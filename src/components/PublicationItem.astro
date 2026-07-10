@@ -1,0 +1,58 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { formatAuthor, isLabMember } from '../lib/cite';
+
+interface Props {
+  pub: CollectionEntry<'publications'>;
+}
+
+const { pub } = Astro.props;
+const { title, authors, venue, year, volume, pages, doi, url } = pub.data;
+
+const names = authors.map((a) => ({ text: formatAuthor(a), highlight: isLabMember(a) }));
+const link = doi ? `https://doi.org/${doi}` : url;
+---
+
+<li>
+  <span class="authors">
+    {
+      names.map((n, i) => (
+        <>
+          {i > 0 && (i === names.length - 1 ? ' & ' : ', ')}
+          {n.highlight ? <strong>{n.text}</strong> : n.text}
+        </>
+      ))
+    }
+  </span>{' '}({year}).{' '}
+  <span class="title">{title}.</span>{' '}
+  {venue && <em>{venue}</em>}{volume && `, ${volume}`}{pages && `, ${pages}`}{(venue || volume || pages) && '. '}
+  {link && (
+    <a class="doi" href={link}>
+      {doi ? `doi:${doi}` : 'link'}
+    </a>
+  )}
+</li>
+
+<style>
+  li {
+    margin-block-end: var(--space-md);
+    max-width: var(--prose-width);
+    color: var(--text-muted);
+  }
+
+  .title {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .authors strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .doi {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    white-space: nowrap;
+  }
+</style>

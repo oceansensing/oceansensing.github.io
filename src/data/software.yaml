@@ -1,0 +1,16 @@
+# Software and tools listed on the Data & Tools page.
+# Each entry needs a unique `id`. Add new tools to the top.
+
+- id: oceansensing-org
+  title: oceansensing on GitHub
+  description: >-
+    The lab's GitHub organization, home to glider piloting, data processing,
+    and analysis code — and the source of this website.
+  repo: https://github.com/oceansensing
+- id: ocean-data-tools
+  title: ocean_data_tools
+  description: >-
+    A MATLAB toolbox for interacting with common ocean data sources — Argo,
+    gliders, CTD, models — published in the Journal of Open Source Software.
+  repo: https://github.com/lnferris/ocean_data_tools
+  language: MATLAB

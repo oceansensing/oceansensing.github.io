@@ -1,0 +1,30 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import NewsCard from '../../components/NewsCard.astro';
+
+const posts = (await getCollection('news', ({ data }) => !data.draft)).sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf()
+);
+---
+
+<BaseLayout title="News" description="News and notes from the Collaboratory for Physical Oceanography.">
+  <div class="container">
+    <h1>News</h1>
+    {posts.map((post) => <NewsCard post={post} />)}
+    <p class="rss">Follow along via <a href="/news/rss.xml">RSS</a>.</p>
+  </div>
+</BaseLayout>
+
+<style>
+  h1 {
+    margin-block: var(--space-xl) var(--space-md);
+  }
+
+  .rss {
+    margin-block-start: var(--space-lg);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+</style>

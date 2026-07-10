@@ -1,0 +1,41 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import FormattedDate from './FormattedDate.astro';
+
+interface Props {
+  post: CollectionEntry<'news'>;
+}
+
+const { post } = Astro.props;
+const { title, date, description } = post.data;
+---
+
+<article>
+  <p class="eyebrow"><FormattedDate date={date} /></p>
+  <h3><a href={`/news/${post.id}/`}>{title}</a></h3>
+  <p class="description">{description}</p>
+</article>
+
+<style>
+  article {
+    padding-block: var(--space-md);
+    border-bottom: 1px solid var(--border);
+  }
+
+  h3 {
+    margin-block: var(--space-2xs) var(--space-xs);
+  }
+
+  h3 a {
+    color: var(--text);
+  }
+
+  h3 a:hover {
+    color: var(--accent);
+  }
+
+  .description {
+    color: var(--text-muted);
+    max-width: var(--prose-width);
+  }
+</style>

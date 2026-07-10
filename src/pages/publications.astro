@@ -1,0 +1,77 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PublicationItem from '../components/PublicationItem.astro';
+
+const pubs = await getCollection('publications');
+
+const byYear = new Map<number, typeof pubs>();
+for (const pub of pubs) {
+  const list = byYear.get(pub.data.year) ?? [];
+  list.push(pub);
+  byYear.set(pub.data.year, list);
+}
+const years = [...byYear.keys()].sort((a, b) => b - a);
+---
+
+<BaseLayout
+  title="Publications"
+  description="Peer-reviewed publications from the Collaboratory for Physical Oceanography."
+>
+  <div class="container">
+    <h1>Publications</h1>
+    <p class="intro">
+      {pubs.length} publications. Lab members in <strong>bold</strong>; every entry
+      links to the paper of record.
+    </p>
+    {
+      years.map((year) => (
+        <section>
+          <h2 class="eyebrow">{year}</h2>
+          <ul>
+            {byYear.get(year)!.map((pub) => (
+              <PublicationItem pub={pub} />
+            ))}
+          </ul>
+        </section>
+      ))
+    }
+  </div>
+</BaseLayout>
+
+<style>
+  h1 {
+    margin-block: var(--space-xl) var(--space-md);
+  }
+
+  .intro {
+    color: var(--text-muted);
+    margin-block-end: var(--space-xl);
+  }
+
+  section {
+    display: grid;
+    grid-template-columns: 6rem 1fr;
+    gap: var(--space-md);
+    border-top: 1px solid var(--border);
+    padding-block: var(--space-md);
+  }
+
+  h2 {
+    font-size: var(--text-base);
+    color: var(--text);
+  }
+
+  ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  @media (max-width: 40rem) {
+    section {
+      grid-template-columns: 1fr;
+      gap: var(--space-xs);
+    }
+  }
+</style>

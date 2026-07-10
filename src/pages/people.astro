@@ -1,0 +1,41 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PersonCard from '../components/PersonCard.astro';
+
+const byOrder = (a: { data: { order: number } }, b: { data: { order: number } }) =>
+  a.data.order - b.data.order;
+
+const current = (await getCollection('people', ({ data }) => data.status === 'current')).sort(byOrder);
+const alumni = (await getCollection('people', ({ data }) => data.status === 'alumni')).sort(byOrder);
+---
+
+<BaseLayout title="People" description="Current members and alumni of the Collaboratory for Physical Oceanography.">
+  <div class="container">
+    <h1>People</h1>
+    <section>
+      {current.map((person) => <PersonCard person={person} />)}
+    </section>
+    <section>
+      <h2><span class="eyebrow">Where they went</span> Alumni</h2>
+      {alumni.map((person) => <PersonCard person={person} />)}
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  h1 {
+    margin-block: var(--space-xl) var(--space-md);
+  }
+
+  h2 {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+    margin-block-start: var(--space-2xl);
+  }
+
+  section:last-child {
+    margin-block-end: var(--space-xl);
+  }
+</style>

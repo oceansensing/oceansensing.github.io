@@ -1,0 +1,108 @@
+---
+import { NAV, SITE } from '../config';
+import ThemeToggle from './ThemeToggle.astro';
+
+const { pathname } = Astro.url;
+const isActive = (href: string) => pathname.startsWith(href);
+---
+
+<header>
+  <div class="container inner">
+    <a class="wordmark" href="/">
+      {SITE.title}<span class="wordmark-sub">{SITE.fullName}</span>
+    </a>
+    <nav aria-label="Main">
+      <ul>
+        {
+          NAV.map((item) => (
+            <li>
+              <a href={item.href} aria-current={isActive(item.href) ? 'page' : undefined}>
+                {item.label}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </nav>
+    <ThemeToggle />
+  </div>
+</header>
+
+<style>
+  header {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .inner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md) var(--space-lg);
+    flex-wrap: wrap;
+    padding-block: var(--space-md);
+  }
+
+  .wordmark {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: var(--text-lg);
+    letter-spacing: -0.02em;
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+  }
+
+  .wordmark:hover {
+    text-decoration: none;
+    color: var(--accent);
+  }
+
+  .wordmark-sub {
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    letter-spacing: 0;
+  }
+
+  nav {
+    margin-inline-start: auto;
+  }
+
+  ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2xs) var(--space-md);
+    list-style: none;
+    padding: 0;
+  }
+
+  nav a {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    padding-block: var(--space-2xs);
+  }
+
+  nav a:hover {
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  nav a[aria-current='page'] {
+    color: var(--accent);
+    border-bottom: 2px solid var(--accent);
+  }
+
+  @media (max-width: 48rem) {
+    .inner {
+      justify-content: space-between;
+    }
+
+    nav {
+      order: 3;
+      width: 100%;
+      margin-inline-start: 0;
+    }
+  }
+</style>

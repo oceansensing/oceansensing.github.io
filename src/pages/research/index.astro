@@ -1,0 +1,39 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import ProjectCard from '../../components/ProjectCard.astro';
+
+const projects = (await getCollection('projects')).sort((a, b) => a.data.order - b.data.order);
+---
+
+<BaseLayout title="Research" description="Research projects of the Collaboratory for Physical Oceanography.">
+  <div class="container">
+    <h1>Research</h1>
+    <p class="intro">
+      Our work centers on polar ocean dynamics, coastal circulation, submarine
+      canyons, upper-ocean dynamics, and ocean turbulence — observed with
+      autonomous platforms we help develop.
+    </p>
+    <div class="grid">
+      {projects.map((project) => <ProjectCard project={project} />)}
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  h1 {
+    margin-block: var(--space-xl) var(--space-md);
+  }
+
+  .intro {
+    color: var(--text-muted);
+    max-width: var(--prose-width);
+    margin-block-end: var(--space-xl);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    gap: var(--space-md);
+  }
+</style>

@@ -1,0 +1,112 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import ProjectCard from '../components/ProjectCard.astro';
+import NewsCard from '../components/NewsCard.astro';
+import { SITE } from '../config';
+
+const projects = (await getCollection('projects', ({ data }) => data.featured)).sort(
+  (a, b) => a.data.order - b.data.order
+);
+
+const news = (await getCollection('news', ({ data }) => !data.draft))
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
+  .slice(0, 3);
+---
+
+<BaseLayout>
+  <section class="hero container">
+    <p class="eyebrow">{SITE.fullName} · VIMS</p>
+    <h1>We observe the ocean where it changes fastest.</h1>
+    <p class="lede">
+      C4PO studies polar and coastal ocean dynamics — circulation, turbulence, and
+      the upper ocean — using autonomous underwater gliders and other uncrewed
+      sensing platforms, from the Mid-Atlantic shelf to the Arctic.
+    </p>
+    <div class="cta">
+      <a class="button" href="/research/">Our research</a>
+      <a class="quiet" href="/publications/">Publications →</a>
+    </div>
+  </section>
+
+  <section class="container">
+    <h2 class="section-heading"><span class="eyebrow">Featured</span> Research</h2>
+    <div class="grid">
+      {projects.map((project) => <ProjectCard project={project} />)}
+    </div>
+  </section>
+
+  <section class="container">
+    <h2 class="section-heading"><span class="eyebrow">Latest</span> News</h2>
+    {news.map((post) => <NewsCard post={post} />)}
+    <p class="more"><a href="/news/">All news →</a></p>
+  </section>
+</BaseLayout>
+
+<style>
+  .hero {
+    padding-block: var(--space-2xl);
+  }
+
+  .hero h1 {
+    max-width: 22ch;
+    margin-block: var(--space-sm) var(--space-md);
+  }
+
+  .lede {
+    font-size: var(--text-lg);
+    color: var(--text-muted);
+    max-width: 48ch;
+    text-wrap: pretty;
+  }
+
+  .cta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg);
+    margin-block-start: var(--space-lg);
+  }
+
+  .button {
+    display: inline-block;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    padding: var(--space-xs) var(--space-md);
+    border-radius: var(--radius);
+    font-weight: 550;
+  }
+
+  .button:hover {
+    background: var(--accent-strong);
+    color: var(--accent-contrast);
+    text-decoration: none;
+  }
+
+  .quiet {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+
+  section {
+    margin-block-end: var(--space-2xl);
+  }
+
+  .section-heading {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+    margin-block-end: var(--space-lg);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    gap: var(--space-md);
+  }
+
+  .more {
+    margin-block-start: var(--space-md);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+</style>

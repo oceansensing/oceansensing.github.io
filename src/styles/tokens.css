@@ -1,0 +1,72 @@
+/*
+ * Design tokens — the entire visual identity of the site lives here.
+ * To retheme, edit these values; components only ever reference tokens.
+ *
+ * All color pairs meet WCAG AA (4.5:1 body text, 3:1 large text/UI).
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* -- color: light ------------------------------------------------ */
+  --bg: #fbfbf9;
+  --bg-subtle: #f1f1ec;
+  --text: #16181d;
+  --text-muted: #555b66;
+  --border: #dcdcd4;
+  --accent: #0a5c8c;
+  --accent-strong: #084a71;
+  --accent-contrast: #ffffff;
+
+  /* -- typography -------------------------------------------------- */
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', monospace;
+
+  /* fluid type scale (~1.2 ratio, scales with viewport) */
+  --text-sm: clamp(0.83rem, 0.8rem + 0.15vw, 0.9rem);
+  --text-base: clamp(1rem, 0.96rem + 0.2vw, 1.1rem);
+  --text-lg: clamp(1.2rem, 1.13rem + 0.35vw, 1.4rem);
+  --text-xl: clamp(1.5rem, 1.36rem + 0.7vw, 1.9rem);
+  --text-2xl: clamp(1.9rem, 1.62rem + 1.4vw, 2.7rem);
+  --text-3xl: clamp(2.3rem, 1.86rem + 2.2vw, 3.6rem);
+
+  /* -- spacing ------------------------------------------------------ */
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1.25rem;
+  --space-lg: 2rem;
+  --space-xl: 3.25rem;
+  --space-2xl: 5.25rem;
+
+  /* -- layout -------------------------------------------------------- */
+  --content-width: 72rem;
+  --prose-width: 65ch;
+  --radius: 6px;
+}
+
+/* -- color: dark (system preference, unless user forced light) ------ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #101318;
+    --bg-subtle: #191e26;
+    --text: #e8eaed;
+    --text-muted: #a3abb8;
+    --border: #2c333e;
+    --accent: #5aa9d6;
+    --accent-strong: #83c0e3;
+    --accent-contrast: #0b1017;
+  }
+}
+
+/* -- color: dark (user override) ------------------------------------ */
+:root[data-theme='dark'] {
+  --bg: #101318;
+  --bg-subtle: #191e26;
+  --text: #e8eaed;
+  --text-muted: #a3abb8;
+  --border: #2c333e;
+  --accent: #5aa9d6;
+  --accent-strong: #83c0e3;
+  --accent-contrast: #0b1017;
+}

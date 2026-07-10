@@ -1,0 +1,11 @@
+# Datasets listed on the Data & Tools page.
+# Each entry needs a unique `id`. Add new datasets to the top.
+
+- id: ioos-glider-dac
+  title: C4PO glider deployments on the IOOS Glider DAC
+  description: >-
+    Real-time and delayed-mode profiles from the lab's underwater glider
+    deployments, archived through the U.S. IOOS national Glider Data
+    Assembly Center.
+  url: https://gliders.ioos.us/
+  archive: IOOS Glider DAC

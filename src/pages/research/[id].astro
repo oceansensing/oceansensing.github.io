@@ -1,0 +1,89 @@
+---
+import { getCollection, render } from 'astro:content';
+import { Image } from 'astro:assets';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export async function getStaticPaths() {
+  const projects = await getCollection('projects');
+  return projects.map((project) => ({
+    params: { id: project.id },
+    props: { project },
+  }));
+}
+
+const { project } = Astro.props;
+const { title, summary, status, cover, sponsors, links } = project.data;
+const { Content } = await render(project);
+---
+
+<BaseLayout title={title} description={summary}>
+  <article class="container">
+    <p class="eyebrow">{status === 'active' ? 'Active project' : 'Completed project'}</p>
+    <h1>{title}</h1>
+    {cover && <Image class="cover" src={cover} alt="" widths={[800, 1400]} sizes="(max-width: 72rem) 100vw, 1100px" />}
+    <div class="prose">
+      <Content />
+    </div>
+    {
+      (sponsors.length > 0 || links.length > 0) && (
+        <aside>
+          {sponsors.length > 0 && (
+            <p>
+              <span class="eyebrow">Sponsors</span>
+              {sponsors.join(' · ')}
+            </p>
+          )}
+          {links.length > 0 && (
+            <p>
+              <span class="eyebrow">Links</span>
+              {links.map((l, i) => (
+                <>
+                  {i > 0 && ' · '}
+                  <a href={l.url}>{l.label}</a>
+                </>
+              ))}
+            </p>
+          )}
+        </aside>
+      )
+    }
+    <p class="back"><a href="/research/">← All research</a></p>
+  </article>
+</BaseLayout>
+
+<style>
+  article {
+    padding-block: var(--space-xl);
+  }
+
+  h1 {
+    margin-block: var(--space-xs) var(--space-lg);
+    max-width: 26ch;
+  }
+
+  .cover {
+    border-radius: var(--radius);
+    margin-block-end: var(--space-lg);
+  }
+
+  aside {
+    border-top: 1px solid var(--border);
+    margin-block-start: var(--space-lg);
+    padding-block-start: var(--space-md);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xl);
+  }
+
+  aside p {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+  }
+
+  .back {
+    margin-block-start: var(--space-xl);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+</style>

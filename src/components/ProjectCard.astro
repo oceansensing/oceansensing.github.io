@@ -1,0 +1,64 @@
+---
+import { Image } from 'astro:assets';
+import type { CollectionEntry } from 'astro:content';
+
+interface Props {
+  project: CollectionEntry<'projects'>;
+}
+
+const { project } = Astro.props;
+const { title, summary, cover, status } = project.data;
+---
+
+<article>
+  <a href={`/research/${project.id}/`}>
+    {cover && <Image src={cover} alt="" widths={[400, 800]} sizes="(max-width: 40rem) 100vw, 400px" />}
+    <div class="body">
+      <p class="eyebrow">{status === 'active' ? 'Active project' : 'Completed'}</p>
+      <h3>{title}</h3>
+      <p class="summary">{summary}</p>
+    </div>
+  </a>
+</article>
+
+<style>
+  article {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--bg-subtle);
+    transition: border-color 0.15s ease;
+  }
+
+  article:hover {
+    border-color: var(--accent);
+  }
+
+  a {
+    color: inherit;
+    display: block;
+    height: 100%;
+  }
+
+  a:hover {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .body {
+    padding: var(--space-md);
+  }
+
+  h3 {
+    margin-block: var(--space-xs);
+  }
+
+  article:hover h3 {
+    color: var(--accent);
+  }
+
+  .summary {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+  }
+</style>
