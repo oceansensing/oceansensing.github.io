@@ -19,6 +19,7 @@ layout code:
 | a news post        | new `.md` file in `src/content/news/`                         |
 | a person           | new `.md` file in `src/content/people/`                       |
 | a research project | new `.md` file in `src/content/projects/`                     |
+| a past project     | set `status: completed` in the project's frontmatter — the Research page moves it to a "Past projects" section automatically |
 | a dataset          | new entry in `src/data/datasets.yaml`                         |
 | a software tool    | new entry in `src/data/software.yaml`                         |
 

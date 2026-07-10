@@ -5,9 +5,9 @@ import ProjectCard from '../components/ProjectCard.astro';
 import NewsCard from '../components/NewsCard.astro';
 import { SITE } from '../config';
 
-const projects = (await getCollection('projects', ({ data }) => data.featured)).sort(
-  (a, b) => a.data.order - b.data.order
-);
+const projects = (
+  await getCollection('projects', ({ data }) => data.featured && data.status === 'active')
+).sort((a, b) => a.data.order - b.data.order);
 
 const news = (await getCollection('news', ({ data }) => !data.draft))
   .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
