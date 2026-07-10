@@ -1,7 +1,12 @@
 ---
+import { Image } from 'astro:assets';
 import { CONTACT, SITE } from '../config';
+import vimsLogoLight from '../assets/vims-logo-light.webp';
+import vimsLogoDark from '../assets/vims-logo-dark.webp';
 
 const year = new Date().getFullYear();
+const vimsAlt =
+  'William & Mary and the Virginia Institute of Marine Science — Batten School of Coastal & Marine Sciences';
 ---
 
 <footer>
@@ -13,6 +18,10 @@ const year = new Date().getFullYear();
         {CONTACT.school}<br />
         {CONTACT.address}
       </p>
+      <a class="affiliation" href="https://www.vims.edu/">
+        <Image class="logo-light" src={vimsLogoLight} alt={vimsAlt} widths={[280, 560]} sizes="280px" />
+        <Image class="logo-dark" src={vimsLogoDark} alt={vimsAlt} widths={[280, 560]} sizes="280px" />
+      </a>
     </div>
     <div class="col">
       <ul>
@@ -49,6 +58,40 @@ const year = new Date().getFullYear();
 
   .muted {
     color: var(--text-muted);
+  }
+
+  .affiliation {
+    display: block;
+    width: min(17.5rem, 100%);
+    margin-block-start: var(--space-md);
+    opacity: 0.85;
+    transition: opacity 0.15s ease;
+  }
+
+  .affiliation:hover {
+    opacity: 1;
+  }
+
+  .affiliation .logo-dark {
+    display: none;
+  }
+
+  :global([data-theme='dark']) .affiliation .logo-light {
+    display: none;
+  }
+
+  :global([data-theme='dark']) .affiliation .logo-dark {
+    display: block;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :global(:root:not([data-theme='light'])) .affiliation .logo-light {
+      display: none;
+    }
+
+    :global(:root:not([data-theme='light'])) .affiliation .logo-dark {
+      display: block;
+    }
   }
 
   ul {
