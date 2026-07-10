@@ -19,10 +19,6 @@ const vimsAlt =
         {CONTACT.address}
       </p>
     </div>
-    <a class="affiliation" href="https://www.vims.edu/">
-      <Image class="logo-light" src={vimsLogoLight} alt={vimsAlt} widths={[280, 560]} sizes="280px" />
-      <Image class="logo-dark" src={vimsLogoDark} alt={vimsAlt} widths={[280, 560]} sizes="280px" />
-    </a>
     <div class="col links">
       <ul>
         <li><a href={`mailto:${CONTACT.email}`}>{CONTACT.email}</a></li>
@@ -30,6 +26,10 @@ const vimsAlt =
         <li><a href="/news/rss.xml">RSS</a></li>
       </ul>
     </div>
+    <a class="affiliation" href="https://www.vims.edu/">
+      <Image class="logo-light" src={vimsLogoLight} alt={vimsAlt} widths={[320, 640]} sizes="320px" />
+      <Image class="logo-dark" src={vimsLogoDark} alt={vimsAlt} widths={[320, 640]} sizes="320px" />
+    </a>
   </div>
   <div class="container copyright muted">
     © {year} {SITE.fullName}
@@ -60,22 +60,28 @@ const vimsAlt =
     color: var(--text-muted);
   }
 
-  .links {
+
+  /* Sized so the logo's top and bottom edges match the 3-line links
+     column beside it: 3 lines of --text-sm at 1.6 line-height plus two
+     --space-2xs gaps. */
+  .affiliation {
+    display: block;
     margin-inline-start: auto;
+    align-self: flex-start;
+    opacity: 0.85;
+    transition: opacity 0.15s ease;
+  }
+
+  .affiliation img {
+    height: calc(3 * 1.6 * var(--text-sm) + 2 * var(--space-2xs));
+    width: auto;
+    max-width: 100%;
   }
 
   @media (max-width: 48rem) {
-    .links {
+    .affiliation {
       margin-inline-start: 0;
     }
-  }
-
-  .affiliation {
-    display: block;
-    width: min(16rem, 100%);
-    align-self: center;
-    opacity: 0.85;
-    transition: opacity 0.15s ease;
   }
 
   .affiliation:hover {
