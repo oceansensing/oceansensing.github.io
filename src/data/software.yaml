@@ -1,6 +1,19 @@
 # Software and tools listed on the Data & Tools page.
-# Each entry needs a unique `id`. Add new tools to the top.
+# Each entry needs a unique `id`. Displayed alphabetically by title.
 
+- id: seaexplorerio-jl
+  title: SeaExplorerIO.jl
+  description: >-
+    A pure-Julia data reader for SeaExplorer glider navigation and payload
+    data.
+  repo: https://github.com/oceansensing/SeaExplorerIO.jl
+  language: Julia
+- id: glideradcp-jl
+  title: GliderADCP.jl
+  description: >-
+    Pure-Julia implementation of a glider ADCP data processing pipeline.
+  repo: https://github.com/truedichotomy/GliderADCP.jl
+  language: Julia
 - id: oceansensing-org
   title: oceansensing on GitHub
   description: >-

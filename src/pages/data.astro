@@ -2,8 +2,11 @@
 import { getCollection } from 'astro:content';
 import BaseLayout from '../layouts/BaseLayout.astro';
 
-const datasets = await getCollection('datasets');
-const software = await getCollection('software');
+const byTitle = (a: { data: { title: string } }, b: { data: { title: string } }) =>
+  a.data.title.localeCompare(b.data.title, 'en', { sensitivity: 'base' });
+
+const datasets = (await getCollection('datasets')).sort(byTitle);
+const software = (await getCollection('software')).sort(byTitle);
 ---
 
 <BaseLayout
