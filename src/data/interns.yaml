@@ -1,0 +1,85 @@
+# Undergraduate interns (archival list from the previous lab website).
+# Each entry needs a unique `id`. Add new interns to the top.
+
+- id: kelsey-barber
+  name: Kelsey Barber
+  role: REU Intern
+  year: '2020'
+  project: >-
+    Impacts of wind on ocean circulation in the Mackenzie Canyon region of
+    the Beaufort Sea — an observational study using underwater gliders
+- id: marta-faulkner
+  name: Marta Faulkner
+  role: REU Intern
+  year: '2018'
+  project: >-
+    Characterizing the transport pathways and the storage of freshwater in
+    the western Arctic Ocean through a HYCOM-based drifter study
+  linkedin: https://www.linkedin.com/in/marta-faulkner/
+- id: danya-abdelhameid
+  name: Danya AbdelHameid
+  role: Undergraduate Research Assistant
+  year: '2017–2018'
+  project: >-
+    Investigating autumn circulation and transport in the western Arctic
+    Ocean
+  linkedin: https://www.linkedin.com/in/danya-abdelhameid/
+- id: jacob-gunnarson
+  name: Jacob Gunnarson
+  role: W&M Undergraduate Intern
+  year: '2017'
+  project: Glider investigation of the eastern Beaufort Sea
+- id: lev-looney
+  name: Lev Looney
+  role: REU Intern
+  year: '2016'
+  project: >-
+    Dominant driver of interannual and decadal variability in salinity of
+    the Mid-Atlantic Bight
+- id: james-brown
+  name: James Brown
+  role: REU Intern
+  year: '2015'
+  project: Investigating cross-shelf exchange at the Mid-Atlantic Bight
+- id: lizzie-wallace
+  name: Lizzie Wallace
+  role: REU Intern
+  year: '2014'
+  project: >-
+    Interannual and decadal variability in temperature and salinity in the
+    Mid-Atlantic Bight and Georges Bank from 1977 to 2013
+- id: paige-stuhlmuller
+  name: Paige Stuhlmuller
+  role: W&M Monroe Scholar
+  year: '2014'
+  project: >-
+    Exploring the exchange flow between the Chesapeake Bay and the
+    continental shelves using the Chesapeake Bay Operational Forecast System
+  linkedin: https://www.linkedin.com/in/paige-stuhlmuller-a3943673/
+- id: hunter-winecoff
+  name: Hunter Winecoff
+  role: W&M Undergraduate Intern
+  year: '2014'
+  project: >-
+    Navigation of autonomous underwater vehicles using onboard hydrographic
+    sensors and the World Ocean Atlas
+- id: brody-marino
+  name: Brody Marino
+  role: W&M Undergraduate Intern
+  year: '2014'
+  project: >-
+    Studying the coupling between sea surface temperature and tropical
+    storms in the North Atlantic
+- id: lauren-kelly-neco
+  name: Lauren Kelly Neco
+  role: REU Intern
+  year: '2013'
+  project: >-
+    Volume transport and properties of Pacific Water along the
+    Chukchi–Beaufort shelfbreak and through Barrow Canyon
+  linkedin: https://www.linkedin.com/in/laurenrkelly/
+- id: dylan-drake
+  name: Dylan Drake
+  role: W&M Undergraduate Intern
+  year: '2013'
+  project: Navigation of autonomous underwater vehicles using bathymetry data

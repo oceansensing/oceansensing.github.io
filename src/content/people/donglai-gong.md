@@ -2,6 +2,7 @@
 name: Donglai Gong
 role: Principal Investigator · Associate Professor
 status: current
+photo: ./donglai-gong.jpg
 email: gong@vims.edu
 links:
   linkedin: https://www.linkedin.com/in/gong/

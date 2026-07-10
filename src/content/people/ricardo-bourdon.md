@@ -2,6 +2,7 @@
 name: Ricardo Bourdon
 role: Ph.D. Student
 status: current
+photo: ./ricardo-bourdon.jpg
 order: 4
 ---
 

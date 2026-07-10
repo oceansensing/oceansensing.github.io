@@ -2,6 +2,7 @@
 name: Fiona Gordon
 role: Undergraduate Research Assistant
 status: alumni
+photo: ./fiona-gordon.jpg
 years: '2023–2024'
 currentPosition: Field Test Engineer, Anduril
 order: 2

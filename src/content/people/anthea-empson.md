@@ -2,6 +2,7 @@
 name: Anthea Empson
 role: Undergraduate Research Assistant
 status: alumni
+photo: ./anthea-empson.jpeg
 years: '2021–2022'
 currentPosition: Physics graduate, William & Mary
 order: 3

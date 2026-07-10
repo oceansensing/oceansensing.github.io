@@ -2,6 +2,7 @@
 name: Jeanna Hudson
 role: Lab Operations Manager
 status: alumni
+photo: ./jeanna-hudson.jpg
 years: '2015–2020'
 currentPosition: VCU School of Nursing
 order: 4

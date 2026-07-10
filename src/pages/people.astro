@@ -8,6 +8,11 @@ const byOrder = (a: { data: { order: number } }, b: { data: { order: number } })
 
 const current = (await getCollection('people', ({ data }) => data.status === 'current')).sort(byOrder);
 const alumni = (await getCollection('people', ({ data }) => data.status === 'alumni')).sort(byOrder);
+const firstYear = (year: string) => Number.parseInt(year, 10) || 0;
+const interns = (await getCollection('interns')).sort(
+  (a, b) =>
+    firstYear(b.data.year) - firstYear(a.data.year) || a.data.name.localeCompare(b.data.name)
+);
 ---
 
 <BaseLayout title="People" description="Current members and alumni of the Collaboratory for Physical Oceanography.">
@@ -19,6 +24,24 @@ const alumni = (await getCollection('people', ({ data }) => data.status === 'alu
     <section>
       <h2><span class="eyebrow">Where they went</span> Alumni</h2>
       {alumni.map((person) => <PersonCard person={person} />)}
+    </section>
+    <section>
+      <h2><span class="eyebrow">Research experiences</span> Undergraduate interns</h2>
+      <ul class="interns">
+        {
+          interns.map(({ data }) => (
+            <li>
+              <span class="intern-name">
+                {data.linkedin ? <a href={data.linkedin}>{data.name}</a> : data.name}
+              </span>
+              <span class="intern-role">
+                {data.role} · {data.year}
+              </span>
+              <span class="intern-project">{data.project}</span>
+            </li>
+          ))
+        }
+      </ul>
     </section>
   </div>
 </BaseLayout>
@@ -33,9 +56,39 @@ const alumni = (await getCollection('people', ({ data }) => data.status === 'alu
     flex-direction: column;
     gap: var(--space-2xs);
     margin-block-start: var(--space-2xl);
+    margin-block-end: var(--space-md);
   }
 
   section:last-child {
     margin-block-end: var(--space-xl);
+  }
+
+  .interns {
+    list-style: none;
+    padding: 0;
+  }
+
+  .interns li {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+    border-top: 1px solid var(--border);
+    padding-block: var(--space-sm);
+    max-width: var(--prose-width);
+  }
+
+  .intern-name {
+    font-weight: 550;
+  }
+
+  .intern-role {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  .intern-project {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
   }
 </style>

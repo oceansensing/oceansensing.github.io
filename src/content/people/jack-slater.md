@@ -2,6 +2,7 @@
 name: Jack Slater
 role: Marine Scientist
 status: current
+photo: ./jack-slater.jpg
 order: 3
 ---
 

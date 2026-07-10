@@ -81,6 +81,17 @@ const datasets = defineCollection({
   }),
 });
 
+const interns = defineCollection({
+  loader: file('src/data/interns.yaml', { parser: (text) => parseYaml(text) }),
+  schema: z.object({
+    name: z.string(),
+    role: z.string(),
+    year: z.string(),
+    project: z.string(),
+    linkedin: z.url().optional(),
+  }),
+});
+
 const software = defineCollection({
   loader: file('src/data/software.yaml', { parser: (text) => parseYaml(text) }),
   schema: z.object({
@@ -91,4 +102,4 @@ const software = defineCollection({
   }),
 });
 
-export const collections = { projects, people, news, publications, datasets, software };
+export const collections = { projects, people, news, publications, datasets, software, interns };
