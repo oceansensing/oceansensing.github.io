@@ -47,7 +47,7 @@ const vimsAlt =
   .inner {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-lg) var(--space-2xl);
+    gap: var(--space-lg) clamp(var(--space-lg), 5vw, var(--space-2xl));
   }
 
   .lab {
@@ -61,11 +61,13 @@ const vimsAlt =
   }
 
 
-  /* Sized so the logo's top and bottom edges match the 3-line links
-     column beside it: 3 lines of --text-sm at 1.6 line-height plus two
-     --space-2xs gaps. */
+  /* 19rem basis makes the logo's height match the 3-line links column at
+     full width; `flex: 0 1` lets it shrink through intermediate widths
+     instead of wrapping onto a lonely second row. */
   .affiliation {
     display: block;
+    flex: 0 1 19rem;
+    min-width: 5.5rem;
     margin-inline-start: auto;
     align-self: flex-start;
     opacity: 0.85;
@@ -73,13 +75,17 @@ const vimsAlt =
   }
 
   .affiliation img {
-    height: calc(3 * 1.6 * var(--text-sm) + 2 * var(--space-2xs));
-    width: auto;
-    max-width: 100%;
+    width: 100%;
+    height: auto;
   }
 
-  @media (max-width: 48rem) {
+  /* Below this width the columns themselves start crowding; stack the
+     logo left-aligned at a fixed size instead of letting it shrink or
+     wrap to a lonely right-aligned row. */
+  @media (max-width: 52rem) {
     .affiliation {
+      flex: 0 0 auto;
+      width: min(16rem, 100%);
       margin-inline-start: 0;
     }
   }
