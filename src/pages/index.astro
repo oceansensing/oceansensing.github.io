@@ -1,9 +1,12 @@
 ---
 import { getCollection } from 'astro:content';
+import { Image } from 'astro:assets';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import ProjectCard from '../components/ProjectCard.astro';
 import NewsCard from '../components/NewsCard.astro';
 import { SITE } from '../config';
+import vimsLogoLight from '../assets/vims-logo-light.webp';
+import vimsLogoDark from '../assets/vims-logo-dark.webp';
 
 const projects = (
   await getCollection('projects', ({ data }) => data.featured && data.status === 'active')
@@ -27,6 +30,22 @@ const news = (await getCollection('news', ({ data }) => !data.draft))
       <a class="button" href="/research/">Our research</a>
       <a class="quiet" href="/publications/">Publications →</a>
     </div>
+    <a class="affiliation" href="https://www.vims.edu/">
+      <Image
+        class="logo-light"
+        src={vimsLogoLight}
+        alt="William & Mary and the Virginia Institute of Marine Science — Batten School of Coastal & Marine Sciences"
+        widths={[420, 840]}
+        sizes="(max-width: 30rem) 88vw, 420px"
+      />
+      <Image
+        class="logo-dark"
+        src={vimsLogoDark}
+        alt="William & Mary and the Virginia Institute of Marine Science — Batten School of Coastal & Marine Sciences"
+        widths={[420, 840]}
+        sizes="(max-width: 30rem) 88vw, 420px"
+      />
+    </a>
   </section>
 
   <section class="container">
@@ -85,6 +104,40 @@ const news = (await getCollection('news', ({ data }) => !data.draft))
   .quiet {
     font-family: var(--font-mono);
     font-size: var(--text-sm);
+  }
+
+  .affiliation {
+    display: block;
+    width: min(26rem, 88%);
+    margin-block-start: var(--space-2xl);
+    opacity: 0.85;
+    transition: opacity 0.15s ease;
+  }
+
+  .affiliation:hover {
+    opacity: 1;
+  }
+
+  .affiliation .logo-dark {
+    display: none;
+  }
+
+  :global([data-theme='dark']) .affiliation .logo-light {
+    display: none;
+  }
+
+  :global([data-theme='dark']) .affiliation .logo-dark {
+    display: block;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :global(:root:not([data-theme='light'])) .affiliation .logo-light {
+      display: none;
+    }
+
+    :global(:root:not([data-theme='light'])) .affiliation .logo-dark {
+      display: block;
+    }
   }
 
   section {
