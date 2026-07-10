@@ -42,6 +42,7 @@ const monthYear = (date: Date) =>
                 <span class="meta">
                   {data.event}
                   {data.location && ` · ${data.location}`} · {monthYear(data.date)}
+                  {data.format && ` · ${data.format}`}
                 </span>
               </li>
             ))}

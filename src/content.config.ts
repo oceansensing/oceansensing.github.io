@@ -94,6 +94,7 @@ const presentations = defineCollection({
     location: z.string().optional(),
     date: z.coerce.date(),
     type: z.enum(['invited', 'conference', 'workshop', 'outreach']).default('conference'),
+    format: z.enum(['talk', 'poster']).optional(),
     link: z.url().optional(),
   }),
 });

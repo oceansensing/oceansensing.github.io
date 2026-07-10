@@ -4,7 +4,20 @@
 #   workshop   — workshops and working groups
 #   outreach   — public and outreach talks
 # Each entry needs a unique `id`. Sorted newest-first within each group.
-# `location` and `link` are optional.
+# `location`, `format` (talk|poster), and `link` are optional.
+
+# --- Conferences -----------------------------------------------------------
+
+- id: slater2025asa
+  title: >-
+    Model-informed acoustic source localization by an underwater glider in a
+    bathymetrically complex seamount region with Gulf Stream influence
+  speakers: J. Slater, D. Gong, Y.-T. Lin & W. R. Harris
+  event: 189th Meeting of the Acoustical Society of America
+  location: Honolulu, Hawaii
+  date: 2025-12-01
+  type: conference
+  link: https://doi.org/10.1121/10.0040418
 
 - id: gong2025oceans
   title: >-
@@ -15,4 +28,94 @@
   location: Brest, France
   date: 2025-06-16
   type: conference
+  format: talk
   link: https://doi.org/10.1109/oceans58557.2025.11104531
+
+- id: ferris2020osm
+  title: >-
+    Turbulent Dissipation Rate and Mixing Variations in the Polar Front of
+    the Southern Ocean
+  speakers: L. Ferris, D. Gong, T. Ijichi, S. Merrifield, J. Shapiro & L. St. Laurent
+  event: Ocean Sciences Meeting
+  location: San Diego, California
+  date: 2020-02-21
+  type: conference
+  format: talk
+
+- id: wang2020osm
+  title: >-
+    Quantifying Shelf-Basin Exchange at Submarine Canyons in the southern
+    Middle Atlantic Bight using data from Underwater Glider Surveys and
+    Numerical Modeling Experiments
+  speakers: H. Wang, D. Gong, H.-C. Yu, Y. J. Zhang, C. K. Harris, M. A. M. Friedrichs, T. N. Miles & J. Hudson
+  event: Ocean Sciences Meeting
+  location: San Diego, California
+  date: 2020-02-19
+  type: conference
+  format: poster
+
+- id: gong2018osm
+  title: >-
+    Interaction of the Mackenzie River Plume with Beaufort Shelfbreak Jet,
+    Wind Forcing, and Offshore Eddy
+  speakers: D. Gong, H. Wang, F. Wiese & G. Auad
+  event: Ocean Sciences Meeting
+  location: Portland, Oregon
+  date: 2018-02-12
+  type: conference
+  link: https://agu.confex.com/agu/os18/preliminaryview.cgi/Paper321271.html
+
+- id: gong2016osm
+  title: >-
+    Quantifying Inflows and Outflows to/from Barrow Canyon using Shipboard
+    and Glider Data
+  speakers: D. Gong & R. S. Pickart
+  event: Ocean Sciences Meeting
+  location: New Orleans, Louisiana
+  date: 2016-02-22
+  type: conference
+  format: talk
+  link: https://agu.confex.com/agu/os16/preliminaryview.cgi/Paper91999.html
+
+- id: wang2016osm
+  title: >-
+    Shelf-Slope Exchanges near Submarine Canyons in the Southern
+    Mid-Atlantic Bight
+  speakers: H. Wang & D. Gong
+  event: Ocean Sciences Meeting
+  location: New Orleans, Louisiana
+  date: 2016-02-22
+  type: conference
+  format: talk
+  link: https://agu.confex.com/agu/os16/preliminaryview.cgi/Paper92468.html
+
+# --- Workshops -------------------------------------------------------------
+
+- id: gong2022ug2
+  title: >-
+    Reimagining Glider and Float Mission Logistics — How to Scale the Next
+    Order of Magnitude for Deployments?
+  speakers: D. Gong
+  event: UG2 Underwater Glider User Group Workshop
+  location: Seattle, Washington
+  date: 2022-09-20
+  type: workshop
+  format: poster
+
+- id: gong2019ego
+  title: 'Glider Observations of the Arctic Ocean: Opportunities, Challenges, and Next Steps'
+  speakers: D. Gong
+  event: 8th EGO Meeting & International Glider Workshop
+  location: New Brunswick, New Jersey
+  date: 2019-05-21
+  type: workshop
+  format: talk
+
+- id: wang2019ego
+  title: Glider Observations of Submarine Canyons off the U.S. East Coast
+  speakers: H. D. Wang
+  event: 8th EGO Meeting & International Glider Workshop
+  location: New Brunswick, New Jersey
+  date: 2019-05-21
+  type: workshop
+  format: poster
