@@ -3,6 +3,9 @@ name: Ricardo Bourdon
 role: Ph.D. Student
 status: current
 photo: ./ricardo-bourdon.jpg
+email: rbbourdon@vims.edu
+links:
+  linkedin: https://www.linkedin.com/in/ricardo-bourdon-ba8a85202/
 order: 4
 ---
 
