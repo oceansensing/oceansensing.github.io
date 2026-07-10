@@ -38,6 +38,7 @@ const interns = (await getCollection('interns')).sort(
                 {data.role} · {data.year}
               </span>
               <span class="intern-project">{data.project}</span>
+              {data.now && <span class="intern-now">Now: {data.now}</span>}
             </li>
           ))
         }
@@ -89,6 +90,10 @@ const interns = (await getCollection('interns')).sort(
 
   .intern-project {
     color: var(--text-muted);
+    font-size: var(--text-sm);
+  }
+
+  .intern-now {
     font-size: var(--text-sm);
   }
 </style>

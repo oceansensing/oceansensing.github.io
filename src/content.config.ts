@@ -88,6 +88,7 @@ const interns = defineCollection({
     role: z.string(),
     year: z.string(),
     project: z.string(),
+    now: z.string().optional(),
     linkedin: z.url().optional(),
   }),
 });
