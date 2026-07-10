@@ -18,12 +18,12 @@ const vimsAlt =
         {CONTACT.school}<br />
         {CONTACT.address}
       </p>
-      <a class="affiliation" href="https://www.vims.edu/">
-        <Image class="logo-light" src={vimsLogoLight} alt={vimsAlt} widths={[280, 560]} sizes="280px" />
-        <Image class="logo-dark" src={vimsLogoDark} alt={vimsAlt} widths={[280, 560]} sizes="280px" />
-      </a>
     </div>
-    <div class="col">
+    <a class="affiliation" href="https://www.vims.edu/">
+      <Image class="logo-light" src={vimsLogoLight} alt={vimsAlt} widths={[280, 560]} sizes="280px" />
+      <Image class="logo-dark" src={vimsLogoDark} alt={vimsAlt} widths={[280, 560]} sizes="280px" />
+    </a>
+    <div class="col links">
       <ul>
         <li><a href={`mailto:${CONTACT.email}`}>{CONTACT.email}</a></li>
         <li><a href={CONTACT.github}>GitHub</a></li>
@@ -60,10 +60,20 @@ const vimsAlt =
     color: var(--text-muted);
   }
 
+  .links {
+    margin-inline-start: auto;
+  }
+
+  @media (max-width: 48rem) {
+    .links {
+      margin-inline-start: 0;
+    }
+  }
+
   .affiliation {
     display: block;
-    width: min(17.5rem, 100%);
-    margin-block-start: var(--space-md);
+    width: min(16rem, 100%);
+    align-self: center;
     opacity: 0.85;
     transition: opacity 0.15s ease;
   }
