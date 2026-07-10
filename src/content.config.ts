@@ -85,6 +85,19 @@ const datasets = defineCollection({
   }),
 });
 
+const presentations = defineCollection({
+  loader: file('src/data/presentations.yaml', { parser: (text) => parseYaml(text) }),
+  schema: z.object({
+    title: z.string(),
+    speakers: z.string(),
+    event: z.string(),
+    location: z.string().optional(),
+    date: z.coerce.date(),
+    type: z.enum(['invited', 'conference', 'workshop', 'outreach']).default('conference'),
+    link: z.url().optional(),
+  }),
+});
+
 const interns = defineCollection({
   loader: file('src/data/interns.yaml', { parser: (text) => parseYaml(text) }),
   schema: z.object({
@@ -107,4 +120,13 @@ const software = defineCollection({
   }),
 });
 
-export const collections = { projects, people, news, publications, datasets, software, interns };
+export const collections = {
+  projects,
+  people,
+  news,
+  publications,
+  presentations,
+  datasets,
+  software,
+  interns,
+};

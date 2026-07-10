@@ -1,0 +1,107 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const GROUPS = [
+  { type: 'invited', eyebrow: 'Seminars', heading: 'Invited talks' },
+  { type: 'conference', eyebrow: 'Meetings', heading: 'Conference presentations' },
+  { type: 'workshop', eyebrow: 'Working groups', heading: 'Workshops' },
+  { type: 'outreach', eyebrow: 'Public engagement', heading: 'Outreach' },
+] as const;
+
+const all = await getCollection('presentations');
+const groups = GROUPS.map((g) => ({
+  ...g,
+  items: all
+    .filter((p) => p.data.type === g.type)
+    .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf()),
+})).filter((g) => g.items.length > 0);
+
+const monthYear = (date: Date) =>
+  date.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+---
+
+<BaseLayout
+  title="Presentations"
+  description="Invited talks, conference presentations, and outreach from the Collaboratory for Physical Oceanography."
+>
+  <div class="container">
+    <h1>Presentations</h1>
+    {
+      groups.map((group) => (
+        <section>
+          <h2>
+            <span class="eyebrow">{group.eyebrow}</span>
+            {group.heading}
+          </h2>
+          <ul>
+            {group.items.map(({ data }) => (
+              <li>
+                <span class="title">{data.link ? <a href={data.link}>{data.title}</a> : data.title}</span>
+                <span class="speakers">{data.speakers}</span>
+                <span class="meta">
+                  {data.event}
+                  {data.location && ` · ${data.location}`} · {monthYear(data.date)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))
+    }
+  </div>
+</BaseLayout>
+
+<style>
+  h1 {
+    margin-block: var(--space-xl) var(--space-md);
+  }
+
+  h2 {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+    margin-block: var(--space-xl) var(--space-md);
+  }
+
+  section:last-child {
+    margin-block-end: var(--space-xl);
+  }
+
+  ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  li {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+    border-top: 1px solid var(--border);
+    padding-block: var(--space-md);
+    max-width: var(--prose-width);
+  }
+
+  .title {
+    font-weight: 550;
+  }
+
+  .title a {
+    color: var(--text);
+  }
+
+  .title a:hover {
+    color: var(--accent);
+  }
+
+  .speakers {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+  }
+
+  .meta {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+</style>

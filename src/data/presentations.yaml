@@ -1,0 +1,18 @@
+# Presentations listed on the Presentations page, grouped by type:
+#   invited    — invited talks and seminars
+#   conference — contributed conference talks and posters
+#   workshop   — workshops and working groups
+#   outreach   — public and outreach talks
+# Each entry needs a unique `id`. Sorted newest-first within each group.
+# `location` and `link` are optional.
+
+- id: gong2025oceans
+  title: >-
+    Next-Generation Uncrewed Surface Vehicles with Autonomous Launch and
+    Recovery Systems for Gliders and Floats
+  speakers: D. Gong, N. von Oppeln-Bronikowski, L. Ferris, W. Boone, J. Slater & R. Bourdon
+  event: OCEANS 2025
+  location: Brest, France
+  date: 2025-06-16
+  type: conference
+  link: https://doi.org/10.1109/oceans58557.2025.11104531

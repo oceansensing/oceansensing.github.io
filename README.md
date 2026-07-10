@@ -16,6 +16,7 @@ layout code:
 | To add…            | Edit…                                                        |
 | ------------------ | ------------------------------------------------------------ |
 | a publication      | paste its BibTeX entry into `src/data/publications.bib`       |
+| a presentation     | new entry in `src/data/presentations.yaml` (type: invited / conference / workshop / outreach) |
 | a news post        | new `.md` file in `src/content/news/`                         |
 | a person           | new `.md` file in `src/content/people/`                       |
 | a research project | new `.md` file in `src/content/projects/`                     |
