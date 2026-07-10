@@ -12,7 +12,7 @@ export async function getStaticPaths() {
 }
 
 const { project } = Astro.props;
-const { title, summary, status, cover, sponsors, links } = project.data;
+const { title, summary, status, cover, coverAlt, gallery, sponsors, links } = project.data;
 const { Content } = await render(project);
 ---
 
@@ -20,10 +20,24 @@ const { Content } = await render(project);
   <article class="container">
     <p class="eyebrow">{status === 'active' ? 'Active project' : 'Completed project'}</p>
     <h1>{title}</h1>
-    {cover && <Image class="cover" src={cover} alt="" widths={[800, 1400]} sizes="(max-width: 72rem) 100vw, 1100px" />}
+    {cover && <Image class="cover" src={cover} alt={coverAlt} widths={[800, 1400]} sizes="(max-width: 72rem) 100vw, 1100px" />}
     <div class="prose">
       <Content />
     </div>
+    {
+      gallery.length > 0 && (
+        <div class="gallery">
+          {gallery.map((photo) => (
+            <Image
+              src={photo.src}
+              alt={photo.alt}
+              widths={[500, 1000]}
+              sizes="(max-width: 40rem) 100vw, 540px"
+            />
+          ))}
+        </div>
+      )
+    }
     {
       (sponsors.length > 0 || links.length > 0) && (
         <aside>
@@ -64,6 +78,20 @@ const { Content } = await render(project);
   .cover {
     border-radius: var(--radius);
     margin-block-end: var(--space-lg);
+  }
+
+  .gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    gap: var(--space-md);
+    margin-block-start: var(--space-lg);
+  }
+
+  .gallery img {
+    border-radius: var(--radius);
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   aside {

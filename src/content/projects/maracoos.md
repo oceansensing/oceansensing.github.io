@@ -5,6 +5,19 @@ summary: >-
   regional coastal ocean observing system, delivering real-time data for
   science, forecasting, and maritime operations.
 status: active
+cover: ./maracoos-scallop-glider.jpg
+coverAlt: >-
+  Aerial view of a yellow underwater glider at the surface beside the R/V
+  Scallop during a Mid-Atlantic Bight deployment.
+gallery:
+  - src: ./maracoos-glider-surface.jpg
+    alt: An underwater glider surfaces in the deep blue water of the Mid-Atlantic Bight.
+  - src: ./maracoos-glider-closeup.jpg
+    alt: Close-up of an underwater glider at the surface during recovery.
+  - src: ./maracoos-slocum-deck.jpg
+    alt: Donglai Gong with a Slocum glider on deck before deployment.
+  - src: ./maracoos-aerial-calm.jpg
+    alt: Aerial view of the recovery boat approaching a surfaced glider on glassy water.
 sponsors:
   - NOAA / U.S. IOOS
 links:

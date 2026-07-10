@@ -12,6 +12,10 @@ const projects = defineCollection({
       summary: z.string(),
       status: z.enum(['active', 'completed']).default('active'),
       cover: image().optional(),
+      coverAlt: z.string().default(''),
+      gallery: z
+        .array(z.object({ src: image(), alt: z.string() }))
+        .default([]),
       sponsors: z.array(z.string()).default([]),
       links: z.array(z.object({ label: z.string(), url: z.url() })).default([]),
       featured: z.boolean().default(false),
