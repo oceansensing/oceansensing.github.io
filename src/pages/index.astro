@@ -17,7 +17,7 @@ const news = (await getCollection('news', ({ data }) => !data.draft))
 <BaseLayout>
   <section class="hero container">
     <p class="eyebrow">{SITE.fullName} · VIMS</p>
-    <h1>Transforming ocean observations into knowledge and action.</h1>
+    <h1>We transform ocean observations into knowledge and action.</h1>
     <p class="lede">
       C4PO studies polar and coastal ocean dynamics — circulation, turbulence, and
       the upper ocean — using autonomous underwater gliders and other uncrewed
@@ -49,7 +49,7 @@ const news = (await getCollection('news', ({ data }) => !data.draft))
   }
 
   .hero h1 {
-    max-width: 22ch;
+    max-width: 30ch;
     margin-block: var(--space-sm) var(--space-md);
   }
 
