@@ -5,7 +5,8 @@ status: current
 photo: ./donglai-gong.jpg
 email: gong@vims.edu
 links:
-  cv: /cv/
+  cv: /cv/donglai-gong/
+  scholar: https://scholar.google.com/citations?user=cKccJ6sAAAAJ
   github: truedichotomy
   linkedin: https://www.linkedin.com/in/gong/
 order: 1

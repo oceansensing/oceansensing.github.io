@@ -6,4 +6,7 @@ import sitemap from '@astrojs/sitemap';
 export default defineConfig({
   site: 'https://oceansensing.github.io',
   integrations: [sitemap()],
+  redirects: {
+    '/cv': '/cv/donglai-gong',
+  },
 });

@@ -3,6 +3,7 @@ import { z } from 'astro/zod';
 import { glob, file } from 'astro/loaders';
 import { parse as parseYaml } from 'yaml';
 import { bibtexLoader } from './lib/bibtexLoader';
+import { cvSectionLoader } from './lib/cvLoader';
 
 const projects = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/projects' }),
@@ -123,32 +124,33 @@ const software = defineCollection({
   }),
 });
 
-// CV sections (src/data/cv/*.yaml) — small structured lists rendered by
-// the /cv/ page. Publications and presentations are NOT duplicated here;
-// the CV pulls those from the collections above.
-const cvFile = (name: string, schema: Parameters<typeof defineCollection>[0]['schema']) =>
+// CV sections (src/data/cv/<person>/*.yaml) — one directory per lab
+// member, same section files each; rendered at /cv/<person>/.
+// Publications and presentations are NOT duplicated here; the CV pulls
+// those from the collections above, filtered by the member's surname.
+const cvSection = (name: string, schema: z.AnyZodObject) =>
   defineCollection({
-    loader: file(`src/data/cv/${name}.yaml`, { parser: (text) => parseYaml(text) }),
-    schema,
+    loader: cvSectionLoader(name),
+    schema: schema.extend({ person: z.string() }),
   });
 
-const cvEducation = cvFile(
+const cvEducation = cvSection(
   'education',
   z.object({ year: z.string(), degree: z.string(), institution: z.string() })
 );
-const cvAppointments = cvFile(
+const cvAppointments = cvSection(
   'appointments',
   z.object({ years: z.string(), title: z.string(), institution: z.string() })
 );
-const cvGrants = cvFile(
+const cvGrants = cvSection(
   'grants',
   z.object({ years: z.string(), title: z.string(), sponsor: z.string(), role: z.string() })
 );
-const cvAdvising = cvFile(
+const cvAdvising = cvSection(
   'advising',
   z.object({ name: z.string(), degree: z.string(), years: z.string(), topic: z.string() })
 );
-const cvService = cvFile(
+const cvService = cvSection(
   'service',
   z.object({
     group: z.enum(['editorial', 'review', 'university']),
@@ -156,9 +158,9 @@ const cvService = cvFile(
     text: z.string(),
   })
 );
-const cvFieldwork = cvFile('fieldwork', z.object({ years: z.string(), text: z.string() }));
-const cvTeaching = cvFile('teaching', z.object({ years: z.string(), text: z.string() }));
-const cvAwards = cvFile('awards', z.object({ year: z.string(), text: z.string() }));
+const cvFieldwork = cvSection('fieldwork', z.object({ years: z.string(), text: z.string() }));
+const cvTeaching = cvSection('teaching', z.object({ years: z.string(), text: z.string() }));
+const cvAwards = cvSection('awards', z.object({ year: z.string(), text: z.string() }));
 
 export const collections = {
   projects,

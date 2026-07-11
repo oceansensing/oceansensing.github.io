@@ -1,0 +1,496 @@
+---
+import { getCollection, getEntry } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PublicationItem from '../../components/PublicationItem.astro';
+import { CONTACT } from '../../config';
+
+export async function getStaticPaths() {
+  // A member's CV page exists once they have any CV data directory.
+  const sections = await Promise.all([
+    getCollection('cvEducation'),
+    getCollection('cvAppointments'),
+    getCollection('cvGrants'),
+    getCollection('cvAdvising'),
+    getCollection('cvService'),
+    getCollection('cvFieldwork'),
+    getCollection('cvTeaching'),
+    getCollection('cvAwards'),
+  ]);
+  const persons = [...new Set(sections.flat().map((e) => e.data.person))];
+  return persons.map((id) => ({ params: { id } }));
+}
+
+const { id } = Astro.params;
+const person = await getEntry('people', id);
+if (!person) {
+  throw new Error(`CV directory src/data/cv/${id}/ has no matching person in src/content/people/`);
+}
+const { name, role, email, links } = person.data;
+
+/* Surname for filtering the shared publication/presentation collections;
+   parenthetical nicknames like "Haixing (Daniel) Wang" are stripped. */
+const surname = name.replace(/\(.*?\)/g, '').trim().split(/\s+/).at(-1)!;
+
+const forPerson = <T extends { data: { person: string } }>(entries: T[]) =>
+  entries.filter((e) => e.data.person === id);
+
+/* Sections are sorted most recent end-year first ("present" outranks
+   all), then most recent start. */
+const span = (years: string) => {
+  const nums = years.match(/\d{4}/g)?.map(Number) ?? [0];
+  const start = nums[0]!;
+  const end = /present/i.test(years) ? 9999 : (nums[nums.length - 1] ?? start);
+  return { start, end };
+};
+const byYears = <T extends { data: { year?: string; years?: string } }>(a: T, b: T) => {
+  const sa = span(a.data.years ?? a.data.year ?? '0');
+  const sb = span(b.data.years ?? b.data.year ?? '0');
+  return sb.end - sa.end || sb.start - sa.start;
+};
+
+const education = forPerson(await getCollection('cvEducation')).sort(byYears);
+const appointments = forPerson(await getCollection('cvAppointments')).sort(byYears);
+const awards = forPerson(await getCollection('cvAwards')).sort(byYears);
+const grants = forPerson(await getCollection('cvGrants')).sort(byYears);
+const advising = forPerson(await getCollection('cvAdvising')).sort(byYears);
+const teaching = forPerson(await getCollection('cvTeaching')).sort(byYears);
+const fieldwork = forPerson(await getCollection('cvFieldwork')).sort(byYears);
+const service = forPerson(await getCollection('cvService')).sort(byYears);
+
+const allPubs = await getCollection('publications');
+const mine = allPubs.filter((p) => p.data.authors.some((a) => a.family.includes(surname)));
+const preprints = mine.filter((p) => p.data.preprint).sort((a, b) => b.data.year - a.data.year);
+const pubs = mine.filter((p) => !p.data.preprint).sort((a, b) => b.data.year - a.data.year);
+
+const myPres = (await getCollection('presentations')).filter((p) =>
+  p.data.speakers.includes(surname)
+);
+const invited = myPres
+  .filter((p) => p.data.type === 'invited')
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
+const contributed = myPres
+  .filter(
+    (p) =>
+      (p.data.type === 'conference' || p.data.type === 'workshop') &&
+      p.data.date.getUTCFullYear() >= 2020
+  )
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
+const contributedTotal = myPres.filter((p) => p.data.type !== 'invited').length;
+
+const serviceGroups = [
+  { key: 'editorial', label: 'Editorial' },
+  { key: 'review', label: 'Panels & review' },
+  { key: 'university', label: 'University & institute' },
+] as const;
+
+const monthYear = (date: Date) =>
+  date.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+---
+
+<BaseLayout
+  title={`Curriculum Vitae — ${name}`}
+  description={`Curriculum vitae of ${name}, ${role}, Collaboratory for Physical Oceanography, Virginia Institute of Marine Science.`}
+>
+  <article class="container cv">
+    <header class="cv-header">
+      <div>
+        <h1>{name}</h1>
+        <p class="role">{role} · {CONTACT.institution}</p>
+        <p class="muted">
+          {CONTACT.school} · {CONTACT.address}
+        </p>
+        <p class="contact-line">
+          {email && <a href={`mailto:${email}`}>{email}</a>}
+          {links.scholar && <> · <a href={links.scholar}>Google Scholar</a></>}
+          {links.github && <> · <a href={`https://github.com/${links.github}`}>GitHub</a></>}
+          {' · '}<a href="https://oceansensing.github.io/">oceansensing.github.io</a>
+        </p>
+      </div>
+      <button class="print-button no-print" onclick="window.print()">Print / Save PDF</button>
+    </header>
+
+    {
+      education.length > 0 && (
+        <section>
+          <h2 class="eyebrow">Education</h2>
+          <ul>
+            {education.map(({ data }) => (
+              <li class="row">
+                <span class="years">{data.year}</span>
+                <span>
+                  <strong>{data.degree}</strong>, {data.institution}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      appointments.length > 0 && (
+        <section>
+          <h2 class="eyebrow">Appointments</h2>
+          <ul>
+            {appointments.map(({ data }) => (
+              <li class="row">
+                <span class="years">{data.years}</span>
+                <span>
+                  <strong>{data.title}</strong>, {data.institution}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      awards.length > 0 && (
+        <section>
+          <h2 class="eyebrow">Honors & awards</h2>
+          <ul>
+            {awards.map(({ data }) => (
+              <li class="row">
+                <span class="years">{data.year}</span>
+                <span>{data.text}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      grants.length > 0 && (
+        <section>
+          <h2 class="eyebrow">Research funding</h2>
+          <p class="note">Award titles, sponsors, and roles; amounts omitted online.</p>
+          <ul>
+            {grants.map(({ data }) => (
+              <li class="row">
+                <span class="years">{data.years}</span>
+                <span>
+                  {data.title}. <em>{data.sponsor}</em> — {data.role}.
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      preprints.length > 0 && (
+        <section>
+          <h2 class="eyebrow">Preprints</h2>
+          <ul class="pubs">
+            {preprints.map((pub) => (
+              <PublicationItem pub={pub} />
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      pubs.length > 0 && (
+        <section>
+          <h2 class="eyebrow">Publications</h2>
+          <ul class="pubs">
+            {pubs.map((pub) => (
+              <PublicationItem pub={pub} />
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      invited.length > 0 && (
+        <section>
+          <h2 class="eyebrow">Invited talks</h2>
+          <ul>
+            {invited.map(({ data }) => (
+              <li class="row">
+                <span class="years">{monthYear(data.date)}</span>
+                <span>
+                  {data.title}. <em>{data.event}</em>
+                  {data.location && `, ${data.location}`}.
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      contributed.length > 0 && (
+        <section>
+          <h2 class="eyebrow">Selected presentations (2020—present)</h2>
+          <p class="note">
+            {contributedTotal} contributed conference and workshop presentations —
+            <a href="/presentations/">full list</a>.
+          </p>
+          <ul>
+            {contributed.map(({ data }) => (
+              <li class="row">
+                <span class="years">{monthYear(data.date)}</span>
+                <span>
+                  {data.speakers}. {data.title}. <em>{data.event}</em>
+                  {data.location && `, ${data.location}`}.
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      advising.length > 0 && (
+        <section>
+          <h2 class="eyebrow">Graduate advising</h2>
+          <ul>
+            {advising.map(({ data }) => (
+              <li class="row">
+                <span class="years">{data.years}</span>
+                <span>
+                  <strong>{data.name}</strong> ({data.degree}). {data.topic}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {id === 'donglai-gong' && (
+            <p class="note">
+              Plus 25+ undergraduate researchers advised through REU, honors theses, and
+              internships — see <a href="/people/">People</a>.
+            </p>
+          )}
+        </section>
+      )
+    }
+
+    {
+      teaching.length > 0 && (
+        <section>
+          <h2 class="eyebrow">Teaching</h2>
+          <ul>
+            {teaching.map(({ data }) => (
+              <li class="row">
+                <span class="years">{data.years}</span>
+                <span>{data.text}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      fieldwork.length > 0 && (
+        <section>
+          <h2 class="eyebrow">Field experience</h2>
+          <ul>
+            {fieldwork.map(({ data }) => (
+              <li class="row">
+                <span class="years">{data.years}</span>
+                <span>{data.text}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      service.length > 0 && (
+        <section>
+          <h2 class="eyebrow">Service</h2>
+          {serviceGroups.map((group) => {
+            const items = service.filter((s) => s.data.group === group.key);
+            return (
+              items.length > 0 && (
+                <div class="service-group">
+                  <h3>{group.label}</h3>
+                  <ul>
+                    {items.map(({ data }) => (
+                      <li class="row">
+                        <span class="years">{data.years}</span>
+                        <span>{data.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            );
+          })}
+        </section>
+      )
+    }
+  </article>
+</BaseLayout>
+
+<style>
+  .cv {
+    max-width: 52rem;
+  }
+
+  .cv-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-lg);
+    padding-block: var(--space-xl) var(--space-lg);
+    border-bottom: 1px solid var(--border);
+  }
+
+  h1 {
+    font-size: var(--text-2xl);
+    margin-block-end: var(--space-2xs);
+  }
+
+  .role {
+    font-weight: 550;
+  }
+
+  .muted {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+  }
+
+  .contact-line {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    margin-block-start: var(--space-xs);
+  }
+
+  .print-button {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-xs) var(--space-sm);
+    cursor: pointer;
+  }
+
+  .print-button:hover {
+    color: var(--text);
+    border-color: var(--text-muted);
+  }
+
+  section {
+    padding-block: var(--space-md);
+    border-bottom: 1px solid var(--border);
+  }
+
+  section:last-child {
+    border-bottom: none;
+    margin-block-end: var(--space-xl);
+  }
+
+  h2 {
+    margin-block-end: var(--space-sm);
+  }
+
+  h3 {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-block: var(--space-sm) var(--space-xs);
+  }
+
+  ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 8rem 1fr;
+    gap: var(--space-md);
+    margin-block-end: var(--space-xs);
+    break-inside: avoid;
+  }
+
+  .years {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .note {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    margin-block-end: var(--space-sm);
+  }
+
+  .pubs :global(li) {
+    margin-block-end: var(--space-sm);
+    break-inside: avoid;
+  }
+
+  @media (max-width: 40rem) {
+    .row {
+      grid-template-columns: 1fr;
+      gap: 0;
+      margin-block-end: var(--space-sm);
+    }
+
+    .cv-header {
+      flex-direction: column;
+    }
+  }
+
+  /* ---- print: clean black-on-white document ---- */
+  @media print {
+    :global(body > header),
+    :global(body > footer),
+    .print-button {
+      display: none !important;
+    }
+
+    :global(:root) {
+      --bg: #ffffff;
+      --bg-subtle: #ffffff;
+      --text: #000000;
+      --text-muted: #444444;
+      --border: #cccccc;
+      --accent: #000000;
+      --accent-strong: #000000;
+    }
+
+    .cv {
+      max-width: none;
+      padding-inline: 0;
+    }
+
+    .cv-header {
+      padding-block-start: 0;
+    }
+
+    section {
+      padding-block: 0.6rem;
+    }
+
+    body {
+      font-size: 10.5pt;
+    }
+
+    a {
+      text-decoration: none;
+      color: #000000;
+    }
+  }
+</style>
+
+<style is:global>
+  @page {
+    margin: 1.8cm;
+  }
+</style>

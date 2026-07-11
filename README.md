@@ -23,7 +23,8 @@ layout code:
 | a past project     | set `status: completed` in the project's frontmatter — the Research page moves it to a "Past projects" section automatically |
 | a dataset          | new entry in `src/data/datasets.yaml`                         |
 | a software tool    | new entry in `src/data/software.yaml`                         |
-| a CV item          | new entry in the matching `src/data/cv/*.yaml` file (grants, advising, service, …) — publications and presentations flow in automatically |
+| a CV item          | new entry in the matching `src/data/cv/<person>/*.yaml` file (grants, advising, service, …) — publications and presentations flow in automatically |
+| a member's CV      | new directory `src/data/cv/<person-id>/` (id matching their file in `src/content/people/`) with any of the section files — their page appears at `/cv/<person-id>/` |
 
 Site title, navigation, contact info, and the list of author names bolded on
 the Publications page live in `src/config.ts`. Colors, fonts, and spacing
