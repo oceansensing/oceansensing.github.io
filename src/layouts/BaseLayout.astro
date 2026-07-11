@@ -47,6 +47,19 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
         document.documentElement.dataset.theme = saved;
       }
     </script>
+
+    <!-- GoatCounter visitor counts (production builds only): no cookies,
+         no personal data — https://oceansensing.goatcounter.com -->
+    {
+      import.meta.env.PROD && (
+        <script
+          is:inline
+          async
+          data-goatcounter="https://oceansensing.goatcounter.com/count"
+          src="https://gc.zgo.at/count.js"
+        />
+      )
+    }
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
