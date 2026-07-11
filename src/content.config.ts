@@ -34,6 +34,7 @@ const people = defineCollection({
       email: z.email().optional(),
       links: z
         .object({
+          cv: z.string().optional(),
           website: z.url().optional(),
           orcid: z.string().optional(),
           scholar: z.url().optional(),
@@ -122,6 +123,43 @@ const software = defineCollection({
   }),
 });
 
+// CV sections (src/data/cv/*.yaml) — small structured lists rendered by
+// the /cv/ page. Publications and presentations are NOT duplicated here;
+// the CV pulls those from the collections above.
+const cvFile = (name: string, schema: Parameters<typeof defineCollection>[0]['schema']) =>
+  defineCollection({
+    loader: file(`src/data/cv/${name}.yaml`, { parser: (text) => parseYaml(text) }),
+    schema,
+  });
+
+const cvEducation = cvFile(
+  'education',
+  z.object({ year: z.string(), degree: z.string(), institution: z.string() })
+);
+const cvAppointments = cvFile(
+  'appointments',
+  z.object({ years: z.string(), title: z.string(), institution: z.string() })
+);
+const cvGrants = cvFile(
+  'grants',
+  z.object({ years: z.string(), title: z.string(), sponsor: z.string(), role: z.string() })
+);
+const cvAdvising = cvFile(
+  'advising',
+  z.object({ name: z.string(), degree: z.string(), years: z.string(), topic: z.string() })
+);
+const cvService = cvFile(
+  'service',
+  z.object({
+    group: z.enum(['editorial', 'review', 'university']),
+    years: z.string(),
+    text: z.string(),
+  })
+);
+const cvFieldwork = cvFile('fieldwork', z.object({ years: z.string(), text: z.string() }));
+const cvTeaching = cvFile('teaching', z.object({ years: z.string(), text: z.string() }));
+const cvAwards = cvFile('awards', z.object({ year: z.string(), text: z.string() }));
+
 export const collections = {
   projects,
   people,
@@ -131,4 +169,12 @@ export const collections = {
   datasets,
   software,
   interns,
+  cvEducation,
+  cvAppointments,
+  cvGrants,
+  cvAdvising,
+  cvService,
+  cvFieldwork,
+  cvTeaching,
+  cvAwards,
 };

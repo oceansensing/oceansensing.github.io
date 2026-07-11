@@ -1,0 +1,16 @@
+# CV: Teaching (condensed to unique courses). Each entry needs a unique `id`.
+- id: msci310
+  years: 2024—present
+  text: MSCI 310/401A — Motion of the Ocean (Physical Oceanography), W&M undergraduate
+- id: msci501
+  years: 2013—2023
+  text: MSCI 401A/501A — Fundamentals of Marine Science, Physical Oceanography
+- id: epad
+  years: 2021—2023
+  text: APSC 471/472 — Engineering Physics and Applied Design (EPAD) Capstone (co-advised)
+- id: msci698
+  years: 2014—2018
+  text: 'MSCI 698 graduate topics: Ocean Turbulent Mixing; Drone Applications in Marine Science; Glider Operations and Data Processing'
+- id: msci330
+  years: 2014—2015
+  text: MSCI 330 — Introduction to Marine Science (co-taught)

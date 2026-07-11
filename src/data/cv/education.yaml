@@ -1,0 +1,13 @@
+# CV: Education. Each entry needs a unique `id`.
+- id: rutgers-phd
+  year: '2010'
+  degree: Ph.D., Oceanography
+  institution: Rutgers University, Department of Marine and Coastal Sciences
+- id: mit-ms
+  year: '2004'
+  degree: M.S., Physics
+  institution: Massachusetts Institute of Technology
+- id: rutgers-bs
+  year: '2001'
+  degree: B.S. Physics & B.A. Mathematics
+  institution: Rutgers University

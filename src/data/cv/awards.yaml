@@ -1,0 +1,7 @@
+# CV: Honors and awards. Each entry needs a unique `id`.
+- id: elsevier-2015
+  year: '2015'
+  text: Elsevier Reviewer Recognition, Continental Shelf Research
+- id: whoi-occi-2010
+  year: '2010'
+  text: WHOI Ocean and Climate Change Institute Postdoctoral Scholar

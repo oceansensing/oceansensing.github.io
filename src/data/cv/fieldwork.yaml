@@ -1,0 +1,32 @@
+# CV: Selected sea-going and field program experience. Each entry needs a
+# unique `id`.
+- id: nesma-passengers
+  years: 2022—2024
+  text: NESMA / PASSENGERS glider field campaigns at the New England and Atlantis II Seamounts (ONR), from R/V Roger Revelle and S/RV Marie Tharp
+- id: norse
+  years: 2022—2023
+  text: NORSE glider field campaigns near Jan Mayen, Nordic Seas (ONR), including R/V Kronprins Haakon
+- id: maracoos-ops
+  years: 2013—present
+  text: Sustained MARACOOS and hurricane-monitoring glider deployments across the Mid-Atlantic Bight
+- id: nwpp-cruise
+  years: '2018'
+  text: Northwest Passage Project research cruise in the Canadian Arctic Archipelago
+- id: mares-gliders
+  years: 2015—2016
+  text: MARES glider deployments in the eastern Beaufort Sea
+- id: healy-2012
+  years: '2012'
+  text: Lead PI, "Along-shelf Variability of the Western Arctic Shelfbreak Boundary Current," USCGC Healy
+- id: clivar-a20-cruise
+  years: '2012'
+  text: Co-Chief Scientist, U.S. CLIVAR A20 repeat hydrography section, R/V Atlantis
+- id: healy-2011
+  years: '2011'
+  text: Arctic Observing Network North Slope mooring cruise, USCGC Healy
+- id: hudson-canyon
+  years: 2008—2011
+  text: Hudson Submarine Canyon hydrographic surveys and bathymetric mapping, NOAA Ship Henry B. Bigelow
+- id: eddies
+  years: '2005'
+  text: EDDIES program cruises, R/V Oceanus

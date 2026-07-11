@@ -5,9 +5,158 @@
 #   outreach   — public and outreach talks
 # Each entry needs a unique `id`. Sorted newest-first within each group.
 # `location`, `format` (talk|poster), and `link` are optional.
+# Source: Donglai Gong's CV (March 2026) + conference archives; entries
+# where the presenting (first) author is a lab member.
 
-# --- Conferences -----------------------------------------------------------
+# --- Invited talks & seminars ---------------------------------------------
 
+- id: gong2026hampton
+  title: 'Submesoscale Dynamics and Ocean Turbulence: From Observations to Understanding'
+  speakers: D. Gong
+  event: Hampton University, Department of Atmospheric and Planetary Sciences
+  location: Hampton, Virginia
+  date: 2026-03-01
+  type: invited
+- id: gong2025wmchem
+  title: 'Submesoscale Dynamics and Ocean Turbulence: Physical Mechanisms Shaping Marine Biogeochemistry'
+  speakers: D. Gong
+  event: William & Mary, Department of Chemistry
+  location: Williamsburg, Virginia
+  date: 2025-11-01
+  type: invited
+- id: gong2023odu
+  title: Glider observations of upper ocean dynamics from the mesoscale to the microscale
+  speakers: D. Gong
+  event: Old Dominion University
+  location: Norfolk, Virginia
+  date: 2023-02-01
+  type: invited
+- id: gong2019vims
+  title: Observing long-term oceanographic changes in the Mid-Atlantic Bight and in the Arctic
+  speakers: D. Gong
+  event: VIMS Department of Physical Sciences seminar
+  location: Gloucester Point, Virginia
+  date: 2019-10-01
+  type: invited
+- id: gong2019philanthropy
+  title: Ocean Data Science Panel — Attracting, Training and Retaining Ocean Data Scientists
+  speakers: D. Gong
+  event: Science Philanthropy Alliance
+  location: San Francisco, California
+  date: 2019-01-01
+  type: invited
+- id: gong2018odu
+  title: Drivers of long term temperature and salinity changes in the Mid-Atlantic Bight
+  speakers: D. Gong
+  event: Old Dominion University, School of Oceanography
+  location: Norfolk, Virginia
+  date: 2018-12-01
+  type: invited
+- id: gong2018vwmc
+  title: 'Drones: A New Tool for Water Monitoring'
+  speakers: D. Gong
+  event: Virginia Water Monitoring Council Conference
+  location: Henrico, Virginia
+  date: 2018-03-01
+  type: invited
+- id: gong2017auvsi
+  title: Applications of Autonomous Systems in Oceanographic Research
+  speakers: D. Gong
+  event: AUVSI Symposium, Virginia Tech
+  location: Blacksburg, Virginia
+  date: 2017-10-01
+  type: invited
+- id: gong2016vimsindustry
+  title: Scientific Applications of AUV/ROV for Offshore Energy
+  speakers: D. Gong
+  event: VIMS–Industry Partnership Meeting
+  location: Gloucester Point, Virginia
+  date: 2016-12-01
+  type: invited
+- id: gong2016ios
+  title: Pacific water transport and transformation in the Chukchi Sea
+  speakers: D. Gong
+  event: Institute of Ocean Sciences, Fisheries and Oceans Canada
+  location: Sidney, British Columbia
+  date: 2016-10-01
+  type: invited
+- id: gong2016ccpo
+  title: Comparing the impact of Arctic and Mid-Atlantic submarine canyons on shelf-basin exchange
+  speakers: D. Gong
+  event: CCPO/MARI seminar series, Old Dominion University
+  location: Norfolk, Virginia
+  date: 2016-04-01
+  type: invited
+- id: gong2015qingdao
+  title: Application of ocean gliders and sustainable robotic ocean exploration
+  speakers: D. Gong
+  event: Ocean University of China & Sencott
+  location: Qingdao, China
+  date: 2015-07-01
+  type: invited
+- id: gong2014vims
+  title: Impact of Climate Variability on the Mid-Atlantic Bight
+  speakers: D. Gong & E. Wallace
+  event: VIMS Department of Physical Sciences seminar
+  location: Gloucester Point, Virginia
+  date: 2014-11-01
+  type: invited
+- id: gong2013vims
+  title: Applications of technologies for observations of physical oceanography in the Mid-Atlantic Bight
+  speakers: D. Gong
+  event: VIMS Department of Physical Sciences seminar
+  location: Gloucester Point, Virginia
+  date: 2013-02-01
+  type: invited
+- id: gong2012coastalcarolina
+  title: Summertime Circulation and Water Mass Transformation in the Chukchi Sea
+  speakers: D. Gong
+  event: Coastal Carolina University
+  location: Conway, South Carolina
+  date: 2012-05-01
+  type: invited
+- id: gong2011whoi
+  title: Summertime evolution of the shelf-slope front and the associated secondary circulation
+  speakers: D. Gong & S. Glenn
+  event: WHOI Department of Physical Oceanography seminar
+  location: Woods Hole, Massachusetts
+  date: 2011-03-01
+  type: invited
+- id: gong2010sandyhook
+  title: Summer-time shelf-slope exchange processes on the New Jersey Shelf
+  speakers: D. Gong
+  event: NOAA Sandy Hook Laboratory
+  location: Sandy Hook, New Jersey
+  date: 2010-07-01
+  type: invited
+- id: gong2010whoi
+  title: Seasonal transport and cross-shelf exchange processes on the New Jersey Shelf
+  speakers: D. Gong
+  event: WHOI Department of Applied Ocean Physics & Engineering seminar
+  location: Woods Hole, Massachusetts
+  date: 2010-01-01
+  type: invited
+
+# --- Conference presentations ----------------------------------------------
+
+- id: gong2026osm
+  title: Design and Operational Considerations for USV-based Autonomous Launch and Recovery System (ALARS) for Glider UUVs and Floats
+  speakers: D. Gong, N. von Oppeln-Bronikowski, J. Shapiro, D. Wilson, J. Slater, L. Ferris, W. Boone, P. Brickley & C. Richards
+  event: Ocean Sciences Meeting
+  date: 2026-02-01
+  type: conference
+- id: slater2026osm
+  title: Acoustic Source Localization by an Underwater Glider in a Bathymetrically Complex Seamount Region Using Data-Assimilative Range-Dependent Sound Speed Profiles
+  speakers: J. Slater, W. Harris, D. Gong & Y.-T. Lin
+  event: Ocean Sciences Meeting
+  date: 2026-02-01
+  type: conference
+- id: bourdon2026osm
+  title: Underwater Glider Observations of Submesoscale Frontogenesis at the Arctic Front Near Jan Mayen
+  speakers: R. Bourdon, D. Gong & L. Ferris
+  event: Ocean Sciences Meeting
+  date: 2026-02-01
+  type: conference
 - id: slater2025asa
   title: >-
     Model-informed acoustic source localization by an underwater glider in a
@@ -18,7 +167,6 @@
   date: 2025-12-01
   type: conference
   link: https://doi.org/10.1121/10.0040418
-
 - id: gong2025oceans
   title: >-
     Next-Generation Uncrewed Surface Vehicles with Autonomous Launch and
@@ -30,7 +178,33 @@
   type: conference
   format: talk
   link: https://doi.org/10.1109/oceans58557.2025.11104531
-
+- id: gong2024osm
+  title: Collocated observations of upper ocean mixing and currents in the Nordic Seas by an autonomous glider with near-realtime ADCP and microstructure processing
+  speakers: D. Gong, L. Ferris, J. Slater & R. Bourdon
+  event: Ocean Sciences Meeting
+  location: New Orleans, Louisiana
+  date: 2024-02-01
+  type: conference
+- id: ferris2024osm
+  title: Turbulent kinetic energy dissipation rate estimated from flight kinematics of autonomous underwater gliders downstream of the Northern Mariana Islands and Jan Mayen volcano
+  speakers: L. Ferris, J. Shapiro, D. Gong & L. St. Laurent
+  event: Ocean Sciences Meeting
+  location: New Orleans, Louisiana
+  date: 2024-02-01
+  type: conference
+- id: kirkpatrick2022agu
+  title: Quantifying Errors Within Data-Assimilative Global Ocean Models Using Glider Data From The Mid-Atlantic Bight Slope Sea
+  speakers: G. Kirkpatrick & D. Gong
+  event: AGU Fall Meeting
+  location: Chicago, Illinois
+  date: 2022-12-01
+  type: conference
+- id: wang2022osm
+  title: Improved thermal lag correction for pumped glider CTD
+  speakers: H. Wang, D. Gong, J. Kerfoot, T. Miles, M. Crowley, O. Schofield & S. Glenn
+  event: Ocean Sciences Meeting
+  date: 2022-02-01
+  type: conference
 - id: ferris2020osm
   title: >-
     Turbulent Dissipation Rate and Mixing Variations in the Polar Front of
@@ -41,7 +215,6 @@
   date: 2020-02-21
   type: conference
   format: talk
-
 - id: wang2020osm
   title: >-
     Quantifying Shelf-Basin Exchange at Submarine Canyons in the southern
@@ -53,7 +226,52 @@
   date: 2020-02-19
   type: conference
   format: poster
-
+- id: shaban2020osm
+  title: Observations of water mass interactions and freshwater transport inside Tallurutiup Imanga — a student-led field study from the Canadian Arctic
+  speakers: M. Shaban, D. Gong, N. Trenholm, K. Kopka, M. Digilio, G. Scowcroft, C. Richards, S. Nudds, D. Torres, B. Loose & D. Clark
+  event: Ocean Sciences Meeting
+  location: San Diego, California
+  date: 2020-02-01
+  type: conference
+  format: poster
+- id: gong2018agu
+  title: Glider observation of tidal and supertidal oscillations in Mid-Atlantic Bight shelfbreak canyons
+  speakers: D. Gong, H. Wang, J. Hudson & L. Ferris
+  event: AGU Fall Meeting
+  location: Washington, D.C.
+  date: 2018-12-01
+  type: conference
+  format: poster
+- id: faulkner2018agu
+  title: Characterizing the Transport Pathways and Storage of Freshwater in the Western Arctic Ocean Through a HYCOM-Based Drifter Study
+  speakers: M. Faulkner & D. Gong
+  event: AGU Fall Meeting
+  location: Washington, D.C.
+  date: 2018-12-01
+  type: conference
+  format: poster
+- id: gong2018agu-ml
+  title: How accessible is machine learning for non-computer scientists? Application of deep learning in physical oceanography and deep sea ecology
+  speakers: D. Gong & J. Hudson
+  event: AGU Fall Meeting
+  location: Washington, D.C.
+  date: 2018-12-01
+  type: conference
+  format: poster
+- id: hudson2018dsbs
+  title: Connecting ocean physical and biogeochemical properties with the spatial distribution of mesopelagic fish abundance/biomass
+  speakers: J. Hudson & D. Gong
+  event: Deep-Sea Biology Symposium
+  location: Monterey, California
+  date: 2018-09-01
+  type: conference
+- id: gong2018grc
+  title: Glider observation of internal tides/waves and large isopycnal displacement in MAB shelfbreak canyons
+  speakers: D. Gong, H. Wang & J. Hudson
+  event: Gordon Research Conference on Ocean Mixing
+  location: Andover, New Hampshire
+  date: 2018-06-01
+  type: conference
 - id: gong2018osm
   title: >-
     Interaction of the Mackenzie River Plume with Beaufort Shelfbreak Jet,
@@ -64,7 +282,41 @@
   date: 2018-02-12
   type: conference
   link: https://agu.confex.com/agu/os18/preliminaryview.cgi/Paper321271.html
-
+- id: abdelhameid2018osm
+  title: 'Multi-Scale Variability of the Western Arctic Boundary Current within the Distributed Biological Observatory''s Sampling Domain: A Model-Based Analysis'
+  speakers: D. AbdelHameid & D. Gong
+  event: Ocean Sciences Meeting
+  location: Portland, Oregon
+  date: 2018-02-01
+  type: conference
+- id: gong2017arcticchange
+  title: Interaction of the Mackenzie River Plume with Beaufort Shelfbreak Jet and Wind Forcing
+  speakers: D. Gong, H. Wang, F. Wiese & G. Auad
+  event: Arctic Change 2017
+  location: Québec City, Canada
+  date: 2017-12-01
+  type: conference
+- id: wang2017mabpom
+  title: Event timescale (days) variation of cross-shelf water mass distribution in the southern Mid-Atlantic Bight driven by wind, sea surface topography, and offshore rings
+  speakers: H. Wang & D. Gong
+  event: MABPOM Conference
+  location: UNC Coastal Studies Institute, North Carolina
+  date: 2017-10-01
+  type: conference
+- id: wang2017grc
+  title: Upwelling and Downwelling in the Mid-Atlantic Bight Canyons from Geostrophic Flow Climatology and Glider Observations
+  speakers: H. Wang & D. Gong
+  event: Gordon Research Conference on Coastal Ocean Dynamics
+  location: Biddeford, Maine
+  date: 2017-06-01
+  type: conference
+- id: gong2017grc
+  title: 'River-Shelf-Basin Interactions in the Eastern Beaufort Sea: Initial glider results from the Marine Arctic Ecosystem Study'
+  speakers: D. Gong, H. Wang & F. Wiese
+  event: Gordon Research Conference on Polar Marine Science
+  location: Ventura, California
+  date: 2017-03-01
+  type: conference
 - id: gong2016osm
   title: >-
     Quantifying Inflows and Outflows to/from Barrow Canyon using Shipboard
@@ -76,7 +328,6 @@
   type: conference
   format: talk
   link: https://agu.confex.com/agu/os16/preliminaryview.cgi/Paper91999.html
-
 - id: wang2016osm
   title: >-
     Shelf-Slope Exchanges near Submarine Canyons in the Southern
@@ -88,9 +339,141 @@
   type: conference
   format: talk
   link: https://agu.confex.com/agu/os16/preliminaryview.cgi/Paper92468.html
+- id: wang2015mabpom
+  title: Influence of Wind and Sea-Surface Topography on Shelf-Slope Exchange near Washington Canyon
+  speakers: H. Wang & D. Gong
+  event: MABPOM Conference
+  location: Atlantic City, New Jersey
+  date: 2015-10-01
+  type: conference
+- id: gong2015grc
+  title: Closing the mass budget in Barrow Canyon using shipboard and glider data
+  speakers: D. Gong, R. Kelly & R. S. Pickart
+  event: Gordon Research Conference on Polar Marine Science
+  location: Lucca, Italy
+  date: 2015-03-01
+  type: conference
+- id: wallace2015aslo
+  title: Interannual and Decadal Variability in Temperature, Salinity, and Shelf Water Volume in the U.S. Mid-Atlantic Bight from 1977 to 2013
+  speakers: E. Wallace & D. Gong
+  event: ASLO Aquatic Sciences Meeting
+  location: Granada, Spain
+  date: 2015-02-01
+  type: conference
+- id: wang2014mabpom
+  title: Submarine Canyon Upwelling and Cold Pool Variability in the Southern Mid-Atlantic Bight
+  speakers: H. Wang & D. Gong
+  event: MABPOM Conference
+  location: Gloucester Point, Virginia
+  date: 2014-10-01
+  type: conference
+- id: gong2014mabpom
+  title: Impact of climate change on the Mid-Atlantic Bight since 1977
+  speakers: D. Gong & E. Wallace
+  event: MABPOM Conference
+  location: Gloucester Point, Virginia
+  date: 2014-10-01
+  type: conference
+- id: gong2014osm
+  title: Summertime water mass transformation in the Chukchi Sea
+  speakers: D. Gong & R. S. Pickart
+  event: Ocean Sciences Meeting
+  location: Honolulu, Hawaii
+  date: 2014-03-01
+  type: conference
+- id: gong2013grc
+  title: Summertime Circulation and Water Mass Transformation in the Eastern Chukchi Sea
+  speakers: D. Gong & R. S. Pickart
+  event: Gordon Research Conference on Polar Marine Science
+  location: Ventura, California
+  date: 2013-03-01
+  type: conference
+- id: gong2012osm
+  title: Observation of Circulation and Water Mass Transformation in the Eastern Chukchi Sea
+  speakers: D. Gong & R. S. Pickart
+  event: Ocean Sciences Meeting
+  location: Salt Lake City, Utah
+  date: 2012-02-01
+  type: conference
+- id: gong2011ams
+  title: Transformation of Pacific water masses north of Bering Strait
+  speakers: D. Gong & R. S. Pickart
+  event: AMS 11th Conference on Polar Meteorology and Oceanography
+  location: Boston, Massachusetts
+  date: 2011-05-01
+  type: conference
+- id: gong2010osm
+  title: Seasonal Transport on the Mid-Atlantic Bight
+  speakers: D. Gong, J. Kohut, J. Wilkin & S. Glenn
+  event: Ocean Sciences Meeting
+  location: Portland, Oregon
+  date: 2010-02-01
+  type: conference
+- id: gong2009mabpom
+  title: Evolution of Stratification and Salinity Intrusions on the MAB Outershelf during Summer 2006
+  speakers: D. Gong, J. Kohut, O. Schofield & S. Glenn
+  event: MABPOM Conference
+  location: Raleigh, North Carolina
+  date: 2009-08-01
+  type: conference
+- id: gong2008mabpom
+  title: Seasonal Climatology of Wind-Driven Circulation on the NJ Shelf
+  speakers: D. Gong, J. Kohut & S. Glenn
+  event: MABPOM Conference
+  location: Woods Hole, Massachusetts
+  date: 2008-09-01
+  type: conference
+- id: gong2008osm
+  title: Wind-driven Circulation and Shelf-Slope Exchange on the NJ Shelf
+  speakers: D. Gong, R. Castelao, J. Kohut, O. Schofield & S. Glenn
+  event: Ocean Sciences Meeting
+  location: Orlando, Florida
+  date: 2008-03-01
+  type: conference
+- id: gong2007mabpom
+  title: Characterizing Summertime Shelf-slope Exchange Processes on the NJ Shelf
+  speakers: D. Gong & S. Glenn
+  event: MABPOM Conference
+  location: New Brunswick, New Jersey
+  date: 2007-09-01
+  type: conference
+- id: gong2007nbgsc
+  title: Transport of Phytoplankton on the Mid-Atlantic Bight
+  speakers: D. Gong, S. Glenn, J. Kohut, O. Schofield & W. Zhang
+  event: Northeast Biological Graduate Student Conference
+  location: Halifax, Nova Scotia
+  date: 2007-02-01
+  type: conference
+- id: gong2006osm
+  title: NJ Turnpike — Dynamics of the Hudson Shelf Valley
+  speakers: D. Gong, S. Glenn, R. Chant, J. Wilkin & J. Kohut
+  event: Ocean Sciences Meeting
+  location: Honolulu, Hawaii
+  date: 2006-02-01
+  type: conference
+- id: gong2005grc
+  title: Coastal Plume & Shelf Circulation — LaTTE 2005 Remote Sensing Results
+  speakers: D. Gong, J. Bosch, R. Chant, J. Kohut, H. Roarty & S. Glenn
+  event: Gordon Research Conference on Coastal Ocean Circulation
+  location: New London, New Hampshire
+  date: 2005-06-01
+  type: conference
+- id: gong2004agu
+  title: Statistical Analysis of Surface Currents Off the Coast of NJ/NY — Initial Study
+  speakers: D. Gong, S. Glenn, R. Chant, J. Kohut, H. Roarty & J. Bosch
+  event: AGU Fall Meeting
+  location: San Francisco, California
+  date: 2004-12-01
+  type: conference
 
-# --- Workshops -------------------------------------------------------------
+# --- Workshops & working groups ---------------------------------------------
 
+- id: gong2024iugc
+  title: Microstructure turbulence, ADCP, and passive acoustic observations in the Nordic Seas using underwater gliders
+  speakers: D. Gong, L. Ferris, R. Bourdon, J. Slater & N. Trenholm
+  event: International Underwater Glider Conference (EGO)
+  date: 2024-06-01
+  type: workshop
 - id: gong2022ug2
   title: >-
     Reimagining Glider and Float Mission Logistics — How to Scale the Next
@@ -101,7 +484,13 @@
   date: 2022-09-20
   type: workshop
   format: poster
-
+- id: gong2022ug2-ams
+  title: 'The Autonomous Mission Sentinel: Fast, cost-effective, autonomous sailing glider deployment and recovery vessel'
+  speakers: D. Gong
+  event: UG2 Underwater Glider User Group Workshop
+  location: Seattle, Washington
+  date: 2022-09-20
+  type: workshop
 - id: gong2019ego
   title: 'Glider Observations of the Arctic Ocean: Opportunities, Challenges, and Next Steps'
   speakers: D. Gong
@@ -110,7 +499,6 @@
   date: 2019-05-21
   type: workshop
   format: talk
-
 - id: wang2019ego
   title: Glider Observations of Submarine Canyons off the U.S. East Coast
   speakers: H. D. Wang
@@ -119,3 +507,48 @@
   date: 2019-05-21
   type: workshop
   format: poster
+- id: gong2019polarice
+  title: Communicating Polar Science in the context of the Green New Deal
+  speakers: D. Gong
+  event: Polar-ICE Science Communication Workshop
+  location: Newark, Delaware
+  date: 2019-01-01
+  type: workshop
+- id: gong2018act
+  title: Applications of Unmanned Aerial Systems at VIMS for Research and Advisory Services
+  speakers: D. Gong & J. Hudson
+  event: Alliance for Coastal Technologies Drone Workshop
+  location: Wells, Maine
+  date: 2018-09-01
+  type: workshop
+- id: gong2017iooc
+  title: Glider Observations of Arctic and Mid-Atlantic Submarine Canyons
+  speakers: D. Gong, H. Wang & J. Hudson
+  event: IOOC Underwater Glider Workshop
+  location: Stennis Space Center, Mississippi
+  date: 2017-01-01
+  type: workshop
+- id: gong2013icescape
+  title: Transport and Transformation of Pacific Water Masses from Bering Strait to Barrow Canyon
+  speakers: D. Gong & R. S. Pickart
+  event: NASA ICESCAPE Project Meeting
+  location: Palo Alto, California
+  date: 2013-09-01
+  type: workshop
+- id: gong2009onr
+  title: Mesoscale Physical Oceanography during SW06/NLIWI
+  speakers: D. Gong & S. Glenn
+  event: ONR Physical Oceanography Review
+  location: Chicago, Illinois
+  date: 2009-06-01
+  type: workshop
+
+# --- Outreach ---------------------------------------------------------------
+
+- id: gong2019bluecrab
+  title: Why we need to observe the ocean?
+  speakers: D. Gong
+  event: Blue Crab Bowl, VIMS
+  location: Gloucester Point, Virginia
+  date: 2019-02-01
+  type: outreach

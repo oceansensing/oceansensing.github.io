@@ -1,0 +1,42 @@
+# CV: Selected professional and university service. Each entry needs a
+# unique `id`. `group` is one of: editorial, review, university.
+- id: frontiers-editor
+  group: editorial
+  years: 2025—present
+  text: Associate Editor, Frontiers in Marine Science — Physical Oceanography
+- id: nsf-review
+  group: review
+  years: 2013—2024
+  text: Proposal reviewer and panelist, NSF (Physical Oceanography, Ocean Sciences, Office of Polar Programs, Graduate Research Fellowship Program)
+- id: noaa-panel
+  group: review
+  years: '2015'
+  text: Panelist, NOAA Climate and Ocean Division
+- id: florida-coe
+  group: review
+  years: '2025'
+  text: Panelist, Florida Centers of Excellence Program
+- id: journal-review
+  group: review
+  years: 2010—present
+  text: 'Manuscript reviewer: JGR Oceans, J. Physical Oceanography, Deep-Sea Research I & II, Continental Shelf Research, Progress in Oceanography, Limnology & Oceanography, Frontiers in Marine Science, Elementa'
+- id: frc
+  group: university
+  years: 2025—present
+  text: W&M Faculty Research Council (Vice-President)
+- id: faculty-council
+  group: university
+  years: 2022—present
+  text: VIMS Faculty Council
+- id: epc
+  group: university
+  years: 2013—2025
+  text: VIMS Education Policy Committee
+- id: academic-council
+  group: university
+  years: 2016—2022
+  text: VIMS Academic Council
+- id: maracoos-rep
+  group: university
+  years: 2014—present
+  text: VIMS Representative to MARACOOS

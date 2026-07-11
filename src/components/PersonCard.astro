@@ -12,6 +12,7 @@ const { name, role, photo, email, links, years, currentPosition } = person.data;
 const { Content } = await render(person);
 
 const externalLinks = [
+  links.cv && { label: 'CV', url: links.cv },
   links.website && { label: 'Website', url: links.website },
   links.scholar && { label: 'Scholar', url: links.scholar },
   links.orcid && { label: 'ORCID', url: `https://orcid.org/${links.orcid}` },

@@ -1,0 +1,21 @@
+# CV: Academic appointments. Each entry needs a unique `id`.
+- id: vims-assoc
+  years: 2019—present
+  title: Associate Professor
+  institution: Virginia Institute of Marine Science, William & Mary
+- id: whoi-guest
+  years: 2015—present
+  title: Guest Investigator
+  institution: Woods Hole Oceanographic Institution
+- id: vims-asst
+  years: 2012—2019
+  title: Assistant Professor
+  institution: Virginia Institute of Marine Science, William & Mary
+- id: whoi-postdoc-inv
+  years: '2012'
+  title: Postdoctoral Investigator
+  institution: Woods Hole Oceanographic Institution
+- id: whoi-postdoc
+  years: 2010—2012
+  title: Postdoctoral Scholar, Ocean and Climate Change Institute
+  institution: Woods Hole Oceanographic Institution

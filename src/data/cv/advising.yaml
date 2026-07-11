@@ -1,0 +1,36 @@
+# CV: Graduate students and postdocs advised. Each entry needs a unique `id`.
+- id: williams-ms
+  name: Jonathan Williams
+  degree: M.S.
+  years: 2025—present
+  topic: Characterizing the impact of Mid-Atlantic Bight shelf water export on the position and orientation of the Gulf Stream
+- id: slater-ms
+  name: Jack Slater
+  degree: M.S.
+  years: 2025—present
+  topic: Impact of submesoscale ocean processes on ocean acoustic propagation
+- id: bourdon-phd
+  name: Ricardo Bourdon
+  degree: Ph.D.
+  years: 2023—present
+  topic: Submesoscale upper ocean dynamics and turbulent mixing
+- id: wang-postdoc
+  name: Haixing (Daniel) Wang
+  degree: Postdoctoral Researcher
+  years: '2022'
+  topic: Submarine canyon dynamics in the Mid-Atlantic Bight
+- id: ferris-phd
+  name: Lauren (Laur) Ferris
+  degree: Ph.D.
+  years: 2017—2022
+  topic: 'Dissertation: Across-scale Energy Transfer in the Southern Ocean'
+- id: wang-phd
+  name: Haixing (Daniel) Wang
+  degree: Ph.D.
+  years: 2016—2021
+  topic: 'Dissertation: Impact of Canyon Upwelling and Downwelling in the Mid-Atlantic Bight'
+- id: wang-ms
+  name: Haixing (Daniel) Wang
+  degree: M.S.
+  years: 2013—2016
+  topic: 'Thesis: On Shelf-Slope Water Mass Exchanges near Washington Canyon and Norfolk Canyon in the Mid-Atlantic Bight'

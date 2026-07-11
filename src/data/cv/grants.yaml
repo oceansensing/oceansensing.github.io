@@ -1,0 +1,113 @@
+# CV: Fellowships, grants, and contracts (titles, sponsors, roles, and
+# terms only — award amounts and award numbers are deliberately omitted
+# from the public site). Each entry needs a unique `id`.
+- id: maracoos-2021
+  years: 2021—2026
+  title: MARACOOS — Powering Understanding and Prediction of the Mid-Atlantic Ocean, Coast, and Estuaries
+  sponsor: NOAA
+  role: VIMS subcontract co-PI
+- id: norse
+  years: 2021—2025
+  title: 'ONR NORSE DRI: Investigation of Upper Ocean Submesoscale Dynamics in the Nordic Seas through Glider-based ADCP & Microstructure Observations'
+  sponsor: Office of Naval Research
+  role: VIMS PI (with co-PI L. Ferris)
+- id: passengers
+  years: 2021—2025
+  title: 'ONR TFO: Predictions of AcousticS with Smart Experimental Networks of GlidERS (PASSENGERS)'
+  sponsor: Office of Naval Research
+  role: VIMS PI
+- id: ioos-hurricane-2022
+  years: 2022—2024
+  title: 'IOOS Disaster Supplemental: Accelerate Improvements in Hurricane Intensity Forecasting Through Underwater Glider Field Campaigns'
+  sponsor: NOAA
+  role: VIMS PI
+- id: hurricane-gliders-2020
+  years: 2020—2022
+  title: Mid-Atlantic Gliders Supporting Hurricane Intensity Forecasts
+  sponsor: NOAA
+  role: VIMS PI
+- id: dredging
+  years: 2020—2021
+  title: Shallow Water Dredging Year 2
+  sponsor: Middle Peninsula Planning Authority
+  role: co-PI (lead D. Milligan)
+- id: maracoos-2016
+  years: 2016—2022
+  title: MARACOOS — Preparing for a Changing Mid-Atlantic
+  sponsor: NOAA
+  role: VIMS subcontract PI (lead S. Glenn, Rutgers)
+- id: sustained-gliders-2020
+  years: 2020—2022
+  title: Sustained Ocean Observations with Underwater Gliders in the Mid-Atlantic Bight
+  sponsor: NOAA
+  role: VIMS subcontract PI
+- id: sustained-gliders-2019
+  years: 2019—2021
+  title: Sustained Ocean Observations with Underwater Gliders in Support of Hurricane Intensity Forecasts
+  sponsor: NOAA
+  role: VIMS subcontract PI
+- id: nwpp
+  years: 2017—2020
+  title: Northwest Passage Project
+  sponsor: Heising-Simons Foundation
+  role: VIMS subcontract PI (lead G. Scowcroft, URI)
+- id: microsoft-ml
+  years: 2019—2022
+  title: Predicting where the fishes are in the ocean using Machine Learning
+  sponsor: Microsoft
+  role: Lead PI
+- id: mares
+  years: 2014—2020
+  title: Marine Arctic Ecosystem Study (MARES) — Ecosystem Dynamics and Monitoring of the Beaufort Sea
+  sponsor: DOI Bureau of Ocean Energy Management
+  role: VIMS subcontract PI (lead F. Wiese, Stantec)
+- id: hyperspectral
+  years: 2018—2019
+  title: Hyperspectral Drone Imaging System
+  sponsor: VIMS ETF
+  role: Lead PI
+- id: goship
+  years: '2018'
+  title: US GO-SHIP S04P
+  sponsor: NSF / Scripps Institution of Oceanography
+  role: VIMS subcontract PI (lead J. Swift, SIO)
+- id: herders
+  years: 2017—2018
+  title: Laboratory Analysis of Chemical Herders
+  sponsor: DOI Bureau of Safety and Environmental Enforcement
+  role: VIMS subcontract PI (lead R. Byrne, ARA)
+- id: oil-acoustics
+  years: 2015—2017
+  title: Development of acoustic methods to measure oil droplet size and slick thickness on ROV and AUV platforms
+  sponsor: DOI Bureau of Safety and Environmental Enforcement
+  role: VIMS subcontract PI (lead P. Panetta, ARA)
+- id: stormwater
+  years: 2014—2016
+  title: Assessing the impact of stormwater runoff on Chesapeake Bay water quality
+  sponsor: Dominion Foundation
+  role: Lead PI
+- id: maracoos-2011
+  years: 2011—2016
+  title: Towards a Comprehensive Mid-Atlantic Regional Association Coastal Ocean Observing System (MARACOOS)
+  sponsor: NOAA / Rutgers University
+  role: VIMS subcontract PI (lead S. Glenn, Rutgers)
+- id: whoi-shelfbreak
+  years: '2012'
+  title: Along-shelf Variability of the Western Arctic Shelfbreak Boundary Current
+  sponsor: Woods Hole Oceanographic Institution
+  role: Lead PI
+- id: clivar-a20
+  years: '2012'
+  title: U.S. CLIVAR Repeat Hydrography Program — Chief Scientist Cruise Support
+  sponsor: Scripps Institution of Oceanography
+  role: co-PI (lead M. McCartney, WHOI)
+- id: whoi-occi
+  years: 2010—2012
+  title: WHOI Ocean and Climate Change Institute Postdoctoral Fellowship
+  sponsor: Woods Hole Oceanographic Institution
+  role: Fellow
+- id: nliwi
+  years: 2007—2010
+  title: 'Characterizing Mesoscale Physical Oceanography On the New Jersey Shelf: Non-Linear Internal Wave Initiative'
+  sponsor: Office of Naval Research
+  role: co-PI (lead S. Glenn, Rutgers)
