@@ -4,7 +4,6 @@ import { CONTACT, SITE } from '../config';
 import vimsLogoLight from '../assets/vims-logo-light.webp';
 import vimsLogoDark from '../assets/vims-logo-dark.webp';
 
-const year = new Date().getFullYear();
 const vimsAlt =
   'William & Mary and the Virginia Institute of Marine Science — Batten School of Coastal & Marine Sciences';
 ---
@@ -30,9 +29,6 @@ const vimsAlt =
       <Image class="logo-light" src={vimsLogoLight} alt={vimsAlt} widths={[320, 640]} sizes="320px" />
       <Image class="logo-dark" src={vimsLogoDark} alt={vimsAlt} widths={[320, 640]} sizes="320px" />
     </a>
-  </div>
-  <div class="container copyright muted">
-    © {year} {SITE.fullName}
   </div>
 </footer>
 
@@ -124,7 +120,4 @@ const vimsAlt =
     gap: var(--space-2xs);
   }
 
-  .copyright {
-    margin-block-start: var(--space-lg);
-  }
 </style>
