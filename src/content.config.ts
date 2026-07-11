@@ -71,6 +71,7 @@ const publications = defineCollection({
     pages: z.string().optional(),
     doi: z.string().optional(),
     url: z.string().optional(),
+    preprint: z.boolean().default(false),
   }),
 });
 

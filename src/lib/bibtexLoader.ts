@@ -46,15 +46,24 @@ function mapEntry(entry: Entry): Record<string, unknown> {
     given: a.firstName,
   }));
 
+  const doi = f.doi?.replace(/^https?:\/\/(dx\.)?doi\.org\//, '');
+  const venue = f.journal ?? f.booktitle ?? f.publisher;
+  // arXiv entries (identified by venue text or the arXiv DOI prefix) are
+  // listed in the Preprints section until their published version
+  // replaces them in the .bib file.
+  const preprint =
+    /arxiv/i.test(`${venue ?? ''} ${f.publisher ?? ''}`) || Boolean(doi?.startsWith('10.48550/'));
+
   return {
     type: entry.type,
     title: f.title ?? '(untitled)',
     authors,
-    venue: f.journal ?? f.booktitle ?? f.publisher,
+    venue,
     year: Number(f.year ?? 0),
     volume: f.volume,
     pages: f.pages,
-    doi: f.doi?.replace(/^https?:\/\/(dx\.)?doi\.org\//, ''),
+    doi,
     url: f.url,
+    preprint,
   };
 }

@@ -3,7 +3,11 @@ import { getCollection } from 'astro:content';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PublicationItem from '../components/PublicationItem.astro';
 
-const pubs = await getCollection('publications');
+const all = await getCollection('publications');
+const preprints = all
+  .filter((p) => p.data.preprint)
+  .sort((a, b) => b.data.year - a.data.year);
+const pubs = all.filter((p) => !p.data.preprint);
 
 const byYear = new Map<number, typeof pubs>();
 for (const pub of pubs) {
@@ -24,6 +28,18 @@ const years = [...byYear.keys()].sort((a, b) => b - a);
       {pubs.length} publications. Lab members in <strong>bold</strong>; every entry
       links to the paper of record.
     </p>
+    {
+      preprints.length > 0 && (
+        <section class="preprints">
+          <h2 class="eyebrow">Preprints</h2>
+          <ul>
+            {preprints.map((pub) => (
+              <PublicationItem pub={pub} />
+            ))}
+          </ul>
+        </section>
+      )
+    }
     {
       years.map((year) => (
         <section>
