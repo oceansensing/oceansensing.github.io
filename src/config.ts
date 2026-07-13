@@ -9,7 +9,7 @@ export const SITE = {
   fullName: 'Collaboratory for Physical Oceanography',
   description:
     'The Collaboratory for Physical Oceanography (C4PO) at the Virginia Institute of Marine Science studies polar and coastal ocean dynamics using autonomous ocean sensing platforms.',
-  url: 'https://oceansensing.github.io',
+  url: 'https://oceansensing.org',
 } as const;
 
 export const NAV = [
