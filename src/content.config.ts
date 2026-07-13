@@ -121,6 +121,8 @@ const software = defineCollection({
     description: z.string(),
     repo: z.url(),
     language: z.string().optional(),
+    // surnames of lab authors; a tool appears on those members' CVs
+    authors: z.array(z.string()).default([]),
   }),
 });
 

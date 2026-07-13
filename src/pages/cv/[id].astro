@@ -62,6 +62,10 @@ const mine = allPubs.filter((p) => p.data.authors.some((a) => a.family.includes(
 const preprints = mine.filter((p) => p.data.preprint).sort((a, b) => b.data.year - a.data.year);
 const pubs = mine.filter((p) => !p.data.preprint).sort((a, b) => b.data.year - a.data.year);
 
+const software = (await getCollection('software'))
+  .filter((s) => s.data.authors.includes(surname))
+  .sort((a, b) => a.data.title.localeCompare(b.data.title, 'en', { sensitivity: 'base' }));
+
 const myPres = (await getCollection('presentations')).filter((p) =>
   p.data.speakers.includes(surname)
 );
@@ -200,6 +204,26 @@ const monthYear = (date: Date) =>
           <ul class="pubs">
             {pubs.map((pub) => (
               <PublicationItem pub={pub} />
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      software.length > 0 && (
+        <section>
+          <h2 class="eyebrow">Software</h2>
+          <ul>
+            {software.map(({ data }) => (
+              <li class="row">
+                <span class="years">{data.language}</span>
+                <span>
+                  <a href={data.repo}>
+                    <strong>{data.title}</strong>
+                  </a>{`. ${data.description}`}
+                </span>
+              </li>
             ))}
           </ul>
         </section>

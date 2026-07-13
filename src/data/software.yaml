@@ -1,6 +1,15 @@
 # Software and tools listed on the Data & Tools page.
 # Each entry needs a unique `id`. Displayed alphabetically by title.
+# `authors` (surnames) controls whose CV a tool appears on.
 
+- id: slocumio-jl
+  title: SlocumIO.jl
+  description: >-
+    A pure-Julia reader for Slocum glider binary data — a Julia
+    implementation of dbdreader.
+  repo: https://github.com/oceansensing/SlocumIO.jl
+  language: Julia
+  authors: [Gong]
 - id: seaexplorerio-jl
   title: SeaExplorerIO.jl
   description: >-
@@ -8,12 +17,22 @@
     data.
   repo: https://github.com/oceansensing/SeaExplorerIO.jl
   language: Julia
+  authors: [Gong]
 - id: glideradcp-jl
   title: GliderADCP.jl
   description: >-
     Pure-Julia implementation of a glider ADCP data processing pipeline.
-  repo: https://github.com/truedichotomy/GliderADCP.jl
+  repo: https://github.com/oceansensing/GliderADCP.jl
   language: Julia
+  authors: [Gong]
+- id: jlglider
+  title: jlglider
+  description: >-
+    A collection of underwater glider data processing functions and scripts
+    written in Julia.
+  repo: https://github.com/oceansensing/jlglider
+  language: Julia
+  authors: [Gong]
 - id: oceansensing-org
   title: oceansensing on GitHub
   description: >-
@@ -27,3 +46,4 @@
     gliders, CTD, models — published in the Journal of Open Source Software.
   repo: https://github.com/lnferris/ocean_data_tools
   language: MATLAB
+  authors: [Ferris]
