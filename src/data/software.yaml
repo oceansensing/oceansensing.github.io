@@ -25,14 +25,6 @@
   repo: https://github.com/oceansensing/GliderADCP.jl
   language: Julia
   authors: [Gong]
-- id: jlglider
-  title: jlglider
-  description: >-
-    A collection of underwater glider data processing functions and scripts
-    written in Julia.
-  repo: https://github.com/oceansensing/jlglider
-  language: Julia
-  authors: [Gong]
 - id: oceansensing-org
   title: oceansensing on GitHub
   description: >-
