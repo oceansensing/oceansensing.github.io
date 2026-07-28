@@ -47,12 +47,26 @@ function mapEntry(entry: Entry): Record<string, unknown> {
   }));
 
   const doi = f.doi?.replace(/^https?:\/\/(dx\.)?doi\.org\//, '');
-  const venue = f.journal ?? f.booktitle ?? f.publisher;
-  // arXiv entries (identified by venue text or the arXiv DOI prefix) are
-  // listed in the Preprints section until their published version
-  // replaces them in the .bib file.
+
+  /* Preprints are their own category: use `@preprint` (or `@eprint`) with
+     BibLaTeX `eprinttype`/`eprint` fields — see the header of
+     publications.bib. The arXiv checks are a fallback for entries pasted
+     straight from a journal or arXiv without those fields. */
   const preprint =
-    /arxiv/i.test(`${venue ?? ''} ${f.publisher ?? ''}`) || Boolean(doi?.startsWith('10.48550/'));
+    ['preprint', 'eprint'].includes(entry.type) ||
+    Boolean(f.eprint ?? f.eprinttype) ||
+    /arxiv/i.test(`${f.journal ?? ''} ${f.publisher ?? ''}`) ||
+    Boolean(doi?.startsWith('10.48550/'));
+
+  const server = f.eprinttype ?? (doi?.startsWith('10.48550/') ? 'arXiv' : undefined);
+  // arXiv is cited by identifier ("arXiv:2406.16818"); other servers by name.
+  const eprintVenue = /^arxiv$/i.test(server ?? '')
+    ? `arXiv${f.eprint ? `:${f.eprint}` : ''}`
+    : server;
+
+  const venue = preprint
+    ? (eprintVenue ?? f.journal ?? f.publisher)
+    : (f.journal ?? f.booktitle ?? f.publisher);
 
   return {
     type: entry.type,
@@ -65,5 +79,6 @@ function mapEntry(entry: Entry): Record<string, unknown> {
     doi,
     url: f.url,
     preprint,
+    server,
   };
 }

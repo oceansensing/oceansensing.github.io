@@ -25,6 +25,9 @@ declare module '@retorquere/bibtex-parser' {
       pages?: string;
       doi?: string;
       url?: string;
+      /** BibLaTeX preprint fields: server name and its identifier */
+      eprinttype?: string;
+      eprint?: string;
       [field: string]: unknown;
     };
     input: string;

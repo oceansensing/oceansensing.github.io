@@ -74,6 +74,8 @@ const publications = defineCollection({
     doi: z.string().optional(),
     url: z.string().optional(),
     preprint: z.boolean().default(false),
+    /** preprint server name, e.g. "arXiv" or "ESS Open Archive" */
+    server: z.string().optional(),
   }),
 });
 
