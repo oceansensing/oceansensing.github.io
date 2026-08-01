@@ -1350,6 +1350,17 @@ import 'leaflet/dist/leaflet.css';
     z-index: 0;
   }
 
+  /* A quarter taller on a desktop screen, where there is height to spare and
+     the extra goes into ocean rather than chrome. Every term scales, not just
+     the vh one, or the clamp would simply pin to the old maximum on a large
+     display. Phones keep the shorter map: the same increase there pushes the
+     legend and the storm line off the first screen. */
+  @media (min-width: 48rem) {
+    #asset-map {
+      height: clamp(30rem, 77.5vh, 50rem);
+    }
+  }
+
   /* Dark mode. Bathymetry imagery is only published light, so the tile
      pane is dimmed rather than inverted — inverting would turn deep water
      pale and read as land. Vector layers lighten to stay legible on it. */
