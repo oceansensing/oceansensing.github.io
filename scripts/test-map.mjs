@@ -574,6 +574,14 @@ const checks = [
   ['measuring suppresses the asset popup', measuringSuppressedPopup],
   ['the measured point snaps to the asset, not the tap', measuredAtTheAsset],
   ['popup links the dataset', /href="https?:[^"]*erddap[^"]*"/i.test(popupHtml)],
+  /* All three popup links are built by one helper, so checking the rendered
+     one checks the mechanism. rel matters as much as target: without
+     noopener the opened page can navigate this one through window.opener. */
+  ['popup links open in their own tab', /target="_blank"/.test(popupHtml)],
+  ['and cannot reach back through window.opener',
+    /rel="[^"]*\bnoopener\b[^"]*"/.test(popupHtml)],
+  ['a new tab is announced, not just shown',
+    /aria-label="[^"]*opens in a new tab[^"]*"/.test(popupHtml)],
   // Theme-driven layers carry a class instead of a baked-in colour, so the
   // stylesheet can restyle them when the reader switches to dark mode.
   ['borders are theme-classed', host.querySelectorAll('path.map-border-country').length > 20],

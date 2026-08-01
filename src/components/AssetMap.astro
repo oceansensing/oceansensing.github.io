@@ -502,6 +502,17 @@ import 'leaflet/dist/leaflet.css';
       L.polyline([[lat, -180], [lat, 180]], { weight: 0.5, className: 'map-grid' }).addTo(graticule);
     }
 
+    /* Every link in a popup leaves the site, so each opens in its own tab:
+       a reader following a float to Euro-Argo has usually not finished with
+       the map, and coming back would cost them their view and a fresh fetch
+       of the whole field. rel is not optional with target=_blank — without
+       noopener the opened page gets a handle on this one through
+       window.opener and can navigate it somewhere else. The label says so
+       out loud for anyone who cannot see a new tab appear. */
+    const outbound = (href: string, text: string) =>
+      `<a href="${href}" target="_blank" rel="noopener noreferrer" ` +
+      `aria-label="${text} (opens in a new tab)">${text}</a>`;
+
     /* ---- hit targets --------------------------------------------------
 
        How close a tap has to land. The dots are drawn small so a crowded
@@ -587,7 +598,10 @@ import 'leaflet/dist/leaflet.css';
             `<strong>Argo ${float.id}</strong>` +
               `<dl><dt>Last profile</dt><dd>${stamp(float.time)}</dd>` +
               `<dt>Position</dt><dd>${float.lat.toFixed(3)}, ${float.lon.toFixed(3)}</dd></dl>` +
-              `<a href="https://fleetmonitoring.euro-argo.eu/float/${float.id}">Float details</a>`
+              outbound(
+                `https://fleetmonitoring.euro-argo.eu/float/${float.id}`,
+                'Float details'
+              )
           );
         }
         const count = (data.floats ?? []).length;
@@ -1208,7 +1222,7 @@ import 'leaflet/dist/leaflet.css';
             `<strong>${s.name}</strong> (${s.classification ?? ''})<br>` +
             `${s.intensityKt ?? '?'} kt · ${s.pressureMb ?? '?'} mb<br>` +
             `Moving ${s.movementDir ?? '?'}° at ${s.movementSpeedKt ?? '?'} kt<br>` +
-            (s.advisoryUrl ? `<a href="${s.advisoryUrl}">NHC advisory</a>` : '');
+            (s.advisoryUrl ? outbound(s.advisoryUrl, 'NHC advisory') : '');
 
           tapTarget([s.lat, s.lon], stormPopup, storms);
           showDetail(
@@ -1295,7 +1309,7 @@ import 'leaflet/dist/leaflet.css';
           `<dt>Last fix</dt><dd>${stamp(a.time)}</dd>` +
           `<dt>Position</dt><dd>${a.lat.toFixed(3)}, ${a.lon.toFixed(3)}</dd>` +
           `</dl>` +
-          `<a href="${a.info}">ERDDAP dataset</a>`;
+          outbound(a.info, 'ERDDAP dataset');
 
         tapTarget([a.lat, a.lon], assetPopup, layer);
         showDetail(
