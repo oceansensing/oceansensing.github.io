@@ -20,10 +20,9 @@ fine for satellites to resolve through clouds and too fast for ship surveys
 to chase.
 
 C4PO observes these events from the air. Beginning with an aerial survey and
-monitoring program for bloom events in the lower York River, the lab has
-developed drone-based remote sensing — multispectral and hyperspectral
-imaging from uncrewed aerial systems — to map blooms at the neighborhood
-scale, in the shallow nearshore waters where blooms concentrate and where
+monitoring program for bloom events in the lower York River, the lab uses
+drone-based aerial remote sensing to map blooms at the neighborhood scale —
+in the shallow nearshore waters where blooms concentrate and where
 conventional platforms struggle to sample. These aerial observations
 complement in-water sampling and have supported collaborative studies of
 phytoplankton dynamics and water quality in the Bay.
