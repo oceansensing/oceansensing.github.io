@@ -34,7 +34,31 @@ const observations = defineCollection({
       title: z.string(),
       short: z.string(),
       summary: z.string(),
-      photos: z.array(z.object({ src: image(), alt: z.string() })).default([]),
+      // optional hero image for the observation's own page
+      cover: z.object({ src: image(), alt: z.string() }).optional(),
+      /* Photos are grouped into dated surveys — the observation page shows
+         them as panels by year, then by day. Mark a photo `featured: true`
+         to pin it into the homepage card's rotation; with none marked, the
+         rotation uses the newest surveys' first photos. */
+      surveys: z
+        .array(
+          z.object({
+            date: z.coerce.date(),
+            location: z.string().optional(),
+            note: z.string().optional(),
+            photos: z
+              .array(
+                z.object({
+                  src: image(),
+                  alt: z.string(),
+                  caption: z.string().optional(),
+                  featured: z.boolean().default(false),
+                })
+              )
+              .default([]),
+          })
+        )
+        .default([]),
       links: z.array(z.object({ label: z.string(), url: z.url() })).default([]),
       order: z.number().default(99),
     }),

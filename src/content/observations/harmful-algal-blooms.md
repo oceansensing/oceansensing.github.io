@@ -7,7 +7,23 @@ summary: >-
   Observing harmful algal blooms in the lower York River and Chesapeake Bay
   with uncrewed aerial systems, resolving bloom patchiness at scales ships
   and satellites miss.
-photos: []
+# Photos are grouped into dated surveys and shown on the page as panels by
+# year, then by day. Add `featured: true` to a photo to pin it into the
+# homepage card's rotation. Example:
+#
+# cover:
+#   src: ./hab-cover.jpg
+#   alt: Discolored water in the lower York River seen from a drone.
+# surveys:
+#   - date: 2025-07-18
+#     location: Lower York River
+#     note: Optional one-line context for the flight.
+#     photos:
+#       - src: ./hab-2025-07-18-a.jpg
+#         alt: Bloom streaks along the shoreline.
+#         caption: Optional caption shown under the photo.
+#         featured: true
+surveys: []
 order: 1
 ---
 

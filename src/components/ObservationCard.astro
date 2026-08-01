@@ -7,7 +7,18 @@ interface Props {
 }
 
 const { observation } = Astro.props;
-const { title, short, photos } = observation.data;
+const { title, short, cover, surveys } = observation.data;
+
+/* Rotation pool: photos explicitly pinned with `featured: true`; failing
+   that, one photo from each survey (newest first), capped so the loop stays
+   a reasonable length. The cover leads if it exists. */
+const newest = [...surveys].sort((a, b) => b.date.valueOf() - a.date.valueOf());
+const pinned = newest.flatMap((s) => s.photos.filter((p) => p.featured));
+const fallback = newest.map((s) => s.photos[0]).filter((p) => p !== undefined);
+const photos = [
+  ...(cover ? [cover] : []),
+  ...(pinned.length > 0 ? pinned : fallback).slice(0, 6),
+];
 
 /* Photo bank rotates with a pure-CSS crossfade — no JavaScript. Each photo
    holds for HOLD seconds; the whole loop is photos.length * HOLD. The
