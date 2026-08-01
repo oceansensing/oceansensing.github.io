@@ -110,8 +110,9 @@ surveys:
         center: { lat: 37.24557, lon: -76.50071 }
   - date: 2017-08-16
     location: Lower York River
-    # Local zone for the date and place; these files carry no
-    # timezone tag and there is no flight video to cross-check.
+    # UTC-4 confirmed from a sidecar XMP export of this event:
+    # GPSTimeStamp 2017-08-30T18:19:53Z against DateCreated
+    # 2017-08-30T14:19:53-04:00.
     timezone: EDT
     note: Drone survey, 14:32–15:28.
     photos:
@@ -129,8 +130,9 @@ surveys:
         camera: { lat: 37.24246, lon: -76.50772, alt: 86 }
   - date: 2017-08-21
     location: Lower York River
-    # Local zone for the date and place; these files carry no
-    # timezone tag and there is no flight video to cross-check.
+    # UTC-4 confirmed from a sidecar XMP export of this event:
+    # GPSTimeStamp 2017-08-30T18:19:53Z against DateCreated
+    # 2017-08-30T14:19:53-04:00.
     timezone: EDT
     note: Drone survey, 12:03–12:07.
     photos:
@@ -153,8 +155,9 @@ surveys:
         camera: { lat: 37.24401, lon: -76.50007, alt: 29 }
   - date: 2017-08-22
     location: Lower York River
-    # Local zone for the date and place; these files carry no
-    # timezone tag and there is no flight video to cross-check.
+    # UTC-4 confirmed from a sidecar XMP export of this event:
+    # GPSTimeStamp 2017-08-30T18:19:53Z against DateCreated
+    # 2017-08-30T14:19:53-04:00.
     timezone: EDT
     note: Drone survey, 14:08–15:24.
     photos:
@@ -188,8 +191,9 @@ surveys:
         camera: { lat: 37.24055, lon: -76.50433, alt: 3 }
   - date: 2017-08-30
     location: Lower York River
-    # Local zone for the date and place; these files carry no
-    # timezone tag and there is no flight video to cross-check.
+    # UTC-4 confirmed from a sidecar XMP export of this event:
+    # GPSTimeStamp 2017-08-30T18:19:53Z against DateCreated
+    # 2017-08-30T14:19:53-04:00.
     timezone: EDT
     note: Drone survey, 14:06–14:25.
     photos:
@@ -218,8 +222,9 @@ surveys:
         camera: { lat: 37.24158, lon: -76.50967, alt: 85 }
   - date: 2017-08-31
     location: Lower York River
-    # Local zone for the date and place; these files carry no
-    # timezone tag and there is no flight video to cross-check.
+    # UTC-4 confirmed from a sidecar XMP export of this event:
+    # GPSTimeStamp 2017-08-30T18:19:53Z against DateCreated
+    # 2017-08-30T14:19:53-04:00.
     timezone: EDT
     note: Drone survey, 14:48–15:03.
     photos:
