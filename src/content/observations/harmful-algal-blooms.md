@@ -1,8 +1,8 @@
 ---
 title: Harmful Algal Blooms
 short: >-
-  Dense blooms that discolor Chesapeake Bay tributaries each summer, tracked
-  from the air with drone-based multispectral and hyperspectral imaging.
+  Blooms that discolor Chesapeake Bay tributaries occur often in the summer.
+  We track HAB from the air using drone-based aerial remote sensing.
 summary: >-
   Observing harmful algal blooms in the lower York River and Chesapeake Bay
   with uncrewed aerial systems, resolving bloom patchiness at scales ships
