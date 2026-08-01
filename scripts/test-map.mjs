@@ -23,6 +23,8 @@ Object.defineProperty(globalThis, 'navigator', { value: window.navigator, config
 for (const k of ['HTMLElement', 'Element', 'Node', 'SVGElement', 'Event', 'MouseEvent', 'KeyboardEvent', 'DOMParser'])
   globalThis[k] = window[k];
 globalThis.getComputedStyle = window.getComputedStyle.bind(window);
+window.matchMedia ??= (query) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {} });
+window.Element.prototype.scrollIntoView = function () {};
 globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
 globalThis.cancelAnimationFrame = clearTimeout;
 
@@ -43,6 +45,17 @@ globalThis.fetch = async (u) => {
 };
 
 const assets = files['ocean-assets'];
+
+/* Stand in for the StormStatus component: one hidden zoom button per storm,
+   plus one naming a storm that is not in the data — that one must stay
+   hidden. AssetMap reveals and wires the rest. */
+const statusEl = document.getElementById('map-status');
+for (const id of [...assets.storms.map((s) => s.id), 'zz992026']) {
+  const b = document.createElement('button');
+  b.dataset.stormZoom = id;
+  b.hidden = true;
+  statusEl.after(b);
+}
 const bundle = fs.readdirSync('dist/_astro').find((f) => f.startsWith('AssetMap') && f.endsWith('.js'));
 if (!bundle) {
   console.error('no AssetMap bundle in dist/_astro — run `npm run build` first');
@@ -64,6 +77,21 @@ if (marker) {
   popupHtml = host.querySelector('.leaflet-popup-content')?.innerHTML ?? '';
 }
 
+/* Zoom buttons: the ones naming a real storm are revealed and wired, the
+   unknown one stays hidden. Clicking must centre the map on that storm. */
+const zoomButtons = [...document.querySelectorAll('[data-storm-zoom]')];
+const known = zoomButtons.filter((b) => assets.storms.some((s) => s.id === b.dataset.stormZoom));
+const unknown = zoomButtons.find((b) => b.dataset.stormZoom === 'zz992026');
+let movedTo = null;
+const target = assets.storms[0];
+if (known[0] && target) {
+  known[0].dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+  await new Promise((r) => setTimeout(r, 1200));
+  const c = host._map?.getCenter?.() ?? null;
+  movedTo = c && { lat: c.lat, lng: c.lng };
+}
+const near = (a, b) => a !== null && Math.abs(a) < b;
+
 const status = document.getElementById('map-status').textContent;
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
@@ -83,6 +111,11 @@ const checks = [
   ['track casings are theme-classed', host.querySelectorAll('path.map-casing').length > 0],
   ['asset markers are theme-classed', host.querySelectorAll('path.map-asset').length === assets.assets.length],
   ['no hardcoded border/casing colours left', !host.querySelector('path[stroke="#4a525c"], path[stroke="#6b7480"], path[stroke="#0d1218"], path[stroke="#8a949f"]')],
+  // Zoom-to-storm buttons in the status line above the map.
+  ['zoom buttons revealed for real storms', known.length > 0 && known.every((b) => !b.hidden)],
+  ['zoom button hidden for an unknown storm', !!unknown && unknown.hidden],
+  ['clicking a zoom button centres that storm',
+    !!movedTo && near(movedTo.lat - target.lat, 1) && near(movedTo.lng - target.lon, 1)],
 ];
 let ok = true;
 for (const [name, pass] of checks) {

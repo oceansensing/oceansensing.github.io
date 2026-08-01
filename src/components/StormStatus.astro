@@ -81,6 +81,7 @@ const active = storms.map((s) => {
   const dir = num(s.movementDir);
   const speed = num(s.movementSpeedKt);
   return {
+    id: s.id,
     name: s.name ?? 'Unnamed',
     url: s.advisoryUrl,
     facts: [
@@ -103,6 +104,18 @@ const active = storms.map((s) => {
         {active.map((s) => (
           <li>
             {s.url ? <a href={s.url}>{s.name}</a> : <strong>{s.name}</strong>}
+            {/* Hidden until AssetMap's script wires it up — without the map
+                there is nothing to zoom, so the control should not appear. */}
+            <button
+              type="button"
+              class="zoom"
+              data-storm-zoom={s.id}
+              title={`Zoom the map to ${s.name}`}
+              aria-label={`Zoom the map to ${s.name}`}
+              hidden
+            >
+              🔍
+            </button>
             <span class="facts">{s.facts.join(' · ')}</span>
           </li>
         ))}
@@ -149,6 +162,26 @@ const active = storms.map((s) => {
   li a,
   li strong {
     font-weight: 600;
+  }
+
+  .zoom {
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: none;
+    padding: 0.1rem 0.3rem;
+    font-size: var(--text-sm);
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .zoom[hidden] {
+    display: none;
+  }
+
+  .zoom:hover,
+  .zoom:focus-visible {
+    border-color: var(--border);
+    background: var(--bg-subtle);
   }
 
   .facts,
