@@ -18,7 +18,9 @@ cover:
 surveys:
   - date: 2026-07-31
     location: Lower York River, Gloucester Point
-    # The photo files carry no timezone; local zone for the date and place.
+    # Photos carry no timezone tag. UTC-4 confirmed from the flight video:
+    # its MP4 creation time (21:58:01 UTC) against the same instant in the
+    # SRT telemetry clock (17:58:01).
     timezone: EDT
     note: >-
       Drone survey, 17:59–18:14, from the Coleman Bridge past Gloucester
