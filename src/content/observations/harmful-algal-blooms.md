@@ -23,43 +23,87 @@ surveys:
       Point Beach to the VIMS campus.
     photos:
       - src: ./hab-2026-07-31-01.jpg
-        alt: Reddish-brown water offshore of a pier on the York River.
+        alt: >-
+          Reddish-brown water offshore of a pier on the York River.
+        time: '17:59'
+        camera: { lat: 37.24626, lon: -76.50120, alt: 120 }
+        center: { lat: 37.24630, lon: -76.49900 }
+      - src: ./hab-2026-07-31-02.jpg
+        alt: >-
+          Vehicles on the Coleman Bridge over the York River, with
+          reddish-brown water beneath and beyond the span.
+        time: '18:00'
+        camera: { lat: 37.24548, lon: -76.50446, alt: 120 }
+        center: { lat: 37.24385, lon: -76.50529 }
       - src: ./hab-2026-07-31-03.jpg
         alt: >-
           A band of reddish-brown water along the wooded York River
           shoreline.
+        time: '18:00'
+        camera: { lat: 37.24485, lon: -76.50772, alt: 120 }
+        center: { lat: 37.24708, lon: -76.50744 }
       - src: ./hab-2026-07-31-04.jpg
         alt: >-
-          Reddish-brown water around boats docked at a marina on the York
-          River.
+          Reddish-brown water around boats docked at a marina on the
+          York River.
+        time: '18:03'
+        camera: { lat: 37.24001, lon: -76.50736, alt: 120 }
+        center: { lat: 37.23901, lon: -76.50780 }
       - src: ./hab-2026-07-31-05.jpg
         alt: >-
-          Reddish-brown water along the sand at a developed stretch of the
-          Gloucester Point shoreline.
+          Reddish-brown water along the sand at a developed stretch of
+          the Gloucester Point shoreline.
+        time: '18:04'
+        camera: { lat: 37.23808, lon: -76.50511, alt: 109 }
+        center: { lat: 37.23693, lon: -76.50605 }
       - src: ./hab-2026-07-31-06.jpg
         alt: >-
-          Reddish-brown water between rock breakwaters on either side of a
-          pier.
+          Reddish-brown water between rock breakwaters on either side
+          of a pier.
+        time: '18:06'
+        camera: { lat: 37.23497, lon: -76.50394, alt: 120 }
+        center: { lat: 37.23497, lon: -76.50394 }
       - src: ./hab-2026-07-31-07.jpg
         alt: >-
-          People on the sand and in the water at Gloucester Point Beach,
-          with reddish-brown water in the enclosed swimming area.
+          People on the sand and in the water at Gloucester Point
+          Beach, with reddish-brown water in the enclosed swimming
+          area.
+        time: '18:07'
+        camera: { lat: 37.23659, lon: -76.50534, alt: 120 }
+        center: { lat: 37.23648, lon: -76.50557 }
       - src: ./hab-2026-07-31-08.jpg
         alt: >-
           The Coleman Bridge and Gloucester Point from upriver, with
           reddish-brown water in the foreground.
+        time: '18:08'
+        camera: { lat: 37.23957, lon: -76.50542, alt: 120 }
       - src: ./hab-2026-07-31-09.jpg
         alt: >-
-          Reddish-brown water with a sharp edge next to the fishing pier at
-          Gloucester Point Beach.
+          Reddish-brown water with a sharp edge next to the fishing
+          pier at Gloucester Point Beach.
+        time: '18:11'
+        camera: { lat: 37.24514, lon: -76.50282, alt: 120 }
+        center: { lat: 37.24543, lon: -76.50200 }
       - src: ./hab-2026-07-31-10.jpg
-        alt: Streaks of reddish-brown water in the York River.
+        alt: >-
+          Streaks of reddish-brown water in the York River.
+        time: '18:11'
+        camera: { lat: 37.24456, lon: -76.50252, alt: 120 }
+        center: { lat: 37.24349, lon: -76.50201 }
       - src: ./hab-2026-07-31-11.jpg
         alt: >-
           The VIMS Gloucester Point campus and research pier, with
           reddish-brown water offshore.
+        time: '18:13'
+        camera: { lat: 37.24432, lon: -76.50132, alt: 76 }
+        center: { lat: 37.24660, lon: -76.50080 }
       - src: ./hab-2026-07-31-12.jpg
-        alt: A close view of the edge between reddish-brown and clear water.
+        alt: >-
+          A close view of the edge between reddish-brown and clear
+          water.
+        time: '18:14'
+        camera: { lat: 37.24545, lon: -76.50130, alt: 66 }
+        center: { lat: 37.24557, lon: -76.50071 }
 order: 1
 ---
 

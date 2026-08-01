@@ -44,6 +44,9 @@ const day = (date: Date) =>
     year: 'numeric',
     timeZone: 'UTC',
   });
+
+const coords = (lat: number, lon: number) =>
+  `${Math.abs(lat).toFixed(4)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(4)}°${lon >= 0 ? 'E' : 'W'}`;
 ---
 
 <BaseLayout title={title} description={summary}>
@@ -83,7 +86,19 @@ const day = (date: Date) =>
                     <figure>
                       {/* Without JavaScript this is just a link to the
                           full-size photo; the lightbox intercepts it. */}
-                      <a class="shot" href={photo.full} data-alt={photo.alt}>
+                      <a
+                        class="shot"
+                        href={photo.full}
+                        data-alt={photo.alt}
+                        data-when={[photo.time, survey.location].filter(Boolean).join(' · ')}
+                        data-where={[
+                          photo.center && `scene ≈ ${coords(photo.center.lat, photo.center.lon)}`,
+                          photo.camera &&
+                            `camera ${coords(photo.camera.lat, photo.camera.lon)}, ${photo.camera.alt} m`,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      >
                         <Image
                           src={photo.src}
                           alt={photo.alt}
@@ -126,6 +141,10 @@ const day = (date: Date) =>
         <button class="close" type="button" aria-label="Close">&times;</button>
         <button class="nav prev" type="button" aria-label="Previous photo">&lsaquo;</button>
         <button class="nav next" type="button" aria-label="Next photo">&rsaquo;</button>
+        <div class="info">
+          <p class="when" />
+          <p class="where" />
+        </div>
         <p class="count" />
       </dialog>
     )
@@ -144,12 +163,17 @@ const day = (date: Date) =>
 
     const img = dialog.querySelector('img');
     const count = dialog.querySelector('.count');
+    const when = dialog.querySelector('.when');
+    const where = dialog.querySelector('.where');
     let at = 0;
 
     const show = (k) => {
       at = (k + shots.length) % shots.length;
-      img.src = shots[at].getAttribute('href');
-      img.alt = shots[at].dataset.alt ?? '';
+      const shot = shots[at];
+      img.src = shot.getAttribute('href');
+      img.alt = shot.dataset.alt ?? '';
+      when.textContent = shot.dataset.when ?? '';
+      where.textContent = shot.dataset.where ?? '';
       count.textContent = `${at + 1} / ${shots.length}`;
     };
 
@@ -271,13 +295,38 @@ const day = (date: Date) =>
 
   #lightbox img {
     position: absolute;
-    inset: 0;
+    inset: 0 0 3.5rem;
     margin: auto;
     max-width: min(94vw, 1600px);
-    max-height: 90dvh;
+    max-height: calc(90dvh - 3.5rem);
     width: auto;
     height: auto;
     border-radius: var(--radius);
+  }
+
+  #lightbox .info {
+    position: absolute;
+    bottom: 2.6rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(94vw, 1600px);
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+  }
+
+  #lightbox .when {
+    color: rgb(255 255 255 / 0.92);
+  }
+
+  #lightbox .where {
+    color: rgb(255 255 255 / 0.6);
+  }
+
+  #lightbox .when:empty,
+  #lightbox .where:empty {
+    display: none;
   }
 
   #lightbox button {

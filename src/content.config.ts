@@ -51,6 +51,16 @@ const observations = defineCollection({
                   src: image(),
                   alt: z.string(),
                   caption: z.string().optional(),
+                  // local time of exposure, from the photo's own metadata
+                  time: z.string().optional(),
+                  // camera position: measured by the aircraft
+                  camera: z
+                    .object({ lat: z.number(), lon: z.number(), alt: z.number() })
+                    .optional(),
+                  /* Where the camera was pointed on the water — projected
+                     from altitude and gimbal angles, so an estimate. Omit
+                     for near-horizontal shots, where it is meaningless. */
+                  center: z.object({ lat: z.number(), lon: z.number() }).optional(),
                 })
               )
               .default([]),

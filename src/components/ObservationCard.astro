@@ -13,7 +13,11 @@ const { title, short, cover, surveys } = observation.data;
    Order and starting photo are randomized per page load by the inline
    script below; without JavaScript it still cycles, just in file order. */
 const newest = [...surveys].sort((a, b) => b.date.valueOf() - a.date.valueOf());
-const photos = [...(cover ? [cover] : []), ...newest.flatMap((s) => s.photos)];
+const pool = [...(cover ? [cover] : []), ...newest.flatMap((s) => s.photos)];
+// The cover usually also appears among the survey photos; show it once.
+const photos = pool.filter(
+  (photo, i) => pool.findIndex((other) => other.src.src === photo.src.src) === i
+);
 
 /* Photo bank rotates with a pure-CSS crossfade — no JavaScript. Each photo
    holds for HOLD seconds; the whole loop is photos.length * HOLD. The
