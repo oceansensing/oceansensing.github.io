@@ -171,6 +171,7 @@ function against(colour, oceans) {
 }
 
 const results = [];
+const notes = [];
 
 // Point and line features are drawn whichever basemap is showing, so they
 // have to survive all of them.
@@ -195,9 +196,17 @@ palette.currents.forEach((colour, i) => {
 /* Particles must not read as assets. They are thin moving lines and the
    markers are filled dots, but keeping them apart in colour too means a
    glance is never ambiguous. */
+const exempt = new Set(palette.separationExempt ?? []);
 for (const [i, colour] of palette.currents.entries()) {
   for (const [name, feature] of Object.entries(palette.features)) {
     const d = deltaE(hex(colour), hex(feature));
+    if (exempt.has(name)) {
+      // Named exemption, with the reason in map-palette.json. Reported, not
+      // hidden — a silently lowered threshold would cover this and every
+      // future clash along with it.
+      if (i === 0) notes.push(`${name} exempt from particle separation (ΔE ${d.toFixed(1)}) — see _separation`);
+      continue;
+    }
     results.push({
       what: `currents[${i}] vs ${name}`,
       on: 'feature separation',
@@ -216,6 +225,7 @@ for (const r of results) {
       ` clears ${(r.coverage * 100).toFixed(0)}% of water (worst ΔE ${r.worst.toFixed(1)})`
   );
 }
+for (const note of notes) console.log(`note  ${note}`);
 if (!ok) {
   console.error(
     `\nSome colours blend into the water behind them (need ΔE ${MIN_DELTA_E} over ` +

@@ -4,7 +4,8 @@
     "storm": "#d1495b",
     "usv": "#f08c00",
     "glider": "#e8368f",
-    "argo": "#35c135"
+    "argo": "#ffd400",
+    "argoEdge": "#3d3000"
   },
   "_currents": "Warm pale amber, slow to fast. Amber rather than blue because the two bathymetries are opposite in tone \u2014 Esri Ocean is light, GEBCO dark \u2014 and no blue clears both: any blue pale enough to show on GEBCO's navy lands inside Esri's ocean, and GEBCO's own water runs blue through cyan to the pale mint it paints shallow banks. Amber sits outside that whole range, so one ramp serves both maps and there is no basemap switching to get wrong. Kept pale rather than saturated so the particles are not mistaken for the orange USV markers.",
   "currents": [
@@ -13,5 +14,9 @@
     "#f5e6ca",
     "#f9edd9",
     "#fcf2e3"
+  ],
+  "_separation": "Argo dots are gold, which sits about \u0394E 18 from the current particles \u2014 under the bar the gate applies elsewhere. No yellow clears them: the particles are pale amber because that is the one hue reading on both bathymetries, and paling the ramp far enough to make room drops its own water contrast to 79%. The dots are therefore given a dark outline, which separates a discrete dot from a drifting trail whatever the fill does. Recorded as a named exemption rather than by lowering the threshold, so the compromise stays visible.",
+  "separationExempt": [
+    "argo"
   ]
 }

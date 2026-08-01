@@ -91,7 +91,7 @@ const files = {
   'ocean-assets': JSON.parse(fs.readFileSync('public/map/ocean-assets.json', 'utf8')),
   currents: JSON.parse(fs.readFileSync('public/map/currents.json', 'utf8')),
   'currents-atlantic': JSON.parse(fs.readFileSync('public/map/currents-atlantic.json', 'utf8')),
-  'currents-nordic': JSON.parse(fs.readFileSync('public/map/currents-nordic.json', 'utf8')),
+  'currents-arctic': JSON.parse(fs.readFileSync('public/map/currents-arctic.json', 'utf8')),
   argo: JSON.parse(fs.readFileSync('public/map/argo.json', 'utf8')),
 };
 globalThis.fetch = async (u) => {
@@ -266,9 +266,9 @@ const expectedNames = assets.storms.map((s) => s.name);
 const gridOutsideRegion = gridOf();
 const coarseHeader = files.currents[0].header;
 const fineHeader = files['currents-atlantic'][0].header;
-const nordicHeader = files['currents-nordic'][0].header;
+const arcticHeader = files['currents-arctic'][0].header;
 const advertised = coarseHeader.details ?? [];
-const nordicRegion = advertised.find((d) => d.url.includes('nordic'));
+const arcticRegion = advertised.find((d) => d.url.includes('arctic'));
 
 /* Particle animation. Segment lengths are the give-away: if the field were
    dead, or the velocity scale far too small, the particles would be stroked
@@ -277,7 +277,14 @@ const nordicRegion = advertised.find((d) => d.url.includes('nordic'));
 const palette = JSON.parse(fs.readFileSync('src/data/map-palette.json', 'utf8'));
 const sortedSegments = [...drawn.segments].sort((a, b) => a - b);
 const medianSegment = sortedSegments.length ? sortedSegments[Math.floor(sortedSegments.length / 2)] : 0;
-const paletteUsed = [...drawn.styles].every((c) => palette.currents.includes(c));
+/* Every stroke on the canvas is either a particle or an Argo dot's outline
+   — nothing else strokes there. Checking membership rather than "all of them
+   are particle colours" keeps this precise now that the dots are outlined,
+   while still catching a particle drawn in a colour the gate never saw. */
+const allowedStrokes = new Set([...palette.currents, palette.features.argoEdge]);
+const paletteUsed =
+  [...drawn.styles].every((c) => allowedStrokes.has(c)) &&
+  palette.currents.some((c) => drawn.styles.has(c));
 
 /* Argo: two thousand dots on a canvas rather than SVG, so they leave no DOM
    to inspect. Arcs are the tell — the particle layer only ever strokes
@@ -293,6 +300,7 @@ host._map?.eachLayer?.((l) => {
 });
 const argoDrawn = drawn.arc;
 const argoColoured = drawn.fills.has(palette.features.argo);
+const argoOutlined = drawn.styles.has(palette.features.argoEdge);
 const spansHemispheres =
   fleet.some((f) => f.lat > 20) && fleet.some((f) => f.lat < -20);
 const spansLongitudes =
@@ -349,20 +357,17 @@ const checks = [
   // Two grids, picked by zoom.
   ['global grid advertises every detail region',
     advertised.length >= 2 && advertised.every((d) => typeof d.minZoom === 'number' && d.url && d.deg)],
-  ['detail grids are genuinely finer', fineHeader.dx < coarseHeader.dx && nordicHeader.dy < coarseHeader.dy],
-  /* High latitude needs a finer latitude step than longitude: at 75N a 0.24
-     deg cell is 7 km wide but 27 km tall, so latitude is what limits how
-     close to a coastline the flow can be resolved. */
-  ['nordic grid resolves latitude more finely than the atlantic one',
-    nordicHeader.dy < fineHeader.dy],
-  ['nordic grid spans the prime meridian without a seam',
-    (() => {
-      // It wraps in the model's 0-360 longitudes, so it is fetched as two
-      // slabs; an unevenly joined seam would show up as the wrong width.
-      const spanned = nordicHeader.nx * nordicHeader.dx;
-      const asked = nordicRegion.east - nordicRegion.west;
-      return nordicRegion.west < 0 && nordicRegion.east > 0 && Math.abs(spanned - asked) < 1;
-    })()],
+  ['detail grids are genuinely finer', fineHeader.dx < coarseHeader.dx && arcticHeader.dy < coarseHeader.dy],
+  /* High latitude spends its samples on latitude, not longitude: at 66N a
+     0.48 deg cell is 22 km wide while 0.12 deg of latitude is 13 km, so
+     latitude is what limits how close to a coastline the flow resolves. */
+  ['arctic grid resolves latitude more finely than longitude',
+    arcticHeader.dy < arcticHeader.dx && arcticHeader.dy < fineHeader.dy],
+  /* A band, not a box — adding one region per complaint does not converge,
+     as Greenland being fixed while the Bering Strait was not showed. */
+  ['arctic grid is a band spanning every longitude',
+    Math.floor(arcticHeader.nx * arcticHeader.dx) >= 360 &&
+      arcticRegion.west <= -180 && arcticRegion.east >= 180],
   ['inside the region, the fine grid is the one in use',
     !!gridInsideRegion && gridInsideRegion.dx === fineHeader.dx],
   ['panned outside it, the layer falls back to the global grid',
@@ -401,6 +406,7 @@ const checks = [
   ['every float became a marker', argoMarkers === fleet.length && fleet.length > 500],
   ['argo dots reach the canvas', argoDrawn > 0],
   ['argo dots use the gated colour', argoColoured],
+  ['argo dots are outlined, which is what separates them from the particles', argoOutlined],
   ['argo window matches every other asset',
     files.argo.historyDays === assets.historyDays],
   ['particles are actually stroked', drawn.stroke > 0 && drawn.moveTo > 100 && drawn.lineTo > 100],

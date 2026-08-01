@@ -157,6 +157,17 @@ counts as dark unless you list it in `LIGHT_BASEMAPS`.
 **Never inline a colour in `AssetMap.astro`.** They live in
 `src/data/map-palette.json`, which the component imports and
 `npm run test:contrast` checks — a hardcoded colour is invisible to the gate.
+`test:map` catches it too, by comparing what actually reaches the canvas
+against the palette file.
+
+Where a colour genuinely cannot clear the bar, the exception is **named in
+the palette with its reasoning** (`separationExempt`) and reported by the
+gate, rather than the threshold being lowered — which would quietly cover
+every future clash as well. Argo is the one such case: gold sits ~ΔE 18 from
+the current particles, no yellow clears them, and paling the particle ramp
+enough to make room drops its own water contrast to 79%. The dots carry a
+dark outline instead, which separates a discrete dot from a drifting trail
+whatever the fill does.
 
 The map offers two bathymetries of opposite tone: Esri Ocean is light (ocean
 luminance ~0.33) and GEBCO is dark (~0.10, though it paints shallow banks a
@@ -192,11 +203,17 @@ the same data:
   resolution, so **adding a region costs nothing to anyone outside it**.
 
   Resolution is per region, because a degree is not a fixed distance. At 35°N
-  a 0.24° cell is ~22 km across; at 75°N it is 7 km wide but still 27 km
-  tall, so **latitude is the binding constraint at high latitude** and the
-  Nordic grid halves the latitude step again. That is what makes a fjord
-  coastline representable, and it cut land carrying flow over
-  Greenland–Svalbard from 3.1% to 0.6%.
+  a 0.24° cell is ~22 km across; at 66°N a 0.48° cell is 22 km wide while
+  0.12° of latitude is 13 km — so **latitude is the binding constraint at
+  high latitude**, and the Arctic grid spends its samples there rather than
+  on longitude.
+
+  The Arctic entry is a **band over every longitude, not a box**. Adding one
+  box per complaint does not converge: Greenland got fixed and the Bering
+  Strait, a third of the way round the world, did not. The band cut land
+  carrying flow to 1.1% around Bering (from 5.9%), 0.7% around
+  Greenland–Svalbard (from 2.7%) and 1.4% in the Canadian Arctic (from
+  4.2%).
 
   A region straddling the prime meridian wraps in the model's 0–360
   longitudes and so is **fetched as two slabs**, the second resuming the

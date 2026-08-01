@@ -47,7 +47,8 @@ import 'leaflet/dist/leaflet.css';
      storms under the common forms of colour blindness. */
   import palette from '../data/map-palette.json';
   import { stormLines, stormLabel, NO_STORMS } from '../lib/stormStatus';
-  const { storm: STORM, usv: USV, glider: GLIDER, argo: ARGO } = palette.features;
+  const { storm: STORM, usv: USV, glider: GLIDER, argo: ARGO, argoEdge: ARGO_EDGE } =
+    palette.features;
 
   const el = document.getElementById('asset-map');
   const status = document.getElementById('map-status');
@@ -334,8 +335,9 @@ import 'leaflet/dist/leaflet.css';
        cost is that canvas markers carry no class, so unlike the other
        platforms these cannot be restyled by theme; the colour is one the
        contrast gate clears on both bathymetries, which is what makes that
-       acceptable. Fill only, no outline: at this size and count an outline
-       is noise. */
+       acceptable. The dark outline earns its cost: gold sits close to the
+       amber particles on fill alone, and an outlined dot still reads as a
+       discrete object beside a drifting trail. */
     const argoCanvas = L.canvas({ padding: 0.3 });
     const argo = L.layerGroup().addTo(map);
 
@@ -345,10 +347,12 @@ import 'leaflet/dist/leaflet.css';
         for (const float of data.floats ?? []) {
           L.circleMarker([float.lat, float.lon], {
             renderer: argoCanvas,
-            radius: 2.6,
-            stroke: false,
+            radius: 2.8,
+            color: ARGO_EDGE,
+            weight: 0.8,
+            opacity: 0.9,
             fillColor: ARGO,
-            fillOpacity: 0.85,
+            fillOpacity: 0.95,
           })
             .addTo(argo)
             .bindPopup(
@@ -974,7 +978,8 @@ import 'leaflet/dist/leaflet.css';
   }
 
   .key.argo::before {
-    background: #35c135;
+    background: #ffd400;
+    box-shadow: inset 0 0 0 1px #3d3000;
   }
 
   /* A slice of the speed colourmap rather than a flat dot — the currents

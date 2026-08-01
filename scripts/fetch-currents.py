@@ -76,11 +76,18 @@ DETAILS = [
         'minZoom': 5,
     },
     {
-        'name': 'currents-nordic.json',
-        'label': 'Nordic Seas, Greenland & Svalbard',
-        'wrap': False,
-        'west': -45.0, 'east': 30.0, 'south': 55.0, 'north': 83.0,
-        'stride': (3, 3),          # 0.24 x 0.12 deg — half the latitude step
+        # A band rather than a box. Adding one region per complaint does not
+        # converge — Greenland was fixed and the Bering Strait, a third of
+        # the way round the world, was not. Every Arctic coast has the same
+        # problem, so cover them all at once.
+        'name': 'currents-arctic.json',
+        'label': 'Arctic',
+        'wrap': True,              # all longitudes, so it closes on itself
+        'south': 60.0, 'north': 85.0,
+        # Longitude is cheap up here and latitude is what binds: at 66N a
+        # 0.48 deg cell is 22 km wide, while 0.12 deg of latitude is 13 km.
+        # Spending the samples on latitude is what resolves a coastline.
+        'stride': (6, 3),          # 0.48 x 0.12 deg
         'minZoom': 5,
     },
 ]
@@ -336,7 +343,10 @@ def main() -> int:
                 {
                     'url': f'/map/{d["name"]}',
                     'label': d['label'],
-                    'west': d['west'], 'east': d['east'],
+                    # A band spanning every longitude advertises the full
+                    # range, so the containment test below always passes on
+                    # longitude and turns on latitude alone.
+                    'west': d.get('west', -180.0), 'east': d.get('east', 180.0),
                     'south': d['south'], 'north': d['north'],
                     'minZoom': d['minZoom'],
                     # So the map can prefer the finest region when two overlap.
