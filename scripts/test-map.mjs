@@ -40,7 +40,7 @@ window.Element.prototype.scrollIntoView = function () {};
 
    requestAnimationFrame is stubbed below, so leaflet-velocity's loop really
    runs here — unlike a headless browser pane, which never paints. */
-const drawn = { moveTo: 0, lineTo: 0, stroke: 0, styles: new Set(), segments: [] };
+const drawn = { moveTo: 0, lineTo: 0, stroke: 0, arc: 0, styles: new Set(), fills: new Set(), segments: [] };
 const properties = {};
 let penX = 0;
 let penY = 0;
@@ -62,6 +62,10 @@ const recordingContext = new Proxy(
         } else if (key === 'stroke') {
           drawn.stroke += 1;
           if (typeof properties.strokeStyle === 'string') drawn.styles.add(properties.strokeStyle);
+        } else if (key === 'arc') {
+          drawn.arc += 1;
+        } else if (key === 'fill') {
+          if (typeof properties.fillStyle === 'string') drawn.fills.add(properties.fillStyle);
         }
       };
     },
@@ -87,6 +91,7 @@ const files = {
   'ocean-assets': JSON.parse(fs.readFileSync('public/map/ocean-assets.json', 'utf8')),
   currents: JSON.parse(fs.readFileSync('public/map/currents.json', 'utf8')),
   'currents-detail': JSON.parse(fs.readFileSync('public/map/currents-detail.json', 'utf8')),
+  argo: JSON.parse(fs.readFileSync('public/map/argo.json', 'utf8')),
 };
 globalThis.fetch = async (u) => {
   // Longest key first: "currents" is a substring of "currents-detail", so
@@ -121,6 +126,17 @@ const SEEDED_VIEW = {
   // prove nothing.
   base: 'Bathymetry (Esri Ocean)',
   overlays: [
+    'Surface currents (animated)',
+    'Current speed (Mercator)',
+    'Hurricanes',
+    'NOAA USVs',
+    'IOOS gliders',
+    'Country & state borders',
+    'Lat/lon grid',
+  ],
+  /* Deliberately does NOT mention 'Argo floats' — this stands in for a view
+     saved before that layer existed, which must not switch it off. */
+  known: [
     'Surface currents (animated)',
     'Current speed (Mercator)',
     'Hurricanes',
@@ -239,6 +255,25 @@ const sortedSegments = [...drawn.segments].sort((a, b) => a - b);
 const medianSegment = sortedSegments.length ? sortedSegments[Math.floor(sortedSegments.length / 2)] : 0;
 const paletteUsed = [...drawn.styles].every((c) => palette.currents.includes(c));
 
+/* Argo: two thousand dots on a canvas rather than SVG, so they leave no DOM
+   to inspect. Arcs are the tell — the particle layer only ever strokes
+   lines, so every arc came from Leaflet's canvas renderer. */
+const fleet = files.argo.floats ?? [];
+/* Leaflet's canvas renderer culls to the viewport, so the arc count is
+   whatever is on screen — a handful here, not the whole fleet. What proves
+   the fleet arrived is that every float became a marker on the map; what
+   proves the canvas ran is that any arcs were drawn at all. */
+let argoMarkers = 0;
+host._map?.eachLayer?.((l) => {
+  if (l.options?.fillColor === palette.features.argo) argoMarkers += 1;
+});
+const argoDrawn = drawn.arc;
+const argoColoured = drawn.fills.has(palette.features.argo);
+const spansHemispheres =
+  fleet.some((f) => f.lat > 20) && fleet.some((f) => f.lat < -20);
+const spansLongitudes =
+  Math.max(...fleet.map((f) => f.lon)) - Math.min(...fleet.map((f) => f.lon)) > 300;
+
 const status = document.getElementById('map-status').textContent;
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
@@ -321,6 +356,13 @@ const checks = [
     rebuiltFacts.length === expectedNames.length &&
       rebuiltFacts.every((f) => f && f.includes('·')) &&
       stormBox.querySelectorAll('button.zoom[data-storm-zoom]').length === expectedNames.length],
+  ['argo fleet is loaded', fleet.length > 500],
+  ['argo coverage is global', spansHemispheres && spansLongitudes],
+  ['every float became a marker', argoMarkers === fleet.length && fleet.length > 500],
+  ['argo dots reach the canvas', argoDrawn > 0],
+  ['argo dots use the gated colour', argoColoured],
+  ['argo window matches every other asset',
+    files.argo.historyDays === assets.historyDays],
   ['particles are actually stroked', drawn.stroke > 0 && drawn.moveTo > 100 && drawn.lineTo > 100],
   /* Guards against the sub-pixel regression, where the plugin's own zoom
      scaling left the median at 0.13 px and nothing appeared to move. Stated

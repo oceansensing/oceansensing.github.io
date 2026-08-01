@@ -24,6 +24,7 @@ import 'leaflet/dist/leaflet.css';
       <span class="key storm">Hurricane</span>
       <span class="key usv">NOAA USV</span>
       <span class="key glider">IOOS glider</span>
+      <span class="key argo">Argo float</span>
       <span class="key current">Surface current</span>
     </span>
     <span class="status" id="map-status">Loading…</span>
@@ -46,7 +47,7 @@ import 'leaflet/dist/leaflet.css';
      storms under the common forms of colour blindness. */
   import palette from '../data/map-palette.json';
   import { stormLines, stormLabel, NO_STORMS } from '../lib/stormStatus';
-  const { storm: STORM, usv: USV, glider: GLIDER } = palette.features;
+  const { storm: STORM, usv: USV, glider: GLIDER, argo: ARGO } = palette.features;
 
   const el = document.getElementById('asset-map');
   const status = document.getElementById('map-status');
@@ -317,6 +318,46 @@ import 'leaflet/dist/leaflet.css';
       L.polyline([[lat, -180], [lat, 180]], { weight: 0.5, className: 'map-grid' }).addTo(graticule);
     }
 
+    /* Argo floats: two thousand dots, against forty gliders and saildrones.
+       Drawn on a canvas rather than as SVG — that many vector elements would
+       compete with the particle animation for the same frame budget. The
+       cost is that canvas markers carry no class, so unlike the other
+       platforms these cannot be restyled by theme; the colour is one the
+       contrast gate clears on both bathymetries, which is what makes that
+       acceptable. Fill only, no outline: at this size and count an outline
+       is noise. */
+    const argoCanvas = L.canvas({ padding: 0.3 });
+    const argo = L.layerGroup().addTo(map);
+
+    fetch('/map/argo.json')
+      .then((r) => r.json())
+      .then((data) => {
+        for (const float of data.floats ?? []) {
+          L.circleMarker([float.lat, float.lon], {
+            renderer: argoCanvas,
+            radius: 2.6,
+            stroke: false,
+            fillColor: ARGO,
+            fillOpacity: 0.85,
+          })
+            .addTo(argo)
+            .bindPopup(
+              `<strong>Argo ${float.id}</strong>` +
+                `<dl><dt>Last profile</dt><dd>${stamp(float.time)}</dd>` +
+                `<dt>Position</dt><dd>${float.lat.toFixed(3)}, ${float.lon.toFixed(3)}</dd></dl>` +
+                `<a href="https://fleetmonitoring.euro-argo.eu/float/${float.id}">Float details</a>`
+            );
+        }
+        const count = (data.floats ?? []).length;
+        if (count) {
+          statusParts.argo = `${count} Argo floats`;
+          showStatus();
+        }
+      })
+      .catch(() => {
+        // No fleet is survivable; the rest of the map is unaffected.
+      });
+
     const borders = L.layerGroup().addTo(map);
     const storms = L.layerGroup().addTo(map);
     const usvs = L.layerGroup().addTo(map);
@@ -328,6 +369,7 @@ import 'leaflet/dist/leaflet.css';
       'Hurricanes': storms,
       'NOAA USVs': usvs,
       'IOOS gliders': gliders,
+      'Argo floats': argo,
       'Country & state borders': borders,
       'Lat/lon grid': graticule,
     };
@@ -351,6 +393,11 @@ import 'leaflet/dist/leaflet.css';
             zoom: map.getZoom(),
             base: Object.keys(bases).find((name) => map.hasLayer(bases[name]!)),
             overlays: Object.keys(overlays).filter((name) => map.hasLayer(overlays[name]!)),
+            /* Every overlay that existed when this was saved. Without it a
+               layer added later looks identical to one the reader switched
+               off, and restoring would hide it from anyone holding an older
+               view — which is exactly what happened when Argo was added. */
+            known: Object.keys(overlays),
           })
         );
       } catch {
@@ -378,7 +425,12 @@ import 'leaflet/dist/leaflet.css';
         markBasemapTone(saved.base);
       }
       if (Array.isArray(saved.overlays)) {
+        // Anything the saved view never knew about keeps its default.
+        const known = new Set<string>(
+          Array.isArray(saved.known) ? saved.known : Object.keys(overlays)
+        );
         for (const [name, layer] of Object.entries(overlays)) {
+          if (!known.has(name)) continue;
           const wanted = saved.overlays.includes(name);
           if (wanted && !map.hasLayer(layer)) map.addLayer(layer);
           else if (!wanted && map.hasLayer(layer)) map.removeLayer(layer);
@@ -561,6 +613,17 @@ import 'leaflet/dist/leaflet.css';
       box.append(list);
     };
 
+    /* The asset feed and the Argo fleet arrive separately, so the status
+       line is assembled from whichever parts have landed rather than
+       written once by whoever finishes last. */
+    const statusParts: Record<string, string> = {};
+    const showStatus = () => {
+      if (!status) return;
+      const order = ['storms', 'assets', 'argo', 'updated'];
+      const line = order.map((k) => statusParts[k]).filter(Boolean).join(' · ');
+      if (line) status.textContent = line;
+    };
+
     const stamp = (t?: string) => (t ? `${t.slice(0, 16).replace('T', ' ')}Z` : 'unknown');
     // "· 11 days" — how long the platform has been out at its last fix.
     const elapsed = (from?: string, to?: string) => {
@@ -725,9 +788,10 @@ import 'leaflet/dist/leaflet.css';
         // Start watching for the next hourly rebuild.
         scheduleRefresh(data.updated);
         const when = (data.updated ?? '').slice(0, 16).replace('T', ' ');
-        status.innerHTML =
-          `${s} active storm${s === 1 ? '' : 's'} · ${n} assets reporting within ` +
-          `${data.historyDays} days · updated ${when}Z`;
+        statusParts.storms = `${s} active storm${s === 1 ? '' : 's'}`;
+        statusParts.assets = `${n} assets reporting within ${data.historyDays} days`;
+        statusParts.updated = `updated ${when}Z`;
+        showStatus();
       }
     } catch {
       if (status) status.textContent = 'Asset data unavailable.';
@@ -890,6 +954,10 @@ import 'leaflet/dist/leaflet.css';
 
   .key.glider::before {
     background: #e8368f;
+  }
+
+  .key.argo::before {
+    background: #35c135;
   }
 
   /* A slice of the speed colourmap rather than a flat dot — the currents

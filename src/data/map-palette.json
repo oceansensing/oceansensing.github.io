@@ -3,7 +3,8 @@
   "features": {
     "storm": "#d1495b",
     "usv": "#f08c00",
-    "glider": "#e8368f"
+    "glider": "#e8368f",
+    "argo": "#35c135"
   },
   "_currents": "Warm pale amber, slow to fast. Amber rather than blue because the two bathymetries are opposite in tone \u2014 Esri Ocean is light, GEBCO dark \u2014 and no blue clears both: any blue pale enough to show on GEBCO's navy lands inside Esri's ocean, and GEBCO's own water runs blue through cyan to the pale mint it paints shallow banks. Amber sits outside that whole range, so one ramp serves both maps and there is no basemap switching to get wrong. Kept pale rather than saturated so the particles are not mistaken for the orange USV markers.",
   "currents": [

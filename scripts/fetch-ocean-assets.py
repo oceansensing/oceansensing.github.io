@@ -28,11 +28,17 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from xml.etree import ElementTree
 
-OUT = pathlib.Path(__file__).resolve().parent.parent / 'public' / 'map' / 'ocean-assets.json'
+MAP_DIR = pathlib.Path(__file__).resolve().parent.parent / 'public' / 'map'
+OUT = MAP_DIR / 'ocean-assets.json'
+# Argo lands in its own file: there are two thousand of them against forty
+# gliders and saildrones, and the page re-fetches ocean-assets.json every
+# hour to check for a new build. Keeping them apart keeps that poll cheap.
+ARGO_OUT = MAP_DIR / 'argo.json'
 
 NHC_STORMS = 'https://www.nhc.noaa.gov/CurrentStorms.json'
 PMEL = 'https://data.pmel.noaa.gov/pmel/erddap'
 IOOS = 'https://gliders.ioos.us/erddap'
+IFREMER = 'https://erddap.ifremer.fr/erddap'
 
 # The trailing window, and the single knob for it. Governs every asset the
 # map draws: how much glider and USV track is fetched, how far back a storm's
@@ -303,6 +309,49 @@ def collect_erddap(base: str, kind: str, match: re.Pattern | None = None) -> lis
     return assets
 
 
+def collect_argo() -> list[dict]:
+    """One position per Argo float that has surfaced inside the window.
+
+    ArgoFloats is a profile-level dataset — every profile ever taken — so
+    the work is done server-side: filter to the window, then
+    orderByMax("platform_number,time") collapses it to the newest profile
+    per float. Roughly two thousand come back, about half the fleet, because
+    a float cycles every ten days and the window is shorter than that.
+
+    No tracks: at this cadence most floats have exactly one fix in the
+    window, so there is nothing to draw a line through.
+    """
+    since = (NOW - timedelta(days=HISTORY_DAYS)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    query = (f'{IFREMER}/tabledap/ArgoFloats.json'
+             f'?platform_number,time,latitude,longitude'
+             f'&time%3E={since}&orderByMax(%22platform_number,time%22)')
+    try:
+        table = get_json(query, timeout=300)['table']
+    except Exception as exc:  # noqa: BLE001 - a dead source must not fail the run
+        print(f'! Argo unavailable: {exc}', file=sys.stderr)
+        return []
+
+    cols = table['columnNames']
+    idx = {c: cols.index(c) for c in cols}
+    floats = []
+    for row in table['rows']:
+        try:
+            lat = float(row[idx['latitude']])
+            lon = float(row[idx['longitude']])
+        except (TypeError, ValueError):
+            continue
+        floats.append({
+            'id': row[idx['platform_number']],
+            'lat': round(lat, 3),
+            'lon': round(lon, 3),
+            # Minute precision: these are surfacings, not a trajectory.
+            'time': (row[idx['time']] or '')[:16] + 'Z',
+        })
+    floats.sort(key=lambda f: f['id'])
+    print(f'  argo: {len(floats)} floats reporting within {HISTORY_DAYS} days')
+    return floats
+
+
 def main() -> int:
     # Keep whatever we had if a source is unreachable, so a NOAA outage
     # degrades to slightly stale data rather than an empty map.
@@ -315,6 +364,8 @@ def main() -> int:
 
     print('hurricanes:')
     storms = collect_storms()
+    print('argo:')
+    argo = collect_argo()
     print('assets:')
     usvs = collect_erddap(PMEL, 'usv', re.compile(r'saildrone|usv|uncrewed|unmanned', re.I))
     gliders = collect_erddap(IOOS, 'glider')
@@ -341,6 +392,18 @@ def main() -> int:
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(payload, separators=(',', ':')) + '\n')
+
+    # Keep the previous fleet if Ifremer was unreachable, rather than
+    # blanking the layer.
+    if argo or not ARGO_OUT.exists():
+        ARGO_OUT.write_text(json.dumps({
+            'updated': NOW.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'historyDays': HISTORY_DAYS,
+            'source': 'Argo GDAC via Ifremer ERDDAP',
+            'floats': argo,
+        }, separators=(',', ':')) + '\n')
+        print(f'wrote {ARGO_OUT} — {len(argo)} floats, '
+              f'{ARGO_OUT.stat().st_size / 1024:.0f} KB')
     print(f'wrote {OUT} — {len(storms)} storms, {len(payload["assets"])} assets, '
           f'{OUT.stat().st_size / 1024:.0f} KB')
     return 0

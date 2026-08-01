@@ -104,6 +104,26 @@ The Leaflet map instance is hung on the container element as `_map`. Nothing on
 the page reads it; the test harness does, and it makes the map pokeable from the
 console.
 
+### Argo floats
+
+About two thousand dots, against forty gliders and saildrones — which drives
+three decisions:
+
+- **Own file** (`public/map/argo.json`, ~30 KB gzipped). `ocean-assets.json`
+  is re-fetched every hour by the auto-refresh poll; Argo does not belong in
+  that.
+- **Canvas renderer**, not SVG. That many vector elements would compete with
+  the particle animation for the same frame budget. The cost is that canvas
+  markers carry no class, so unlike the other platforms they **cannot be
+  restyled by theme** — which is only acceptable because the colour clears
+  both bathymetries in `test:contrast`.
+- **No tracks.** A float cycles every ten days and the window is five, so
+  most have exactly one fix in it. Roughly half the fleet shows at any time,
+  for the same reason.
+
+Note the canvas renderer culls to the viewport, so a test that counts draw
+calls counts what is on screen, not the fleet.
+
 ### Data pipeline (`scripts/fetch-ocean-assets.py`)
 
 Standard library only, so CI needs no Python dependencies. Aggregates NHC storms
@@ -221,6 +241,12 @@ it for another hour. And it **saves the reader's view first**
 (`sessionStorage`, key `asset-map-view`: centre, zoom, basemap, overlays)
 and restores it on load, so a refresh does not dump them back at the basin.
 `fitBounds(BASIN)` therefore runs only when nothing was restored.
+
+The saved view also records **every overlay that existed when it was
+written**, not just the ones switched on. Without that, a layer added later
+is indistinguishable from one the reader turned off, and restoring would
+hide it from anyone holding an older view — which is what happened the
+moment Argo was added. Unknown layers keep their default.
 
 `npm run test:map` seeds a saved view and asserts the map comes back to it.
 
