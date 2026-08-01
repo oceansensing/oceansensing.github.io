@@ -2,12 +2,17 @@
 import { getCollection } from 'astro:content';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import ProjectCard from '../components/ProjectCard.astro';
+import ObservationCard from '../components/ObservationCard.astro';
 import NewsCard from '../components/NewsCard.astro';
 import { SITE } from '../config';
 
 const projects = (
   await getCollection('projects', ({ data }) => data.featured && data.status === 'active')
 ).sort((a, b) => a.data.order - b.data.order);
+
+const observations = (await getCollection('observations')).sort(
+  (a, b) => a.data.order - b.data.order
+);
 
 const news = (await getCollection('news', ({ data }) => !data.draft))
   .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
@@ -35,6 +40,21 @@ const news = (await getCollection('news', ({ data }) => !data.draft))
       {projects.map((project) => <ProjectCard project={project} />)}
     </div>
   </section>
+
+  {
+    observations.length > 0 && (
+      <section class="container">
+        <h2 class="section-heading">
+          <span class="eyebrow">Significant</span> Observations
+        </h2>
+        <div class="grid">
+          {observations.map((observation) => (
+            <ObservationCard observation={observation} />
+          ))}
+        </div>
+      </section>
+    )
+  }
 
   <section class="container">
     <h2 class="section-heading"><span class="eyebrow">Latest</span> News</h2>

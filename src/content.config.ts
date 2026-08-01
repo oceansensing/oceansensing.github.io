@@ -24,6 +24,22 @@ const projects = defineCollection({
     }),
 });
 
+/* Significant Observations — ocean events the lab observes (harmful algal
+   blooms, hurricanes, ...). Each gets a homepage card whose photo bank
+   rotates, and a dedicated page at /observations/<id>/. */
+const observations = defineCollection({
+  loader: glob({ pattern: '**/*.md', base: './src/content/observations' }),
+  schema: ({ image }) =>
+    z.object({
+      title: z.string(),
+      short: z.string(),
+      summary: z.string(),
+      photos: z.array(z.object({ src: image(), alt: z.string() })).default([]),
+      links: z.array(z.object({ label: z.string(), url: z.string().url() })).default([]),
+      order: z.number().default(99),
+    }),
+});
+
 const people = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/people' }),
   schema: ({ image }) =>
@@ -168,6 +184,7 @@ const cvAwards = cvSection('awards', z.object({ year: z.string(), text: z.string
 
 export const collections = {
   projects,
+  observations,
   people,
   news,
   publications,

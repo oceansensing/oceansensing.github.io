@@ -1,0 +1,142 @@
+---
+import { Image } from 'astro:assets';
+import type { CollectionEntry } from 'astro:content';
+
+interface Props {
+  observation: CollectionEntry<'observations'>;
+}
+
+const { observation } = Astro.props;
+const { title, short, photos } = observation.data;
+
+/* Photo bank rotates with a pure-CSS crossfade — no JavaScript. Each photo
+   holds for HOLD seconds; the whole loop is photos.length * HOLD. The
+   keyframe stops depend on how many photos there are, and CSS custom
+   properties can't be used for keyframe percentages, so the keyframes are
+   generated per card. A negative animation-delay of one fade means photo 0
+   is already fully visible at page load (no fade-in from blank). */
+const HOLD = 30;
+const FADE = 1.5;
+const count = photos.length;
+const cycle = count * HOLD;
+const holdPct = 100 / Math.max(count, 1);
+const fadePct = count > 1 ? (FADE / cycle) * 100 : 0;
+const anim = `obs-${observation.id.replace(/[^a-z0-9]/gi, '-')}`;
+const keyframes =
+  count > 1
+    ? `@keyframes ${anim}{0%{opacity:0}${fadePct.toFixed(3)}%{opacity:1}` +
+      `${holdPct.toFixed(3)}%{opacity:1}${(holdPct + fadePct).toFixed(3)}%{opacity:0}100%{opacity:0}}`
+    : '';
+---
+
+{count > 1 && <style is:inline set:html={keyframes} />}
+
+<article>
+  <a href={`/observations/${observation.id}/`}>
+    <div
+      class="frame"
+      data-single={count === 1 ? '' : undefined}
+      data-empty={count === 0 ? '' : undefined}
+    >
+      {
+        photos.map((photo, i) => (
+          <Image
+            class="slide"
+            src={photo.src}
+            alt={i === 0 ? photo.alt : ''}
+            widths={[500, 1000]}
+            sizes="(max-width: 40rem) 100vw, 540px"
+            style={`animation-name:${anim};animation-duration:${cycle}s;animation-delay:calc(${i * HOLD}s - ${FADE}s)`}
+          />
+        ))
+      }
+    </div>
+    <div class="body">
+      <p class="eyebrow">Significant observation</p>
+      <h3>{title}</h3>
+      <p class="summary">{short}</p>
+    </div>
+  </a>
+</article>
+
+<style>
+  article {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--bg-subtle);
+    transition: border-color 0.15s ease;
+  }
+
+  article:hover {
+    border-color: var(--accent);
+  }
+
+  a {
+    color: inherit;
+    display: block;
+    height: 100%;
+  }
+
+  a:hover {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .frame {
+    position: relative;
+    aspect-ratio: 16 / 10;
+    background: var(--bg-subtle);
+    overflow: hidden;
+  }
+
+  /* No photos yet: a quiet placeholder rather than a broken-looking gap. */
+  .frame[data-empty] {
+    background: linear-gradient(140deg, var(--bg-subtle), var(--border));
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    animation-iteration-count: infinite;
+    animation-timing-function: linear;
+  }
+
+  /* A single photo just sits there. */
+  .frame[data-single] .slide {
+    opacity: 1;
+    animation: none;
+  }
+
+  .body {
+    padding: var(--space-md);
+  }
+
+  h3 {
+    margin-block: var(--space-xs);
+  }
+
+  article:hover h3 {
+    color: var(--accent);
+  }
+
+  .summary {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slide {
+      animation: none;
+      opacity: 0;
+    }
+
+    .slide:first-child {
+      opacity: 1;
+    }
+  }
+</style>

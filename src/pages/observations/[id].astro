@@ -1,0 +1,118 @@
+---
+import { getCollection, render } from 'astro:content';
+import { Image } from 'astro:assets';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export async function getStaticPaths() {
+  const observations = await getCollection('observations');
+  return observations.map((observation) => ({
+    params: { id: observation.id },
+    props: { observation },
+  }));
+}
+
+const { observation } = Astro.props;
+const { title, summary, photos, links } = observation.data;
+const { Content } = await render(observation);
+
+const [lead, ...rest] = photos;
+---
+
+<BaseLayout title={title} description={summary}>
+  <article class="container">
+    <p class="eyebrow">Significant observation</p>
+    <h1>{title}</h1>
+    {
+      lead && (
+        <Image
+          class="cover"
+          src={lead.src}
+          alt={lead.alt}
+          widths={[800, 1400]}
+          sizes="(max-width: 72rem) 100vw, 1100px"
+        />
+      )
+    }
+    <div class="prose">
+      <Content />
+    </div>
+    {
+      rest.length > 0 && (
+        <div class="gallery">
+          {rest.map((photo) => (
+            <Image
+              src={photo.src}
+              alt={photo.alt}
+              widths={[500, 1000]}
+              sizes="(max-width: 40rem) 100vw, 540px"
+            />
+          ))}
+        </div>
+      )
+    }
+    {
+      links.length > 0 && (
+        <aside>
+          <p>
+            <span class="eyebrow">Links</span>
+            {links.map((l, i) => (
+              <>
+                {i > 0 && ' · '}
+                <a href={l.url}>{l.label}</a>
+              </>
+            ))}
+          </p>
+        </aside>
+      )
+    }
+    <p class="back"><a href="/">← Home</a></p>
+  </article>
+</BaseLayout>
+
+<style>
+  article {
+    padding-block: var(--space-xl);
+  }
+
+  h1 {
+    margin-block: var(--space-xs) var(--space-lg);
+    max-width: 26ch;
+  }
+
+  .cover {
+    border-radius: var(--radius);
+    margin-block-end: var(--space-lg);
+  }
+
+  .gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    gap: var(--space-md);
+    margin-block-start: var(--space-lg);
+  }
+
+  .gallery img {
+    border-radius: var(--radius);
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  aside {
+    border-top: 1px solid var(--border);
+    margin-block-start: var(--space-lg);
+    padding-block-start: var(--space-md);
+  }
+
+  aside p {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+  }
+
+  .back {
+    margin-block-start: var(--space-xl);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+</style>
