@@ -13,10 +13,26 @@ const { title, short, cover, surveys } = observation.data;
    Order and starting photo are randomized per page load by the inline
    script below; without JavaScript it still cycles, just in file order. */
 const newest = [...surveys].sort((a, b) => b.date.valueOf() - a.date.valueOf());
-const pool = [...(cover ? [cover] : []), ...newest.flatMap((s) => s.photos)];
+const all = [...(cover ? [cover] : []), ...newest.flatMap((s) => s.photos)];
 // The cover usually also appears among the survey photos; show it once.
-const photos = pool.filter(
-  (photo, i) => pool.findIndex((other) => other.src.src === photo.src.src) === i
+const unique = all.filter(
+  (photo, i) => all.findIndex((other) => other.src.src === photo.src.src) === i
+);
+
+/* Every slide downloads when the page loads, so the rotation takes a
+   capped, evenly spaced sample rather than the whole bank — the card stays
+   light no matter how many surveys accumulate, while still spanning them.
+   The script below shuffles this sample per visit. */
+const MAX_SLIDES = 8;
+const sampled =
+  unique.length <= MAX_SLIDES
+    ? unique
+    : Array.from(
+        { length: MAX_SLIDES },
+        (_, i) => unique[Math.round((i * (unique.length - 1)) / (MAX_SLIDES - 1))]!
+      );
+const photos = sampled.filter(
+  (photo, i) => sampled.findIndex((other) => other.src.src === photo.src.src) === i
 );
 
 /* Photo bank rotates with a pure-CSS crossfade — no JavaScript. Each photo

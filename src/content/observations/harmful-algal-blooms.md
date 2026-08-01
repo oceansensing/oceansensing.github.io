@@ -108,6 +108,155 @@ surveys:
         time: '18:14'
         camera: { lat: 37.24545, lon: -76.50130, alt: 66 }
         center: { lat: 37.24557, lon: -76.50071 }
+  - date: 2017-08-16
+    location: Lower York River
+    # Local zone for the date and place; these files carry no
+    # timezone tag and there is no flight video to cross-check.
+    timezone: EDT
+    note: Drone survey, 14:32–15:28.
+    photos:
+      - src: ./hab-2017-08-16-01.jpg
+        alt: >-
+          The Gloucester Point shoreline with houses and a pier, and
+          olive-green water offshore.
+        time: '14:36'
+        camera: { lat: 37.24467, lon: -76.49996, alt: 67 }
+      - src: ./hab-2017-08-16-02.jpg
+        alt: >-
+          The Coleman Bridge roadway from above, with dark green water
+          and a pale streak alongside.
+        time: '14:45'
+        camera: { lat: 37.24246, lon: -76.50772, alt: 86 }
+  - date: 2017-08-21
+    location: Lower York River
+    # Local zone for the date and place; these files carry no
+    # timezone tag and there is no flight video to cross-check.
+    timezone: EDT
+    note: Drone survey, 12:03–12:07.
+    photos:
+      - src: ./hab-2017-08-21-01.jpg
+        alt: >-
+          Brown water across the width of the York River, with the far
+          shore in the distance.
+        time: '12:03'
+        camera: { lat: 37.24829, lon: -76.49662, alt: 23 }
+      - src: ./hab-2017-08-21-02.jpg
+        alt: >-
+          A brown patch offshore of piers and houses, against greener
+          water nearer the shore.
+        time: '12:04'
+        camera: { lat: 37.24586, lon: -76.49708, alt: 10 }
+      - src: ./hab-2017-08-21-03.jpg
+        alt: >-
+          A dark brown patch offshore of a wooded shoreline.
+        time: '12:06'
+        camera: { lat: 37.24401, lon: -76.50007, alt: 29 }
+  - date: 2017-08-22
+    location: Lower York River
+    # Local zone for the date and place; these files carry no
+    # timezone tag and there is no flight video to cross-check.
+    timezone: EDT
+    note: Drone survey, 14:08–15:24.
+    photos:
+      - src: ./hab-2017-08-22-01.jpg
+        alt: >-
+          Brown and olive water across the York River, with a distant
+          shoreline.
+        time: '14:14'
+      - src: ./hab-2017-08-22-02.jpg
+        alt: >-
+          A close view of the water surface, mottled purple-brown and
+          green.
+        time: '14:26'
+        camera: { lat: 37.24822, lon: -76.49957, alt: 37 }
+      - src: ./hab-2017-08-22-03.jpg
+        alt: >-
+          The Coleman Bridge and its approach at Gloucester Point, with
+          brown water on one side and greener water on the other.
+        time: '14:35'
+        camera: { lat: 37.24447, lon: -76.50793, alt: 79 }
+      - src: ./hab-2017-08-22-04.jpg
+        alt: >-
+          A dark red-brown streak with a sharp edge in lighter water.
+        time: '14:37'
+        camera: { lat: 37.24337, lon: -76.50374, alt: 52 }
+      - src: ./hab-2017-08-22-05.jpg
+        alt: >-
+          A schooner under sail on the York River, with the Coleman
+          Bridge behind.
+        time: '15:23'
+        camera: { lat: 37.24055, lon: -76.50433, alt: 3 }
+  - date: 2017-08-30
+    location: Lower York River
+    # Local zone for the date and place; these files carry no
+    # timezone tag and there is no flight video to cross-check.
+    timezone: EDT
+    note: Drone survey, 14:06–14:25.
+    photos:
+      - src: ./hab-2017-08-30-01.jpg
+        alt: >-
+          A broad band of brown water meeting lighter water in the open
+          river.
+        time: '14:09'
+        camera: { lat: 37.23899, lon: -76.48330, alt: 82 }
+      - src: ./hab-2017-08-30-02.jpg
+        alt: >-
+          A dark brown plume in the York River, with the shoreline and
+          bridge in the distance.
+        time: '14:12'
+        camera: { lat: 37.23883, lon: -76.48383, alt: 81 }
+      - src: ./hab-2017-08-30-03.jpg
+        alt: >-
+          The Coleman Bridge and Gloucester Point, with streaked brown
+          water beneath.
+        time: '14:20'
+        camera: { lat: 37.24054, lon: -76.50505, alt: 85 }
+      - src: ./hab-2017-08-30-04.jpg
+        alt: >-
+          Bridge spans over brown and green streaked water.
+        time: '14:21'
+        camera: { lat: 37.24158, lon: -76.50967, alt: 85 }
+  - date: 2017-08-31
+    location: Lower York River
+    # Local zone for the date and place; these files carry no
+    # timezone tag and there is no flight video to cross-check.
+    timezone: EDT
+    note: Drone survey, 14:48–15:03.
+    photos:
+      - src: ./hab-2017-08-31-01.jpg
+        alt: >-
+          Extensive brown water in the York River, with the Coleman
+          Bridge in the distance.
+        time: '14:50'
+        camera: { lat: 37.23738, lon: -76.49666, alt: 102 }
+      - src: ./hab-2017-08-31-02.jpg
+        alt: >-
+          Brown water in swirls along a green, wooded shoreline.
+        time: '14:55'
+        camera: { lat: 37.22602, lon: -76.49233, alt: 100 }
+      - src: ./hab-2017-08-31-03.jpg
+        alt: >-
+          Brown water meeting the sand at a wooded point.
+        time: '14:56'
+        camera: { lat: 37.22984, lon: -76.49562, alt: 100 }
+      - src: ./hab-2017-08-31-04.jpg
+        alt: >-
+          Dense orange-brown water filling the frame, with streaked
+          structure.
+        time: '14:58'
+        camera: { lat: 37.23750, lon: -76.50359, alt: 101 }
+      - src: ./hab-2017-08-31-05.jpg
+        alt: >-
+          The Coleman Bridge, houses, and piers, with brown water
+          throughout.
+        time: '14:58'
+        camera: { lat: 37.23969, lon: -76.50731, alt: 101 }
+      - src: ./hab-2017-08-31-06.jpg
+        alt: >-
+          The Coleman Bridge over brown and olive water with surface
+          swirls.
+        time: '15:00'
+        camera: { lat: 37.24136, lon: -76.51041, alt: 100 }
 order: 1
 ---
 
