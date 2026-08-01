@@ -741,6 +741,20 @@ console.log(
   `particles: ${drawn.stroke} strokes, ${drawn.lineTo} segments — ` +
     `px/frame p10 ${at(0.1)} median ${at(0.5)} p90 ${at(0.9)} max ${at(0.999)}`
 );
+/* Speed and lifetime are only meaningful together — a trail is one times the
+   other, so an over-long life and a runaway velocity look the same on
+   screen. Print both, so tuning one is done with the other in view. */
+{
+  const cfg = Object.values(host._map._layers).find((l) => l.options?.particleAge);
+  if (cfg) {
+    const seconds = cfg.options.particleAge / cfg.options.frameRate;
+    console.log(
+      `particle life: ${cfg.options.particleAge} frames at ${cfg.options.frameRate}/s ` +
+        `= ${seconds.toFixed(1)} s — trail ~${(seconds * cfg.options.frameRate * driftFar).toFixed(0)} px ` +
+        `at the z5 p90`
+    );
+  }
+}
 console.log(
   `drift vs zoom: p90 ${driftNear.toFixed(2)} px/frame at z8, ${driftFar.toFixed(2)} at z5, ` +
     `${driftGlobe.toFixed(2)} at z2 ` +

@@ -395,9 +395,18 @@ not see the globe view collapse, which is how the rounded Jacobian shipped.
 The recorder is **emptied per window** rather than sliced from a mark: it
 stops recording at 400k segments, two windows reach that, and a third then
 reads an empty tail that looks exactly like a field which stopped drawing.
-Trail length is age
+Trail length is lifetime
 × speed, so a runaway speed and an over-long lifetime look identical on
-screen; measure the speed before touching `particleAge`.
+screen; measure the speed before touching the lifetime. `test:map` prints
+both together for that reason.
+
+**Lifetime is `PARTICLE_SECONDS`, in seconds**, converted to the plugin's
+frame count on the way in — 4 s at 18 fps. It is what keeps the field evenly
+covered rather than a cosmetic knob: particles are seeded at random but
+advect into the fast cores and stay there, so a long life lets the picture
+decay from a fine even texture into a few long bright ropes with bare water
+between them, within a minute of opening the page. Respawning reseeds the
+slow water. It was 5 s, which showed that decay clearly on a phone.
 
 ### Measuring, and the point readout
 

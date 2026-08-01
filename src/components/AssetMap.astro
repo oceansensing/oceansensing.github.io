@@ -161,6 +161,24 @@ import 'leaflet/dist/leaflet.css';
        default leaves them at a fifth of a pixel — invisible. */
     const DRIFT = 3.0;
 
+    /* How long a particle lives before it is reborn somewhere random. The
+       plugin counts this in frames, which hides what it means, so it is
+       written as seconds here and converted below.
+
+       It is what keeps the field evenly covered. Particles are seeded at
+       random, but they advect into the fast cores and stay there, so the
+       longer they live the more the picture drifts from a fine even texture
+       towards a few long bright ropes with bare water between them —
+       visible within a minute of opening the page. Respawning more often
+       keeps reseeding the slow water.
+
+       Trail length is lifetime x speed, so an over-long life and a runaway
+       velocity look identical on screen. Measure the speed first: it is
+       currently p90 1.0-1.7 px/frame across zooms 2 to 8, which is right,
+       so this is the knob that was actually wrong. */
+    const PARTICLE_SECONDS = 4;
+    const FRAME_RATE = 18;
+
     /* The plugin turns a velocity into a screen displacement by multiplying
        it by the reader's velocityScale, then by mapArea^0.4, then by the
        projection's own Jacobian — pixels per degree, which doubles with
@@ -235,12 +253,12 @@ import 'leaflet/dist/leaflet.css';
           minVelocity: 0,
           maxVelocity: 1.5,
           colorScale: palette.currents,
-          // Denser, longer-lived and thicker than the plugin's wind defaults:
-          // ocean particles move slowly, so they need weight to register.
-          particleAge: 90,
+          // Denser and thicker than the plugin's wind defaults: ocean
+          // particles move slowly, so they need weight to register.
+          particleAge: Math.round(PARTICLE_SECONDS * FRAME_RATE),
           particleMultiplier: 1 / 140,
           lineWidth: 2.2,
-          frameRate: 18,
+          frameRate: FRAME_RATE,
         });
         group.addLayer(flowReady);
         entry.layer = flowReady;
