@@ -684,8 +684,8 @@ surveys:
 order: 1
 ---
 
-Each summer, dense algal blooms develop in the lower Chesapeake Bay and its
-tributaries, discoloring the water and, at high enough concentrations,
+Each summer, dense algal blooms can develop in the lower Chesapeake Bay and
+its tributaries, discoloring the water and, at high enough concentrations,
 depleting oxygen and harming the fish, shellfish, and people who depend on
 the estuary. Blooms are notoriously patchy: they form, drift, and dissipate
 over hours to days, at spatial scales of tens to hundreds of meters — too
