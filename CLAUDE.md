@@ -5,18 +5,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
+npm run verify       # build + check + check:docs + test:map + test:clock
 npm run dev          # dev server at localhost:4321
 npm run build        # production build into dist/
 npm run check        # astro check — type-checks .astro and .ts; must be 0 errors
+npm run check:docs   # docs reference real scripts, real paths, the right URL
 npm run data         # regenerate public/map/ocean-assets.json from NOAA/IOOS live
 npm run test:map     # headless test of the built map bundle
 npm run test:clock   # headless test of the built UTC clock
 ```
 
-Both test scripts run against `dist/`, so **`npm run build` first** or they test
-stale code. There is no watch mode and no per-test filter — each script is a
-single file that prints one `ok`/`FAIL` line per check and exits non-zero on any
-failure.
+**`npm run verify` is the gate.** CI runs exactly this and the deploy job will
+not run unless it passes, so a change that fails it does not reach the site.
+Run it before pushing.
+
+Both test scripts run against `dist/`, so **build first** or they test stale
+code — `verify` does that for you. There is no watch mode and no per-test
+filter; each script is a single file that prints one `ok`/`FAIL` line per check
+and exits non-zero on any failure.
+
+`check:docs` exists because `README.md` went stale on three counts at once
+after the domain cutover — wrong live URL, a "when ready" section for work
+already done, and a claim about client-side JS that four features had since
+broken. It verifies that every `npm run …` and every backticked repo path in
+`README.md`, `CLAUDE.md` and `PLAN.md` is real, that the canonical URL agrees
+across `astro.config.mjs`, `src/config.ts` and the README, and that the deploy
+workflow still contains the gate the README promises.
 
 `npm run check` truncates long diagnostics when piped through `tail`; read the
 whole output or grep for `^- [0-9]+ error`.

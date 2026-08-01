@@ -12,7 +12,9 @@
     "astro": "astro",
     "data": "python3 scripts/fetch-ocean-assets.py",
     "test:map": "node scripts/test-map.mjs",
-    "test:clock": "node scripts/test-clock.mjs"
+    "test:clock": "node scripts/test-clock.mjs",
+    "check:docs": "node scripts/check-docs.mjs",
+    "verify": "npm run build && npm run check && npm run check:docs && npm run test:map && npm run test:clock"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",

@@ -2,11 +2,13 @@
 
 Website of **C4PO — the Collaboratory for Physical Oceanography** at the
 Virginia Institute of Marine Science, live at
-[oceansensing.github.io](https://oceansensing.github.io).
+[oceansensing.org](https://oceansensing.org).
 
-Built with [Astro](https://astro.build). Static output, no client-side
-JavaScript except the theme toggle. Every push to `main` deploys
-automatically via GitHub Actions.
+Built with [Astro](https://astro.build). Static output, and close to zero
+client-side JavaScript — the exceptions are the theme toggle, the photo
+shuffle and lightbox on observation pages, the asset map, and the UTC clock.
+Every push to `main` deploys automatically via GitHub Actions, and a scheduled
+run rebuilds hourly to refresh the map data.
 
 ## Editing content
 
@@ -23,6 +25,7 @@ layout code:
 | a past project     | set `status: completed` in the project's frontmatter — the Research page moves it to a "Past projects" section automatically |
 | a dataset          | new entry in `src/data/datasets.yaml`                         |
 | a software tool    | new entry in `src/data/software.yaml`                         |
+| a significant observation | new `.md` file in `src/content/observations/` — add `map: assets` for the live asset map, or `surveys:` entries for dated photo panels |
 | a CV item          | new entry in the matching `src/data/cv/<person>/*.yaml` file (grants, advising, service, …) — publications and presentations flow in automatically |
 | a member's CV      | new directory `src/data/cv/<person-id>/` (id matching their file in `src/content/people/`) with any of the section files — their page appears at `/cv/<person-id>/` |
 
@@ -30,23 +33,47 @@ Site title, navigation, contact info, and the list of author names bolded on
 the Publications page live in `src/config.ts`. Colors, fonts, and spacing
 live in `src/styles/tokens.css`.
 
-Commit and push to `main` — the site rebuilds and deploys in about a minute.
-
 ## Developing locally
 
 ```sh
 npm install
 npm run dev      # dev server at localhost:4321
 npm run build    # production build into dist/
-npm run check    # type-check
+npm run verify   # everything CI checks, in one command
 ```
 
-## Custom domain (when ready)
+`npm run verify` builds, type-checks, checks the docs for drift, and runs the
+map and clock test harnesses. **CI runs the same command and refuses to deploy
+if it fails**, so running it before you push is the quickest way to find out
+whether a change will publish.
 
-1. Add a `public/CNAME` file containing `oceansensing.org` and change `site`
-   in `astro.config.mjs` to `https://oceansensing.org`.
-2. Repo Settings → Pages → Custom domain → `oceansensing.org`, then enable
-   "Enforce HTTPS".
-3. At the DNS registrar: apex `A` records to `185.199.108.153`,
-   `185.199.109.153`, `185.199.110.153`, `185.199.111.153`, and a `www`
-   CNAME to `oceansensing.github.io`.
+The individual pieces, if you want one on its own:
+
+```sh
+npm run check        # type-check
+npm run check:docs   # docs reference real scripts, real paths, the right URL
+npm run test:map     # asset map, against the built bundle
+npm run test:clock   # UTC clock, against the built bundle
+```
+
+Both test harnesses read from `dist/`, so build first or they test stale code.
+
+`npm run data` refreshes `public/map/ocean-assets.json` from the live NOAA and
+IOOS feeds. CI does this on every deploy; you only need it locally if you are
+working on the map and want current positions.
+
+## Deployment
+
+Pushing to `main` deploys to GitHub Pages, gated on `npm run verify` — if the
+checks fail, nothing is published. The same workflow runs hourly on a schedule
+to refresh the map data; that run commits nothing, so the repository does not
+grow.
+
+DNS lives at the registrar: apex `A` records to `185.199.108.153`,
+`185.199.109.153`, `185.199.110.153`, `185.199.111.153`, and a `www` CNAME to
+`oceansensing.github.io`. The apex is canonical and HTTPS is enforced. The same
+zone carries the lab's PrivateEmail MX records — **do not let a registrar "Mail
+Settings" default overwrite them**, or lab email stops.
+
+Working on this repo with Claude Code? `CLAUDE.md` has the architecture notes
+and `PLAN.md` tracks what is still open.

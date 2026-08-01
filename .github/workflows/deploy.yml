@@ -21,7 +21,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Gate. Nothing reaches Pages unless this passes: type errors, a broken
+  # map or clock, and docs that no longer match the repo all stop the deploy
+  # rather than shipping. Runs against the committed data snapshot, so it
+  # needs no network beyond npm and cannot fail on an upstream outage.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run verify
+
   build:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
