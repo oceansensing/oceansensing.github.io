@@ -134,17 +134,10 @@ const SEEDED_VIEW = {
     'Country & state borders',
     'Lat/lon grid',
   ],
-  /* Deliberately does NOT mention 'Argo floats' — this stands in for a view
-     saved before that layer existed, which must not switch it off. */
-  known: [
-    'Surface currents (animated)',
-    'Current speed (Mercator)',
-    'Hurricanes',
-    'NOAA USVs',
-    'IOOS gliders',
-    'Country & state borders',
-    'Lat/lon grid',
-  ],
+  /* No `known` list, exactly as every view saved before that field existed.
+     Argo is missing from `overlays` for the same reason — it did not exist
+     either — and must therefore keep its default rather than be treated as
+     a layer the reader turned off. */
 };
 window.sessionStorage.setItem('asset-map-view', JSON.stringify(SEEDED_VIEW));
 

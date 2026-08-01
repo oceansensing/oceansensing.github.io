@@ -425,9 +425,16 @@ import 'leaflet/dist/leaflet.css';
         markBasemapTone(saved.base);
       }
       if (Array.isArray(saved.overlays)) {
-        // Anything the saved view never knew about keeps its default.
+        /* Anything the saved view never knew about keeps its default.
+           When it carries no list at all — every view saved before this was
+           added — the only layers it can be assumed to have known about are
+           the ones it recorded as on. Falling back to the current set of
+           overlays instead would treat a brand new layer as one the reader
+           had switched off, which is the exact bug this exists to prevent
+           and made the first version of it useless to anyone holding an
+           older view. */
         const known = new Set<string>(
-          Array.isArray(saved.known) ? saved.known : Object.keys(overlays)
+          Array.isArray(saved.known) ? saved.known : saved.overlays
         );
         for (const [name, layer] of Object.entries(overlays)) {
           if (!known.has(name)) continue;
