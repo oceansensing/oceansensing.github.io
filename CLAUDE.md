@@ -154,10 +154,22 @@ the same data:
 - **Mercator speed raster** (off by default) — the Copernicus WMTS tiles.
   Also what `prefers-reduced-motion` readers get instead of the animation.
 
-`velocityScale` is tuned for currents, not wind. The plugin's default leaves
-the Gulf Stream drifting a fifth of a pixel per frame — invisible. Measured
-values live in the component comment; re-measure rather than guess if the
-region or zoom behaviour changes.
+Two things about the particles are easy to get wrong and were, both silently:
+
+- **They must composite normally.** The Mercator raster is multiplied over
+  the basemap; when the particles shared that pane they were multiplied too,
+  which all but deleted them — they are near-white, and multiplying by
+  near-white changes almost nothing. Hence two panes. `test:contrast` reads
+  the particle pane's name out of the component and fails if a blend mode
+  reappears on it, because the whole gate assumes normal compositing.
+- **Their speed must be divided by the plugin's `mapArea^0.4`.** That factor
+  makes particles slower the further you zoom *in* — the same current drifted
+  1.4 px/frame at zoom 3 and 0.23 at zoom 6, so zooming to a storm stopped
+  the flow. `scaleForView()` cancels it and rescales on `zoomend`.
+
+`npm run test:map` records the canvas draw calls and prints the per-frame
+displacement distribution — that is how both bugs were found, and it fails if
+the particles go sub-pixel again. Re-measure rather than guess when tuning.
 
 **leaflet-velocity is UMD and reads Leaflet off the global object**, which
 the bundled ESM build never sets. It is therefore loaded by dynamic import

@@ -144,6 +144,30 @@ import 'leaflet/dist/leaflet.css';
        in place first and the plugin pulled in dynamically after. Without
        this the built bundle dies on "L is not defined" — the dev server
        hides it by serving Leaflet's UMD build, which does set the global. */
+    /* How briskly the particles drift. Not a physical quantity — the plugin
+       applies its own projection factor on top — so this was calibrated by
+       measuring the drawn segments: it puts a typical current near 1.4 px a
+       frame and the fast ones above 2, which streams clearly without looking
+       frantic. npm run test:map prints the distribution.
+
+       Currents run an order of magnitude slower than wind, so the plugin's
+       wind-tuned default left them at a fifth of a pixel — invisible. Worse,
+       it multiplies by mapArea^0.4, which makes particles slower the further
+       you zoom IN: the same current drifted 1.4 px/frame at zoom 3 and 0.23
+       at zoom 6, so zooming to a storm — exactly when the flow matters —
+       all but stopped it. Dividing that factor out ties the speed to the
+       current rather than the viewport. */
+    const DRIFT = 0.28;
+
+    const scaleForView = () => {
+      const rad = Math.PI / 180;
+      const bounds = map.getBounds();
+      const area = Math.abs(
+        (bounds.getSouth() - bounds.getNorth()) * rad * (bounds.getWest() - bounds.getEast()) * rad
+      );
+      return DRIFT / Math.pow(Math.max(area, 1e-6), 0.4);
+    };
+
     const loadPlugin = async () => {
       // globalThis rather than window: it is window in a browser and works
       // in the headless harness too, where the two are different objects.
@@ -162,12 +186,7 @@ import 'leaflet/dist/leaflet.css';
             'Currents: US Navy ESPC-D-V02' + (run ? ` — ${run}Z run` : ''),
           paneName: 'currents',
           displayValues: false,
-          /* Currents run an order of magnitude slower than wind, so the
-             plugin's wind-tuned default leaves particles moving a fifth of
-             a pixel per frame — invisible. Measured against the live field:
-             this puts the Gulf Stream at ~1.4 px/frame. The plugin scales
-             it by map area, so the apparent drift holds across zooms. */
-          velocityScale: 0.08,
+          velocityScale: scaleForView(),
           minVelocity: 0,
           maxVelocity: 1.5,
           colorScale: palette.currents,
@@ -179,6 +198,14 @@ import 'leaflet/dist/leaflet.css';
           frameRate: 18,
         });
         flow.addLayer(flowReady);
+        /* Rescale on zoom so the drift stays put as the viewport changes.
+           Zoom only — setOptions restarts the animation, and doing that on
+           every pan would make the field stutter as you drag. */
+        map.on('zoomend', () => {
+          (flowReady as unknown as { setOptions?: (o: object) => void })?.setOptions?.({
+            velocityScale: scaleForView(),
+          });
+        });
       })
       .catch(() => {
         // No field: the switcher still lists the layer, it is simply empty,

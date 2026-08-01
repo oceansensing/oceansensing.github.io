@@ -32,16 +32,46 @@ globalThis.sessionStorage = window.sessionStorage;
 globalThis.localStorage = window.localStorage;
 window.matchMedia ??= (query) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {} });
 window.Element.prototype.scrollIntoView = function () {};
-/* jsdom has no canvas backend, and the particle layer wants a 2d context
-   the moment it starts. A no-op context lets it construct and run its setup
-   for real — which is what catches plugin-loading regressions — while the
-   drawing goes nowhere. Installing the native `canvas` package just to
-   render particles nobody looks at is not worth the CI fragility. */
-const noopContext = new Proxy(
+/* jsdom has no canvas backend, so instead of rendering pixels the 2d context
+   is recorded. That is the only way to prove the particles actually animate
+   without pulling in the native `canvas` package: the draw calls tell you
+   whether segments are being stroked, in which colours, and whether the
+   particles are moving. Pixels would be nicer but not worth the CI fragility.
+
+   requestAnimationFrame is stubbed below, so leaflet-velocity's loop really
+   runs here — unlike a headless browser pane, which never paints. */
+const drawn = { moveTo: 0, lineTo: 0, stroke: 0, styles: new Set(), segments: [] };
+const properties = {};
+let penX = 0;
+let penY = 0;
+const recordingContext = new Proxy(
   {},
-  { get: (_, key) => (key === 'canvas' ? null : () => {}), set: () => true }
+  {
+    get: (_, key) => {
+      if (key === 'canvas') return null;
+      if (key in properties) return properties[key];
+      return (...args) => {
+        if (key === 'moveTo') {
+          drawn.moveTo += 1;
+          [penX, penY] = args;
+        } else if (key === 'lineTo') {
+          drawn.lineTo += 1;
+          if (drawn.segments.length < 500) {
+            drawn.segments.push(Math.hypot(args[0] - penX, args[1] - penY));
+          }
+        } else if (key === 'stroke') {
+          drawn.stroke += 1;
+          if (typeof properties.strokeStyle === 'string') drawn.styles.add(properties.strokeStyle);
+        }
+      };
+    },
+    set: (_, key, value) => {
+      properties[key] = value;
+      return true;
+    },
+  }
 );
-window.HTMLCanvasElement.prototype.getContext = () => noopContext;
+window.HTMLCanvasElement.prototype.getContext = () => recordingContext;
 
 globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
 globalThis.cancelAnimationFrame = clearTimeout;
@@ -165,6 +195,14 @@ const rebuiltNames = [...stormBox.querySelectorAll('li a, li strong')].map((e) =
 const rebuiltFacts = [...stormBox.querySelectorAll('.facts')].map((e) => e.textContent);
 const expectedNames = assets.storms.map((s) => s.name);
 
+/* Particle animation. Segment lengths are the give-away: if the field were
+   dead, or the velocity scale far too small, the particles would be stroked
+   at zero length and nothing would appear on screen even though the draw
+   calls all happened. */
+const palette = JSON.parse(fs.readFileSync('src/data/map-palette.json', 'utf8'));
+const movingSegments = drawn.segments.filter((d) => d > 0.5).length;
+const paletteUsed = [...drawn.styles].every((c) => palette.currents.includes(c));
+
 const status = document.getElementById('map-status').textContent;
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
@@ -219,6 +257,10 @@ const checks = [
     rebuiltFacts.length === expectedNames.length &&
       rebuiltFacts.every((f) => f && f.includes('·')) &&
       stormBox.querySelectorAll('button.zoom[data-storm-zoom]').length === expectedNames.length],
+  ['particles are actually stroked', drawn.stroke > 0 && drawn.moveTo > 100 && drawn.lineTo > 100],
+  ['particles move a visible distance each frame',
+    drawn.segments.length > 0 && movingSegments / drawn.segments.length > 0.5],
+  ['particles are drawn in the checked palette', drawn.styles.size > 0 && paletteUsed],
   ['view is written back for the next reload',
     (() => {
       const saved = JSON.parse(window.sessionStorage.getItem('asset-map-view') ?? 'null');
@@ -230,6 +272,12 @@ for (const [name, pass] of checks) {
   console.log(`${pass ? 'ok  ' : 'FAIL'}  ${name}`);
   ok &&= pass;
 }
+const lens = [...drawn.segments].sort((a, b) => a - b);
+const at = (q) => (lens.length ? lens[Math.floor(lens.length * q)].toFixed(2) : 'n/a');
+console.log(
+  `particles: ${drawn.stroke} strokes, ${drawn.lineTo} segments — ` +
+    `px/frame p10 ${at(0.1)} median ${at(0.5)} p90 ${at(0.9)} max ${at(0.999)}`
+);
 console.log(`status: ${status}`);
 console.log('popup:', popupHtml.replace(/<[^>]+>/g,' | ').replace(/\s+/g,' ').trim().slice(0,240));
 process.exit(ok ? 0 : 1);

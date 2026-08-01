@@ -65,10 +65,12 @@ active-storm status line, and a server-synchronised UTC clock.
 
 ### Needs a human eye
 
-- **Nobody has watched the particles move yet.** Colour is now settled by
-  measurement — `npm run test:contrast` proves the amber ramp separates from
-  both bathymetries' water — but motion itself still has not been observed
-  here. The data, grid geometry,
+- **Nobody has watched the particles move yet.** They are now verified
+  indirectly: the harness records the canvas draw calls and confirms segments
+  are stroked, in the checked palette, moving 1.5 px a frame. Colour is
+  settled by `npm run test:contrast`. But no one has actually looked at the
+  finished animation — the browser here never paints, and Claude in Chrome
+  was not connected. Worth a glance. The data, grid geometry,
   land masking, pane order, plugin loading and per-frame drift were all
   verified numerically, but the headless browser here never paints — it
   reports zero animation frames per second — so the animation itself was
