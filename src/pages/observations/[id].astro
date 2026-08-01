@@ -2,6 +2,7 @@
 import { getCollection, render } from 'astro:content';
 import { Image, getImage } from 'astro:assets';
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import SurveyPanel from '../../components/SurveyPanel.astro';
 
 export async function getStaticPaths() {
   const observations = await getCollection('observations');
@@ -21,22 +22,6 @@ const dated = surveys
   .filter((s) => s.photos.length > 0)
   .sort((a, b) => b.date.valueOf() - a.date.valueOf());
 
-const years = [...new Set(dated.map((s) => s.date.getUTCFullYear()))].sort((a, b) => b - a);
-
-/* Each thumbnail also carries a full-size variant, which the lightbox
-   swaps in when the photo is opened. */
-const panels = await Promise.all(
-  dated.map(async (survey) => ({
-    ...survey,
-    photos: await Promise.all(
-      survey.photos.map(async (photo) => ({
-        ...photo,
-        full: (await getImage({ src: photo.src, width: 1600, format: 'webp' })).src,
-      }))
-    ),
-  }))
-);
-
 const day = (date: Date) =>
   date.toLocaleDateString('en-US', {
     month: 'long',
@@ -47,6 +32,56 @@ const day = (date: Date) =>
 
 const coords = (lat: number, lon: number) =>
   `${Math.abs(lat).toFixed(4)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(4)}°${lon >= 0 ? 'E' : 'W'}`;
+
+/* Prepare each survey for SurveyPanel: a full-size variant per photo for
+   the lightbox, plus the two metadata lines it shows. */
+const panels = await Promise.all(
+  dated.map(async (survey) => ({
+    year: survey.date.getUTCFullYear(),
+    heading: day(survey.date),
+    location: survey.location,
+    note: survey.note,
+    photos: await Promise.all(
+      survey.photos.map(async (photo) => ({
+        src: photo.src,
+        alt: photo.alt,
+        caption: photo.caption,
+        full: (await getImage({ src: photo.src, width: 1600, format: 'webp' })).src,
+        when: [
+          photo.time
+            ? `${day(survey.date)}, ${photo.time}${survey.timezone ? ` ${survey.timezone}` : ''}`
+            : day(survey.date),
+          survey.location,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        where: [
+          photo.center && `scene ≈ ${coords(photo.center.lat, photo.center.lon)}`,
+          photo.camera &&
+            `camera ${coords(photo.camera.lat, photo.camera.lon)}, ${photo.camera.alt} m`,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      }))
+    ),
+  }))
+);
+
+/* Years newest first. With more than one, older years collapse behind a
+   <details> so the page stays navigable as surveys accumulate; the newest
+   stays open. A lone year needs no disclosure control. */
+const byYear = [...new Set(panels.map((p) => p.year))]
+  .sort((a, b) => b - a)
+  .map((year) => {
+    const items = panels.filter((p) => p.year === year);
+    const photos = items.reduce((n, p) => n + p.photos.length, 0);
+    return {
+      year,
+      items,
+      tally: `${items.length} ${items.length === 1 ? 'survey' : 'surveys'} · ${photos} ${photos === 1 ? 'photo' : 'photos'}`,
+    };
+  });
+const collapsible = byYear.length > 1;
 ---
 
 <BaseLayout title={title} description={summary}>
@@ -69,58 +104,26 @@ const coords = (lat: number, lon: number) =>
     </div>
 
     {
-      years.map((year) => (
-        <section class="year">
-          <h2 class="eyebrow">{year}</h2>
-          {panels
-            .filter((s) => s.date.getUTCFullYear() === year)
-            .map((survey) => (
-              <div class="survey">
-                <h3>
-                  {day(survey.date)}
-                  {survey.location && <span class="where"> · {survey.location}</span>}
-                </h3>
-                {survey.note && <p class="note">{survey.note}</p>}
-                <div class="gallery">
-                  {survey.photos.map((photo) => (
-                    <figure>
-                      {/* Without JavaScript this is just a link to the
-                          full-size photo; the lightbox intercepts it. */}
-                      <a
-                        class="shot"
-                        href={photo.full}
-                        data-alt={photo.alt}
-                        data-when={[
-                          photo.time
-                            ? `${day(survey.date)}, ${photo.time}${survey.timezone ? ` ${survey.timezone}` : ''}`
-                            : day(survey.date),
-                          survey.location,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                        data-where={[
-                          photo.center && `scene ≈ ${coords(photo.center.lat, photo.center.lon)}`,
-                          photo.camera &&
-                            `camera ${coords(photo.camera.lat, photo.camera.lon)}, ${photo.camera.alt} m`,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      >
-                        <Image
-                          src={photo.src}
-                          alt={photo.alt}
-                          widths={[500, 1000]}
-                          sizes="(max-width: 40rem) 100vw, 460px"
-                        />
-                      </a>
-                      {photo.caption && <figcaption>{photo.caption}</figcaption>}
-                    </figure>
-                  ))}
-                </div>
-              </div>
+      byYear.map(({ year, items, tally }, i) =>
+        collapsible ? (
+          <details class="year" open={i === 0}>
+            <summary>
+              <span class="eyebrow">{year}</span>
+              <span class="tally">{tally}</span>
+            </summary>
+            {items.map((survey) => (
+              <SurveyPanel survey={survey} />
             ))}
-        </section>
-      ))
+          </details>
+        ) : (
+          <section class="year">
+            <h2 class="eyebrow">{year}</h2>
+            {items.map((survey) => (
+              <SurveyPanel survey={survey} />
+            ))}
+          </section>
+        )
+      )
     }
 
     {
@@ -234,53 +237,58 @@ const coords = (lat: number, lon: number) =>
     color: var(--text);
   }
 
-  .survey {
-    margin-block-start: var(--space-lg);
+  /* ---- collapsible years (only rendered when there is more than one) ---- */
+
+  details.year > summary {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+    cursor: pointer;
+    list-style: none;
+    padding-block: var(--space-2xs);
   }
 
-  .survey h3 {
+  details.year > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  /* Disclosure triangle, rotating when the year opens. */
+  details.year > summary::before {
+    content: '';
+    flex-shrink: 0;
+    align-self: center;
+    width: 0;
+    height: 0;
+    border-left: 0.42rem solid var(--text-muted);
+    border-top: 0.3rem solid transparent;
+    border-bottom: 0.3rem solid transparent;
+    transform-origin: 0.14rem 50%;
+    transition: transform 0.15s ease;
+  }
+
+  details.year[open] > summary::before {
+    transform: rotate(90deg);
+  }
+
+  details.year > summary:hover::before {
+    border-left-color: var(--accent);
+  }
+
+  details.year > summary .eyebrow {
+    color: var(--text);
     font-size: var(--text-base);
-    font-weight: 600;
   }
 
-  .where {
-    font-weight: 400;
-    color: var(--text-muted);
-  }
-
-  .note {
-    color: var(--text-muted);
+  .tally {
+    font-family: var(--font-mono);
     font-size: var(--text-sm);
-    max-width: var(--prose-width);
-    margin-block-start: var(--space-2xs);
+    color: var(--text-muted);
   }
 
-  .gallery {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
-    gap: var(--space-md);
-    margin-block-start: var(--space-sm);
-  }
-
-  figure {
-    margin: 0;
-  }
-
-  figure img {
-    border-radius: var(--radius);
-    width: 100%;
-    aspect-ratio: 4 / 3;
-    object-fit: cover;
-    transition: opacity 0.15s ease;
-  }
-
-  .shot {
-    display: block;
-    cursor: zoom-in;
-  }
-
-  .shot:hover img {
-    opacity: 0.88;
+  @media (prefers-reduced-motion: reduce) {
+    details.year > summary::before {
+      transition: none;
+    }
   }
 
   /* ---- lightbox ---- */
@@ -394,11 +402,6 @@ const coords = (lat: number, lon: number) =>
     }
   }
 
-  figcaption {
-    color: var(--text-muted);
-    font-size: var(--text-sm);
-    margin-block-start: var(--space-2xs);
-  }
 
   aside {
     border-top: 1px solid var(--border);
