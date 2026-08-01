@@ -176,12 +176,12 @@ import 'leaflet/dist/leaflet.css';
     };
 
     Promise.all([fetch('/map/currents.json').then((r) => r.json()), loadPlugin()])
-      .then(([grid]) => {
+      .then(([coarse]) => {
         // Name the run in the attribution: ESPC publishes once a day at 12Z,
         // so this is how a reader can tell how fresh the field actually is.
-        const run = grid?.[0]?.header?.modelRun?.slice(0, 16).replace('T', ' ');
+        const run = coarse?.[0]?.header?.modelRun?.slice(0, 16).replace('T', ' ');
         flowReady = L.velocityLayer({
-          data: grid,
+          data: coarse,
           attribution:
             'Currents: US Navy ESPC-D-V02' + (run ? ` — ${run}Z run` : ''),
           paneName: 'currents',
@@ -198,14 +198,72 @@ import 'leaflet/dist/leaflet.css';
           frameRate: 18,
         });
         flow.addLayer(flowReady);
-        /* Rescale on zoom so the drift stays put as the viewport changes.
-           Zoom only — setOptions restarts the animation, and doing that on
-           every pan would make the field stutter as you drag. */
-        map.on('zoomend', () => {
-          (flowReady as unknown as { setOptions?: (o: object) => void })?.setOptions?.({
-            velocityScale: scaleForView(),
-          });
-        });
+
+        /* Two grids. The coarse one covers the globe and came with the page;
+           the fine one is four times sharper but only over the Atlantic and
+           Gulf, and is fetched the first time the reader zooms into it. The
+           region and its zoom threshold are read from the coarse file's own
+           header, so they are not written down twice.
+
+           Swap only when the answer changes: setOptions restarts the
+           animation, and doing that on every pan would make the field
+           stutter as you drag. */
+        const detail = coarse?.[0]?.header?.detail;
+        let fine: unknown = null;
+        let fetchingFine = false;
+        let showingFine = false;
+
+        const layer = flowReady as unknown as { setOptions?: (o: object) => void };
+
+        const fineFits = () => {
+          if (!detail || map.getZoom() < detail.minZoom) return false;
+          // The whole viewport must be inside the fine grid, or the parts
+          // outside it would simply have no flow.
+          const view = map.getBounds();
+          return (
+            view.getWest() >= detail.west &&
+            view.getEast() <= detail.east &&
+            view.getSouth() >= detail.south &&
+            view.getNorth() <= detail.north
+          );
+        };
+
+        const applyView = (zoomChanged: boolean) => {
+          const wants = fineFits();
+
+          if (wants !== showingFine) {
+            if (wants && !fine) {
+              if (!fetchingFine) {
+                fetchingFine = true;
+                fetch(detail.url)
+                  .then((r) => r.json())
+                  .then((grid) => {
+                    fine = grid;
+                    fetchingFine = false;
+                    // The view may have moved on while that was in flight.
+                    applyView(false);
+                  })
+                  .catch(() => {
+                    // Coarse everywhere is a fine outcome; do not retry in a
+                    // loop over a network that is not answering.
+                    fetchingFine = false;
+                    detail.minZoom = Infinity;
+                  });
+              }
+              return;
+            }
+            showingFine = wants;
+            layer.setOptions?.({ data: wants ? fine : coarse, velocityScale: scaleForView() });
+            return;
+          }
+
+          // Rescale on zoom so the drift stays put as the viewport changes.
+          if (zoomChanged) layer.setOptions?.({ velocityScale: scaleForView() });
+        };
+
+        map.on('zoomend', () => applyView(true));
+        map.on('moveend', () => applyView(false));
+        applyView(false);
       })
       .catch(() => {
         // No field: the switcher still lists the layer, it is simply empty,

@@ -86,9 +86,14 @@ const files = {
   boundaries: JSON.parse(fs.readFileSync('public/map/boundaries.json', 'utf8')),
   'ocean-assets': JSON.parse(fs.readFileSync('public/map/ocean-assets.json', 'utf8')),
   currents: JSON.parse(fs.readFileSync('public/map/currents.json', 'utf8')),
+  'currents-detail': JSON.parse(fs.readFileSync('public/map/currents-detail.json', 'utf8')),
 };
 globalThis.fetch = async (u) => {
-  const key = Object.keys(files).find((k) => String(u).includes(k));
+  // Longest key first: "currents" is a substring of "currents-detail", so
+  // insertion order would hand the detail request the coarse grid.
+  const key = Object.keys(files)
+    .sort((a, b) => b.length - a.length)
+    .find((k) => String(u).includes(k));
   if (!key) throw new Error('unexpected fetch: ' + u);
   return { json: async () => files[key] };
 };
@@ -134,6 +139,19 @@ await import('./' + path.join('..', 'dist', '_astro', bundle));
 await new Promise((r) => setTimeout(r, 1500));
 
 const host = document.getElementById('asset-map');
+
+const velocityLayer = (() => {
+  let found = null;
+  host._map?.eachLayer?.((l) => {
+    if (l._windy) found = l;
+  });
+  return found;
+})();
+const gridOf = () => velocityLayer?.options?.data?.[0]?.header ?? null;
+
+/* The seeded view sits at zoom 6 inside the Atlantic detail region, so by
+   now the fine grid should have been lazily fetched and swapped in. */
+const gridInsideRegion = gridOf();
 
 // Read the restored view before anything below moves the map.
 const restoredCentre = host._map?.getCenter?.() ?? null;
@@ -203,6 +221,13 @@ const rebuiltNames = [...stormBox.querySelectorAll('li a, li strong')].map((e) =
 const rebuiltFacts = [...stormBox.querySelectorAll('.facts')].map((e) => e.textContent);
 const expectedNames = assets.storms.map((s) => s.name);
 
+/* The zoom button above flew the map to the storm, which this season is in
+   the eastern Pacific — outside the detail region. So the layer should have
+   fallen back to the coarse grid, which tests the swap the other way. */
+const gridOutsideRegion = gridOf();
+const coarseHeader = files.currents[0].header;
+const fineHeader = files['currents-detail'][0].header;
+
 /* Particle animation. Segment lengths are the give-away: if the field were
    dead, or the velocity scale far too small, the particles would be stroked
    at zero length and nothing would appear on screen even though the draw
@@ -253,6 +278,18 @@ const checks = [
   ['currents reach the far hemisphere (Kuroshio runs NE, fast)',
     kuU > 0.2 && kuV > 0.2 && Math.hypot(kuU, kuV) > 0.5],
   ['Antarctic Circumpolar runs eastward', accU !== null && accU > 0],
+  // Two grids, picked by zoom.
+  ['global grid advertises the detail grid',
+    !!coarseHeader.detail && typeof coarseHeader.detail.minZoom === 'number' &&
+      coarseHeader.detail.url.includes('currents-detail')],
+  ['detail grid is genuinely finer', fineHeader.dx < coarseHeader.dx],
+  ['detail grid covers the region it advertises',
+    Math.abs(fineHeader.lo1 - (coarseHeader.detail.west + 360)) < fineHeader.dx &&
+      fineHeader.la1 >= coarseHeader.detail.north - fineHeader.dy - 0.5],
+  ['inside the region, the fine grid is the one in use',
+    !!gridInsideRegion && gridInsideRegion.dx === fineHeader.dx],
+  ['panned outside it, the layer falls back to the global grid',
+    !!gridOutsideRegion && gridOutsideRegion.dx === coarseHeader.dx],
   // One shared window drives storm history, glider tracks and USV tracks.
   ['history window is published once', typeof assets.historyDays === 'number' && !('activeWindowDays' in assets)],
   ['storms carry observed history', withHistory.length === assets.storms.length],
@@ -295,6 +332,10 @@ const at = (q) => (lens.length ? lens[Math.floor(lens.length * q)].toFixed(2) : 
 console.log(
   `particles: ${drawn.stroke} strokes, ${drawn.lineTo} segments — ` +
     `px/frame p10 ${at(0.1)} median ${at(0.5)} p90 ${at(0.9)} max ${at(0.999)}`
+);
+console.log(
+  `grids: inside region dx ${gridInsideRegion?.dx} · outside dx ${gridOutsideRegion?.dx} ` +
+    `(coarse ${coarseHeader.dx}, fine ${fineHeader.dx})`
 );
 console.log(`status: ${status}`);
 console.log('popup:', popupHtml.replace(/<[^>]+>/g,' | ').replace(/\s+/g,' ').trim().slice(0,240));

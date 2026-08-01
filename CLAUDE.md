@@ -152,12 +152,23 @@ the same data:
   is open; **Copernicus publishes Mercator at the same resolution but its
   numeric access needs credentials**, and the WMTS only serves pictures.
 
-  The grid is global at ~0.96°, and **must span a full 360° of longitude** —
-  leaflet-velocity only wraps across the antimeridian when it does, and
-  without that particles pile up against the edge. It also means longitude
-  has to be indexed with a floored modulo, since the grid starts at 0°E and
-  half the world is west of that. 678 KB raw, 107 KB gzipped over the wire.
-  Resolution is the payload knob: 0.48° globally would be ~3 MB.
+  **Two grids, chosen by zoom.** `currents.json` is global at ~0.96° and
+  loads with the page (107 KB gzipped). `currents-detail.json` is 0.24° over
+  the Atlantic and Gulf and is fetched only when the reader zooms inside that
+  region (136 KB gzipped) — being lazy is what pays for the resolution. The
+  map swaps with `setOptions({data})`, and only when the answer changes,
+  since that call restarts the animation.
+
+  The map learns the detail region and its zoom threshold from the **global
+  file's header** (`header.detail`) rather than repeating them in the
+  component, and it requires the whole viewport to be inside the region — a
+  partly-covered view would have flow on one side and nothing on the other.
+
+  The global grid **must span a full 360° of longitude**: that is the exact
+  condition leaflet-velocity uses to wrap across the antimeridian, and
+  without it particles pile up against the edge. It also means longitude is
+  indexed with a floored modulo, since the grid starts at 0°E and half the
+  world is west of that.
 - **Mercator speed raster** (off by default) — the Copernicus WMTS tiles.
   Also what `prefers-reduced-motion` readers get instead of the animation.
 

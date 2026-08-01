@@ -55,11 +55,12 @@ active-storm status line, and a server-synchronised UTC clock.
   switcher. If Mercator specifically matters for the animation, it is doable:
   add Copernicus Marine credentials as GitHub secrets and the pipeline can
   pull u/v from the toolbox instead. That needs a Copernicus account.
-- **Payload.** The animated field is global at ~0.96° — 678 KB raw but 107 KB
-  gzipped, which is what actually crosses the wire. The Mercator raster's
-  707 KB of tiles is opt-in, so the default view is still lighter than when
-  those tiles were on by default. Finer global resolution is the obvious
-  future ask and the obvious cost: 0.48° globally is about 3 MB raw.
+- **Payload.** The animated field is two grids: global at ~0.96° loading with
+  the page (107 KB gzipped), and 0.24° over the Atlantic fetched only on
+  zooming in (136 KB). The Mercator raster's 707 KB of tiles stays opt-in.
+  If the detail region should cover somewhere else — the Nordic Seas for
+  NORSE, say — it is a bounding box in `scripts/fetch-currents.py`; a second
+  detail region would need the map to pick between several rather than one.
 - **The Hurricane Florence cover has no visible credit.** The page now opens
   on the map, and the credit line lived under the hero that was removed, so
   the attribution survives only in the Markdown front matter. NASA imagery is
