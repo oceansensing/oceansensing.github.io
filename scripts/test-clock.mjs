@@ -38,10 +38,14 @@ const expected = (t) => {
 /**
  * Run the clock once in a fresh DOM.
  * @param skewMs  how wrong the device clock is
- * @param serveDate  true to answer the HEAD with a correct Date header,
- *                   false to fail the request
+ * @param mode    'ok'      a plain correct Date header
+ *                'aged'    a correct, freshly generated Date header AND a
+ *                          non-zero Age, the way the CDN in front of the
+ *                          real site behaves. Adding the two double-counts
+ *                          and used to run the clock ahead.
+ *                'offline' the request fails
  */
-async function boot(name, skewMs, serveDate) {
+async function boot(name, skewMs, mode) {
   const dom = new JSDOM('<!doctype html><body><time id="utc-clock" hidden></time></body>', {
     url: 'https://oceansensing.org/observations/hurricanes/',
   });
@@ -56,17 +60,20 @@ async function boot(name, skewMs, serveDate) {
   Date.now = () => REAL_NOW() + skewMs;
 
   globalThis.fetch = async () => {
-    if (!serveDate) throw new Error('offline');
+    if (mode === 'offline') throw new Error('offline');
     // A real server dates its response from its own correct clock, truncated
-    // to whole seconds by the HTTP date format.
+    // to whole seconds by the HTTP date format. Note the Date stays correct
+    // in 'aged' too — that is the whole point: the cache refreshes Date and
+    // counts Age up at the same time.
     const truncated = Math.floor(REAL_NOW() / 1000) * 1000;
+    const age = mode === 'aged' ? '7' : '0';
     return {
       headers: {
         get: (k) =>
           k.toLowerCase() === 'date'
             ? new Date(truncated).toUTCString()
             : k.toLowerCase() === 'age'
-              ? '0'
+              ? age
               : null,
       },
     };
@@ -93,9 +100,11 @@ async function boot(name, skewMs, serveDate) {
 
 // A device nine and a bit hours behind, with a reachable server.
 const SKEW = -(9 * 3600 + 17 * 60 + 42) * 1000 - 300;
-const synced = await boot('synced', SKEW, true);
+const synced = await boot('synced', SKEW, 'ok');
+// Same skew, but the response comes from a cache that has held it 7 s.
+const aged = await boot('aged', SKEW, 'aged');
 // Same skew, but the server cannot be reached.
-const offline = await boot('offline', SKEW, false);
+const offline = await boot('offline', SKEW, 'offline');
 
 // One second of slack: the clock and the assertion can straddle a boundary.
 const within1s = (shown, truth) =>
@@ -113,6 +122,9 @@ const checks = [
   ['says it synchronised with the server', /synchronised with the server/.test(synced.title)],
   ['still shows a clock when the server is unreachable', /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2} UTC$/.test(offline.text)],
   ['admits it is the device clock when unverified', /from this device/.test(offline.title)],
+  // Regression: Date + Age double-counted, so a page held at the edge for a
+  // while made the clock run that many seconds ahead.
+  ['a cached response does not push the clock ahead', within1s(aged.text, aged.trulyIs)],
 ];
 
 let ok = true;
@@ -123,4 +135,5 @@ for (const [name, pass] of checks) {
 console.log(`device clock said: ${synced.deviceSays}`);
 console.log(`clock displayed:   ${synced.text}`);
 console.log(`truth was:         ${synced.trulyIs}`);
+console.log(`via 7s-old cache:  ${aged.text}  (truth ${aged.trulyIs})`);
 process.exit(ok ? 0 : 1);
