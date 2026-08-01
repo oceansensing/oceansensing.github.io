@@ -253,10 +253,17 @@ import 'leaflet/dist/leaflet.css';
           minVelocity: 0,
           maxVelocity: 1.5,
           colorScale: palette.currents,
-          // Denser and thicker than the plugin's wind defaults: ocean
-          // particles move slowly, so they need weight to register.
+          /* Denser and thicker than the plugin's wind defaults: ocean
+             particles move slowly, so they need weight to register.
+
+             The multiplier is one particle per this many square pixels of
+             map, and the count is linear in it — so 1/112 is a quarter more
+             than the 1/140 it replaced. It pairs with the shorter lifetime
+             above: cutting the trails shortens what each particle
+             contributes, and more of them puts the density back without
+             going back to long ropes. */
           particleAge: Math.round(PARTICLE_SECONDS * FRAME_RATE),
-          particleMultiplier: 1 / 140,
+          particleMultiplier: 1 / 112,
           lineWidth: 2.2,
           frameRate: FRAME_RATE,
         });
