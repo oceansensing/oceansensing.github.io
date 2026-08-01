@@ -45,6 +45,7 @@ import 'leaflet/dist/leaflet.css';
      blue-green, and magenta stays separable from the orange USVs and the red
      storms under the common forms of colour blindness. */
   import palette from '../data/map-palette.json';
+  import { stormLines, stormLabel, NO_STORMS } from '../lib/stormStatus';
   const { storm: STORM, usv: USV, glider: GLIDER } = palette.features;
 
   const el = document.getElementById('asset-map');
@@ -365,7 +366,15 @@ import 'leaflet/dist/leaflet.css';
         try {
           const url = `/map/ocean-assets.json?_=${Date.now()}`;
           const fresh = await (await fetch(url, { cache: 'no-store' })).json();
-          if (fresh?.updated && fresh.updated !== loadedStamp) newerAvailable = true;
+          if (fresh?.updated && fresh.updated !== loadedStamp) {
+            newerAvailable = true;
+            /* Update the storm line now rather than at reload time. It is a
+               line of text, so replacing it interrupts nobody, and it is the
+               part a reader is most likely to be relying on. The map's own
+               markers catch up when the reload happens. */
+            renderStormStatus(fresh.storms ?? []);
+            rewire?.();
+          }
         } catch {
           // Offline or mid-deploy; just try again on the next tick.
         }
@@ -377,6 +386,63 @@ import 'leaflet/dist/leaflet.css';
       // than sitting on it for another hour.
       window.setInterval(reloadIfUnobtrusive, SETTLE_EVERY);
       document.addEventListener('visibilitychange', reloadIfUnobtrusive);
+    };
+
+    /* Rebuilds the storm line in place. Mirrors StormStatus.astro's markup
+       exactly — same classes, same order — because the stylesheet is written
+       against that structure and this replaces it wholesale. */
+    let rewire: (() => void) | null = null;
+
+    const renderStormStatus = (raw: unknown[]) => {
+      const box = document.querySelector('[data-storm-status]');
+      if (!box) return;
+      const lines = stormLines(raw as Parameters<typeof stormLines>[0]);
+
+      box.textContent = '';
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = stormLabel(lines.length);
+      box.append(label);
+
+      if (!lines.length) {
+        const none = document.createElement('p');
+        none.className = 'none';
+        none.textContent = NO_STORMS;
+        box.append(none);
+        return;
+      }
+
+      const list = document.createElement('ul');
+      for (const line of lines) {
+        const item = document.createElement('li');
+
+        let name: HTMLElement;
+        if (line.url) {
+          const link = document.createElement('a');
+          link.href = line.url;
+          name = link;
+        } else {
+          name = document.createElement('strong');
+        }
+        name.textContent = line.name;
+
+        const zoom = document.createElement('button');
+        zoom.type = 'button';
+        zoom.className = 'zoom';
+        if (line.id) zoom.dataset.stormZoom = line.id;
+        zoom.title = `Zoom the map to ${line.name}`;
+        zoom.setAttribute('aria-label', zoom.title);
+        zoom.hidden = true;
+        zoom.textContent = '🔍';
+
+        const facts = document.createElement('span');
+        facts.className = 'facts';
+        facts.textContent = line.facts.join(' · ');
+
+        item.append(name, zoom, facts);
+        list.append(item);
+      }
+      box.append(list);
     };
 
     const stamp = (t?: string) => (t ? `${t.slice(0, 16).replace('T', ' ')}Z` : 'unknown');
@@ -453,23 +519,35 @@ import 'leaflet/dist/leaflet.css';
         }
       }
 
-      /* The status line above renders a zoom button per storm. It ships
-         hidden and is revealed only here, so it never sits on the page as a
-         dead control when the map or the data fails to load. */
+      /* The status line above the map is rendered at build time, so between
+         hourly builds it can fall behind the data — and the auto-reload
+         waits for the reader to be idle, which an engaged reader never is.
+         So it is rebuilt here from whatever was just fetched, through the
+         same formatter the build uses. */
+      renderStormStatus(data.storms ?? []);
+
+      /* Each storm gets a zoom button. They ship hidden and are revealed
+         only here, so one never sits on the page as a dead control when the
+         map or the data fails to load. Re-run after every re-render, since
+         rebuilding the list throws the old buttons and their handlers away. */
       const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      for (const button of document.querySelectorAll<HTMLButtonElement>('[data-storm-zoom]')) {
-        const at = stormAt.get(button.dataset.stormZoom ?? '');
-        if (!at) continue;
-        button.hidden = false;
-        button.addEventListener('click', () => {
-          // Never zoom out from wherever the reader has already got to.
-          const zoom = Math.max(map.getZoom(), 5);
-          if (!map.hasLayer(storms)) map.addLayer(storms);
-          host.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
-          if (reduce) map.setView(at, zoom);
-          else map.flyTo(at, zoom);
-        });
-      }
+      const wireZoomButtons = () => {
+        for (const button of document.querySelectorAll<HTMLButtonElement>('[data-storm-zoom]')) {
+          const at = stormAt.get(button.dataset.stormZoom ?? '');
+          if (!at) continue;
+          button.hidden = false;
+          button.addEventListener('click', () => {
+            // Never zoom out from wherever the reader has already got to.
+            const zoom = Math.max(map.getZoom(), 5);
+            if (!map.hasLayer(storms)) map.addLayer(storms);
+            host.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+            if (reduce) map.setView(at, zoom);
+            else map.flyTo(at, zoom);
+          });
+        }
+      };
+      wireZoomButtons();
+      rewire = wireZoomButtons;
 
       for (const a of data.assets ?? []) {
         const isUsv = a.kind === 'usv';

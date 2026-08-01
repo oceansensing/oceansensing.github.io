@@ -13,7 +13,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const dom = new JSDOM(
-  '<!doctype html><body><div id="asset-map"></div><span id="map-status"></span></body>',
+  '<!doctype html><body><div id="asset-map"></div><span id="map-status"></span>' +
+    // Deliberately wrong server-rendered content: if the client does not
+    // rebuild it, the assertions below will still see "STALE".
+    '<div class="storm-status" data-storm-status><span class="label">STALE</span>' +
+    '<ul><li><strong>STALE</strong><span class="facts">STALE</span></li></ul></div></body>',
   { pretendToBeVisual: true, url: 'http://localhost/' }
 );
 const { window } = dom;
@@ -152,6 +156,15 @@ const solidStorm = stormPaths.filter((p) => !p.getAttribute('stroke-dasharray'))
 const dashedStorm = stormPaths.filter((p) => p.getAttribute('stroke-dasharray'));
 const withHistory = assets.storms.filter((s) => (s.history?.length ?? 0) > 1);
 
+/* The storm line is rendered at build time and then re-rendered here from
+   the fetched data. Seeding it with markup that does NOT match the data is
+   what proves the client actually rebuilt it rather than leaving the
+   server's version in place. */
+const stormBox = document.querySelector('[data-storm-status]');
+const rebuiltNames = [...stormBox.querySelectorAll('li a, li strong')].map((e) => e.textContent);
+const rebuiltFacts = [...stormBox.querySelectorAll('.facts')].map((e) => e.textContent);
+const expectedNames = assets.storms.map((s) => s.name);
+
 const status = document.getElementById('map-status').textContent;
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
@@ -199,6 +212,13 @@ const checks = [
       Math.abs(restoredCentre.lng - SEEDED_VIEW.lng) < 0.5 &&
       restoredZoom === SEEDED_VIEW.zoom],
   ['saved basemap choice is restored', restoredBase],
+  ['storm line rebuilt from fetched data',
+    rebuiltNames.length === expectedNames.length &&
+      expectedNames.every((n, i) => rebuiltNames[i] === n)],
+  ['rebuilt storm line keeps its facts and zoom button',
+    rebuiltFacts.length === expectedNames.length &&
+      rebuiltFacts.every((f) => f && f.includes('·')) &&
+      stormBox.querySelectorAll('button.zoom[data-storm-zoom]').length === expectedNames.length],
   ['view is written back for the next reload',
     (() => {
       const saved = JSON.parse(window.sessionStorage.getItem('asset-map-view') ?? 'null');

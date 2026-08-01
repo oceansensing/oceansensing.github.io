@@ -1,21 +1,14 @@
 ---
 import fs from 'node:fs';
 import path from 'node:path';
+import { stormLines, stormLabel, NO_STORMS, type Storm } from '../lib/stormStatus';
 
-/* One line per active tropical cyclone, read at build time from the same
-   file the map fetches. The deploy refreshes it hourly (see
-   .github/workflows/deploy.yml), so this is exactly as current as the map
-   below it and costs no client-side request. */
-
-interface Storm {
-  id?: string;
-  name?: string;
-  classification?: string;
-  intensityKt?: string | number;
-  movementDir?: number | null;
-  movementSpeedKt?: number | null;
-  advisoryUrl?: string;
-}
+/* One line per active tropical cyclone, rendered at build time so the line
+   is right with JavaScript off. AssetMap re-renders it in the browser from
+   the data it fetches, which is what keeps it current between builds — the
+   deploy only rebuilds hourly, and the auto-reload deliberately waits for
+   the reader to be idle, so this markup alone could sit stale for a while.
+   Both paths format through src/lib/stormStatus.ts. */
 
 let storms: Storm[] = [];
 try {
@@ -25,80 +18,14 @@ try {
   // No data file yet (a fresh checkout before the first fetch) — say nothing.
 }
 
-const POINTS = [
-  'N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
-  'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW',
-];
-const compass = (deg: number) => POINTS[Math.round((((deg % 360) + 360) % 360) / 22.5) % 16];
-
-// NHC status codes.
-const KIND: Record<string, string> = {
-  TD: 'Tropical depression',
-  TS: 'Tropical storm',
-  HU: 'Hurricane',
-  MH: 'Major hurricane',
-  STD: 'Subtropical depression',
-  STS: 'Subtropical storm',
-  PTC: 'Post-tropical cyclone',
-  PC: 'Potential tropical cyclone',
-  DB: 'Disturbance',
-  LO: 'Low',
-};
-
-// Saffir-Simpson thresholds in knots, so "Hurricane" reads "Category 3 hurricane".
-const CATEGORY: [number, number][] = [[137, 5], [113, 4], [96, 3], [83, 2], [64, 1]];
-
-/* Null and '' both coerce to 0, which would report a missing intensity as
-   "0 kt" — so screen them out before converting. */
-const num = (v: unknown) => {
-  if (v === null || v === undefined || v === '') return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-};
-
-const describe = (s: Storm) => {
-  const kt = num(s.intensityKt);
-  const kind = KIND[s.classification ?? ''] ?? s.classification ?? 'Tropical cyclone';
-  if (/hurricane/i.test(kind) && kt !== null) {
-    const cat = CATEGORY.find(([floor]) => kt >= floor);
-    if (cat) return `Category ${cat[1]} hurricane`;
-  }
-  return kind;
-};
-
-/* NHC storm ids carry the basin as a two-letter prefix — al052026 is the
-   fifth Atlantic storm of 2026, ep072026 the seventh in the eastern
-   Pacific. Nothing else in the feed names the basin. */
-const BASIN: Record<string, string> = {
-  al: 'Atlantic',
-  ep: 'Eastern Pacific',
-  cp: 'Central Pacific',
-};
-const basin = (id?: string) => BASIN[(id ?? '').slice(0, 2).toLowerCase()] ?? null;
-
-const active = storms.map((s) => {
-  const kt = num(s.intensityKt);
-  const dir = num(s.movementDir);
-  const speed = num(s.movementSpeedKt);
-  return {
-    id: s.id,
-    name: s.name ?? 'Unnamed',
-    url: s.advisoryUrl,
-    facts: [
-      basin(s.id),
-      describe(s),
-      kt === null ? null : `${kt} kt`,
-      dir === null || speed === null ? null : `${compass(dir)} ${speed} kt`,
-    ].filter(Boolean) as string[],
-  };
-});
+const active = stormLines(storms);
 ---
 
-<div class="storm-status">
-  <span class="label">{active.length === 1 ? 'Active storm' : 'Active storms'}</span>
+<div class="storm-status" data-storm-status>
+  <span class="label">{stormLabel(active.length)}</span>
   {
     active.length === 0 ? (
-      <p class="none">None — no tropical cyclones are being tracked right now.</p>
+      <p class="none">{NO_STORMS}</p>
     ) : (
       <ul>
         {active.map((s) => (
@@ -124,7 +51,11 @@ const active = storms.map((s) => {
   }
 </div>
 
-<style>
+<style is:global>
+  /* Global rather than Astro-scoped, and keyed off .storm-status, because
+     AssetMap rebuilds this list in the browser when newer data arrives.
+     Scoped styles hang off a data-astro-cid attribute that client-created
+     elements do not carry, so the refreshed line would come back unstyled. */
   .storm-status {
     display: flex;
     flex-wrap: wrap;
@@ -135,7 +66,7 @@ const active = storms.map((s) => {
     margin-block-end: var(--space-lg);
   }
 
-  .label {
+  .storm-status .label {
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     text-transform: uppercase;
@@ -143,7 +74,7 @@ const active = storms.map((s) => {
     color: var(--text-muted);
   }
 
-  ul {
+  .storm-status ul {
     list-style: none;
     margin: 0;
     padding: 0;
@@ -152,19 +83,19 @@ const active = storms.map((s) => {
     gap: var(--space-2xs);
   }
 
-  li {
+  .storm-status li {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
     gap: var(--space-2xs) var(--space-sm);
   }
 
-  li a,
-  li strong {
+  .storm-status li a,
+  .storm-status li strong {
     font-weight: 600;
   }
 
-  .zoom {
+  .storm-status .zoom {
     border: 1px solid transparent;
     border-radius: var(--radius);
     background: none;
@@ -174,24 +105,24 @@ const active = storms.map((s) => {
     cursor: pointer;
   }
 
-  .zoom[hidden] {
+  .storm-status .zoom[hidden] {
     display: none;
   }
 
-  .zoom:hover,
-  .zoom:focus-visible {
+  .storm-status .zoom:hover,
+  .storm-status .zoom:focus-visible {
     border-color: var(--border);
     background: var(--bg-subtle);
   }
 
-  .facts,
-  .none {
+  .storm-status .facts,
+  .storm-status .none {
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     color: var(--text-muted);
   }
 
-  .none {
+  .storm-status .none {
     margin: 0;
   }
 </style>
