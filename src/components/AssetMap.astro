@@ -67,9 +67,10 @@ import 'leaflet/dist/leaflet.css';
     (host as HTMLElement & { _map?: L.Map })._map = map;
 
     /* Bathymetry is the default, since the point of the map is where the
-       platforms sit relative to the ocean floor. That means tile requests
-       to Esri; the coastline layer below is the offline, no-tracking
-       alternative and is drawn from a file shipped with the site. */
+       platforms sit relative to the ocean floor. GEBCO leads; Esri's ocean
+       basemap is the lighter alternative. Either means tile requests off
+       site — the coastline layer below is the offline, no-tracking option,
+       drawn from a file shipped with the site. */
     const bathymetry = L.tileLayer(
       'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
       { attribution: 'Esri — GEBCO, NOAA, National Geographic', maxZoom: 13 }
@@ -271,20 +272,34 @@ import 'leaflet/dist/leaflet.css';
       });
 
     const coastline = L.layerGroup();
+    const gebco = L.tileLayer.wms('https://wms.gebco.net/mapserv?', {
+      layers: 'GEBCO_LATEST',
+      format: 'image/png',
+      attribution: 'GEBCO Compilation Group',
+    });
+
     const bases: Record<string, L.Layer> = {
+      'Bathymetry (GEBCO)': gebco,
       'Bathymetry (Esri Ocean)': bathymetry,
-      'Bathymetry (GEBCO)': L.tileLayer.wms('https://wms.gebco.net/mapserv?', {
-        layers: 'GEBCO_LATEST',
-        format: 'image/png',
-        attribution: 'GEBCO Compilation Group',
-      }),
       OpenStreetMap: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19,
       }),
       'Coastline only (no tracking)': coastline,
     };
-    bathymetry.addTo(map);
+    gebco.addTo(map);
+
+    /* Dark mode dims the tile pane, which was written when the light Esri
+       basemap was the default. GEBCO is already dark — its deep ocean sits
+       near 0.10 luminance against Esri's 0.33 — so dimming it too drops the
+       sea to almost black. The active basemap's tone is published on the
+       container and the stylesheet dims only the light ones. */
+    const LIGHT_BASEMAPS = new Set(['Bathymetry (Esri Ocean)', 'OpenStreetMap']);
+    const markBasemapTone = (name: string) => {
+      host.dataset.basemapTone = LIGHT_BASEMAPS.has(name) ? 'light' : 'dark';
+    };
+    markBasemapTone('Bathymetry (GEBCO)');
+    map.on('baselayerchange', (e: L.LayersControlEvent) => markBasemapTone(e.name));
 
     /* Animation is the default, but a continuously moving field is exactly
        what prefers-reduced-motion is about; those readers get the static
@@ -356,6 +371,11 @@ import 'leaflet/dist/leaflet.css';
       if (base) {
         for (const layer of Object.values(bases)) if (map.hasLayer(layer)) map.removeLayer(layer);
         map.addLayer(base);
+        /* Leaflet's layers control turns this addLayer into a
+           baselayerchange, so the handler above already catches it — but
+           only because the control is built before this runs. Setting it
+           here too makes the tone independent of that ordering. */
+        markBasemapTone(saved.base);
       }
       if (Array.isArray(saved.overlays)) {
         for (const [name, layer] of Object.entries(overlays)) {
@@ -775,7 +795,8 @@ import 'leaflet/dist/leaflet.css';
     --map-currents-blend: multiply;
   }
 
-  #asset-map :global(.leaflet-tile-pane) {
+  /* Only light basemaps get dimmed in dark mode — see markBasemapTone. */
+  #asset-map[data-basemap-tone='light'] :global(.leaflet-tile-pane) {
     filter: var(--map-tiles);
   }
 

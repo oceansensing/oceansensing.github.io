@@ -119,6 +119,19 @@ is committed by CI** — the data is fetched into the build, so the repo does no
 grow. A snapshot of `ocean-assets.json` is committed so local and offline builds
 work.
 
+### Basemaps
+
+GEBCO is the default. Esri Ocean, OpenStreetMap and an offline coastline-only
+layer are the alternatives; the coastline one is the no-tracking option and
+ships with the site.
+
+Tone matters, because dark mode dims the tile pane and that was written when
+the light Esri basemap was the default — GEBCO's deep ocean sits near 0.10
+luminance against Esri's 0.33, so dimming it too drops the sea to nearly
+black. The active basemap's tone is published as `data-basemap-tone` on the
+map container and **only light basemaps are dimmed**. Add a basemap and it
+counts as dark unless you list it in `LIGHT_BASEMAPS`.
+
 ### Map colour, and the contrast gate
 
 **Never inline a colour in `AssetMap.astro`.** They live in

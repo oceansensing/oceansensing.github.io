@@ -117,7 +117,9 @@ const SEEDED_VIEW = {
   lat: 12.34,
   lng: -45.67,
   zoom: 6,
-  base: 'Bathymetry (GEBCO)',
+  // Deliberately NOT the default basemap — restoring the default would
+  // prove nothing.
+  base: 'Bathymetry (Esri Ocean)',
   overlays: [
     'Surface currents (animated)',
     'Current speed (Mercator)',
@@ -156,7 +158,7 @@ const gridInsideRegion = gridOf();
 // Read the restored view before anything below moves the map.
 const restoredCentre = host._map?.getCenter?.() ?? null;
 const restoredZoom = host._map?.getZoom?.() ?? null;
-const restoredBase = !!host.querySelector('img[src*="gebco"], .leaflet-tile-pane img[src*="gebco"]');
+const restoredBase = !!host.querySelector('.leaflet-tile-pane img[src*="arcgisonline"]');
 
 // Open a marker popup for real, then read what it rendered.
 let popupHtml = '';
@@ -302,7 +304,16 @@ const checks = [
       Math.abs(restoredCentre.lat - SEEDED_VIEW.lat) < 0.5 &&
       Math.abs(restoredCentre.lng - SEEDED_VIEW.lng) < 0.5 &&
       restoredZoom === SEEDED_VIEW.zoom],
-  ['saved basemap choice is restored', restoredBase],
+  ['saved basemap choice is restored over the default', restoredBase],
+  /* Dark mode dims only light basemaps, so the tone published on the
+     container has to follow the basemap actually showing. Restoring a saved
+     basemap goes through map.addLayer, which fires no baselayerchange — the
+     tone went stale there until it was set by hand. */
+  ['basemap tone follows the basemap actually showing',
+    host.dataset.basemapTone === 'light'],
+  ['GEBCO is listed first in the basemap switcher',
+    [...host.querySelectorAll('.leaflet-control-layers-base label')][0]
+      ?.textContent.trim() === 'Bathymetry (GEBCO)'],
   ['storm line rebuilt from fetched data',
     rebuiltNames.length === expectedNames.length &&
       expectedNames.every((n, i) => rebuiltNames[i] === n)],
