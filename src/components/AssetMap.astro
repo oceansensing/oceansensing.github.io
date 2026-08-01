@@ -84,10 +84,10 @@ import 'leaflet/dist/leaflet.css';
     // Lat/lon grid, every 10°.
     const graticule = L.layerGroup();
     for (let lon = -180; lon <= 180; lon += 10) {
-      L.polyline([[-85, lon], [85, lon]], { weight: 0.5, opacity: 0.35, color: '#7f8c9b' }).addTo(graticule);
+      L.polyline([[-85, lon], [85, lon]], { weight: 0.5, className: 'map-grid' }).addTo(graticule);
     }
     for (let lat = -80; lat <= 80; lat += 10) {
-      L.polyline([[lat, -180], [lat, 180]], { weight: 0.5, opacity: 0.35, color: '#7f8c9b' }).addTo(graticule);
+      L.polyline([[lat, -180], [lat, 180]], { weight: 0.5, className: 'map-grid' }).addTo(graticule);
     }
 
     const borders = L.layerGroup().addTo(map);
@@ -142,7 +142,7 @@ import 'leaflet/dist/leaflet.css';
     fetch('/map/coastline.json')
       .then((r) => r.json())
       .then(({ rings }) => {
-        const style = { color: '#8a949f', weight: 0.8, fillColor: '#8a949f', fillOpacity: 0.16 };
+        const style = { weight: 0.8, className: 'map-land' };
         for (const ring of rings as number[][][]) L.polygon(flip(ring), style).addTo(coastline);
       })
       .catch(() => {});
@@ -151,10 +151,10 @@ import 'leaflet/dist/leaflet.css';
       .then((r) => r.json())
       .then(({ countries, states }) => {
         for (const line of states as number[][][]) {
-          L.polyline(flip(line), { color: '#6b7480', weight: 0.6, opacity: 0.6, dashArray: '3,3' }).addTo(borders);
+          L.polyline(flip(line), { weight: 0.6, dashArray: '3,3', className: 'map-border-state' }).addTo(borders);
         }
         for (const line of countries as number[][][]) {
-          L.polyline(flip(line), { color: '#4a525c', weight: 1, opacity: 0.75 }).addTo(borders);
+          L.polyline(flip(line), { weight: 1, className: 'map-border-country' }).addTo(borders);
         }
       })
       .catch(() => {});
@@ -222,11 +222,10 @@ import 'leaflet/dist/leaflet.css';
         if (a.track?.length > 1) {
           const path = flip(a.track);
           L.polyline(path, {
-            color: '#0d1218',
             weight: 4.5,
-            opacity: 0.4,
             lineCap: 'round',
             lineJoin: 'round',
+            className: 'map-casing',
           }).addTo(layer);
           L.polyline(path, {
             color: tint,
@@ -240,8 +239,8 @@ import 'leaflet/dist/leaflet.css';
         }
         L.circleMarker([a.lat, a.lon], {
           radius: isUsv ? 6 : 4.5,
-          color: '#10161d',
           weight: 1.2,
+          className: 'map-asset',
           fillColor: tint,
           fillOpacity: 0.95,
         })
@@ -283,12 +282,91 @@ import 'leaflet/dist/leaflet.css';
     margin: 0 0 var(--space-lg);
   }
 
+  /* Map colours live here rather than in the script, so switching theme
+     restyles every vector layer with no redraw. */
   #asset-map {
+    --map-land: #8a949f;
+    --map-land-fill: 0.16;
+    --map-border: #4a525c;
+    --map-border-state: #6b7480;
+    --map-grid: #7f8c9b;
+    --map-casing: #0d1218;
+    --map-casing-opacity: 0.4;
+    --map-asset-edge: #10161d;
+    --map-tiles: none;
+
     height: clamp(24rem, 62vh, 40rem);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--bg-subtle);
     z-index: 0;
+  }
+
+  /* Dark mode. Bathymetry imagery is only published light, so the tile
+     pane is dimmed rather than inverted — inverting would turn deep water
+     pale and read as land. Vector layers lighten to stay legible on it. */
+  @media (prefers-color-scheme: dark) {
+    :global(:root:not([data-theme='light'])) #asset-map {
+      --map-land: #6f7b88;
+      --map-land-fill: 0.22;
+      --map-border: #97a3b2;
+      --map-border-state: #7d8896;
+      --map-grid: #6d7a88;
+      --map-casing: #05080c;
+      --map-casing-opacity: 0.55;
+      --map-asset-edge: #05080c;
+      --map-tiles: brightness(0.62) saturate(0.85) contrast(1.08);
+    }
+  }
+
+  :global(:root[data-theme='dark']) #asset-map {
+    --map-land: #6f7b88;
+    --map-land-fill: 0.22;
+    --map-border: #97a3b2;
+    --map-border-state: #7d8896;
+    --map-grid: #6d7a88;
+    --map-casing: #05080c;
+    --map-casing-opacity: 0.55;
+    --map-asset-edge: #05080c;
+    --map-tiles: brightness(0.62) saturate(0.85) contrast(1.08);
+  }
+
+  #asset-map :global(.leaflet-tile-pane) {
+    filter: var(--map-tiles);
+  }
+
+  #asset-map :global(.map-land) {
+    stroke: var(--map-land);
+    fill: var(--map-land);
+    fill-opacity: var(--map-land-fill);
+  }
+
+  #asset-map :global(.map-border-country) {
+    stroke: var(--map-border);
+    stroke-opacity: 0.8;
+    fill: none;
+  }
+
+  #asset-map :global(.map-border-state) {
+    stroke: var(--map-border-state);
+    stroke-opacity: 0.65;
+    fill: none;
+  }
+
+  #asset-map :global(.map-grid) {
+    stroke: var(--map-grid);
+    stroke-opacity: 0.35;
+    fill: none;
+  }
+
+  #asset-map :global(.map-casing) {
+    stroke: var(--map-casing);
+    stroke-opacity: var(--map-casing-opacity);
+    fill: none;
+  }
+
+  #asset-map :global(.map-asset) {
+    stroke: var(--map-asset-edge);
   }
 
   .fallback {

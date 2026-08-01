@@ -76,6 +76,13 @@ const checks = [
   ['glider colour is not the old teal', !host.querySelector('path[stroke="#0a7d8c"]')],
   ['popup shows deployment date', popupHtml.includes('Deployed')],
   ['popup links the dataset', /href="https?:[^"]*erddap[^"]*"/i.test(popupHtml)],
+  // Theme-driven layers carry a class instead of a baked-in colour, so the
+  // stylesheet can restyle them when the reader switches to dark mode.
+  ['borders are theme-classed', host.querySelectorAll('path.map-border-country').length > 20],
+  ['state lines are theme-classed', host.querySelectorAll('path.map-border-state').length > 20],
+  ['track casings are theme-classed', host.querySelectorAll('path.map-casing').length > 0],
+  ['asset markers are theme-classed', host.querySelectorAll('path.map-asset').length === assets.assets.length],
+  ['no hardcoded border/casing colours left', !host.querySelector('path[stroke="#4a525c"], path[stroke="#6b7480"], path[stroke="#0d1218"], path[stroke="#8a949f"]')],
 ];
 let ok = true;
 for (const [name, pass] of checks) {
