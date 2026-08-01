@@ -1,0 +1,109 @@
+---
+/* A live UTC clock, synchronised against the server rather than trusting the
+   reader's device. Observation pages timestamp everything in UTC — photo
+   times, deployment dates, last fixes — so the clock gives the reader a
+   reference to read them against, and it has to be right to be worth having.
+
+   Ships hidden and is revealed by the script: without JavaScript there is no
+   clock, which is honest, whereas a frozen build-time stamp would look like
+   a running one. */
+---
+
+<time id="utc-clock" hidden></time>
+
+<script>
+  const el = document.getElementById('utc-clock') as HTMLTimeElement | null;
+  if (el) run(el);
+
+  function run(clock: HTMLTimeElement) {
+    /* Offset from the device clock to real time. Zero until the first sync
+       lands, so the clock starts on the device's own guess and corrects
+       itself a moment later. */
+    let offset = 0;
+    let synced = false;
+    let timer: number | undefined;
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+
+    const render = () => {
+      const d = new Date(Date.now() + offset);
+      clock.dateTime = d.toISOString();
+      clock.textContent =
+        `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T` +
+        `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} UTC`;
+      clock.hidden = false;
+    };
+
+    // Tick on the UTC second boundary rather than every 1000 ms, so the
+    // display never skips or repeats a second as the timer drifts.
+    const tick = () => {
+      render();
+      const intoSecond = (Date.now() + offset) % 1000;
+      timer = window.setTimeout(tick, 1000 - intoSecond + 5);
+    };
+
+    /* Ask the server what time it is. Every HTTP response carries a Date
+       header, so a static site needs no time API: HEAD the current page with
+       a cache-buster and read it back. */
+    const sync = async () => {
+      try {
+        const url = new URL(location.href);
+        url.searchParams.set('_t', String(Date.now()));
+        const before = Date.now();
+        const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+        const after = Date.now();
+
+        const header = res.headers.get('date');
+        if (!header) throw new Error('no Date header');
+        const stamp = Date.parse(header);
+        if (!Number.isFinite(stamp)) throw new Error('unparseable Date header');
+
+        /* Three corrections:
+           - Age, if a cache served this, is how long ago the origin dated it.
+           - The header is truncated to whole seconds, so the true instant is
+             uniformly somewhere in the second it names; +500 ms is the
+             middle of that interval.
+           - The header describes the moment the response was generated,
+             which sits roughly halfway through the round trip. */
+        const age = Number(res.headers.get('age') ?? 0);
+        const serverNow = stamp + (Number.isFinite(age) ? age * 1000 : 0) + 500;
+        offset = serverNow - (before + after) / 2;
+        synced = true;
+        clock.title = 'Coordinated Universal Time, synchronised with the server';
+      } catch {
+        // Offline, or a server that withholds the header. The device clock is
+        // the only thing left; say so rather than implying it was checked.
+        if (!synced) {
+          offset = 0;
+          clock.title = 'Coordinated Universal Time, from this device — the server could not be reached to check it';
+        }
+      }
+      render();
+    };
+
+    void sync();
+    tick();
+
+    // Device clocks drift, and a sleeping laptop wakes up wrong.
+    window.setInterval(sync, 10 * 60 * 1000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') {
+        window.clearTimeout(timer);
+        return;
+      }
+      void sync();
+      tick();
+    });
+  }
+</script>
+
+<style>
+  #utc-clock {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    /* Fixed-width digits, so the line does not twitch every second. */
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+</style>

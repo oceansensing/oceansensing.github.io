@@ -4,6 +4,7 @@ import { Image, getImage } from 'astro:assets';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SurveyPanel from '../../components/SurveyPanel.astro';
 import AssetMap from '../../components/AssetMap.astro';
+import UtcClock from '../../components/UtcClock.astro';
 import StormStatus from '../../components/StormStatus.astro';
 
 export async function getStaticPaths() {
@@ -88,7 +89,10 @@ const collapsible = byYear.length > 1;
 
 <BaseLayout title={title} description={summary}>
   <article class="container">
-    <p class="eyebrow">Significant observation</p>
+    <div class="topline">
+      <p class="eyebrow">Significant observation</p>
+      <UtcClock />
+    </div>
     <h1>{title}</h1>
     {map === 'assets' && <StormStatus />}
     {map === 'assets' && <AssetMap />}
@@ -223,6 +227,15 @@ const collapsible = byYear.length > 1;
 <style>
   article {
     padding-block: var(--space-xl);
+  }
+
+  /* Eyebrow and clock share a line; the clock drops below it only when
+     there is genuinely no room. */
+  .topline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2xs) var(--space-sm);
   }
 
   h1 {
