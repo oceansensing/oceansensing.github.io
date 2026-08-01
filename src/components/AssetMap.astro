@@ -21,9 +21,10 @@ import 'leaflet/dist/leaflet.css';
   </div>
   <figcaption>
     <span class="legend">
-      <span class="key storm">Hurricane track &amp; cone</span>
-      <span class="key usv">NOAA USV + track</span>
-      <span class="key glider">IOOS glider + track</span>
+      <span class="key storm">Hurricane</span>
+      <span class="key usv">NOAA USV</span>
+      <span class="key glider">IOOS glider</span>
+      <span class="key current">Surface current</span>
     </span>
     <span class="status" id="map-status">Loading…</span>
   </figcaption>
@@ -70,6 +71,46 @@ import 'leaflet/dist/leaflet.css';
       'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
       { attribution: 'Esri — GEBCO, NOAA, National Geographic', maxZoom: 13 }
     );
+    /* Surface currents from Mercator Ocean's global 1/12° analysis-forecast
+       (Copernicus Marine GLOBAL_ANALYSISFORECAST_PHY_001_024), served as
+       WMTS in EPSG:3857 — which is Leaflet's own projection, so the tiles
+       are ordinary XYZ. Leaving the TIME dimension off makes the server
+       fall back to its default, and that default is the current hour, so
+       the field stays live with no date handling here.
+
+       It gets its own pane between the basemap and the vectors: whichever
+       basemap the reader picks, the currents sit above it and below every
+       track and marker, so the platforms are never obscured. */
+    const CMEMS = 'https://wmts.marine.copernicus.eu/teroWmts';
+    const CURRENTS =
+      'GLOBAL_ANALYSISFORECAST_PHY_001_024/' +
+      'cmems_mod_glo_phy_anfc_0.083deg_PT1H-m_202406/sea_water_velocity';
+
+    const pane = map.createPane('currents');
+    pane.style.zIndex = '250';
+    pane.style.pointerEvents = 'none';
+
+    const currents = L.tileLayer(
+      `${CMEMS}?service=WMTS&request=GetTile&version=1.0.0` +
+        `&layer=${encodeURIComponent(CURRENTS)}` +
+        `&style=${encodeURIComponent('cmap:speed,vectorStyle:solid')}` +
+        '&tilematrixset=EPSG:3857&TileMatrix={z}&TileRow={y}&TileCol={x}&format=image/png',
+      {
+        pane: 'currents',
+        className: 'map-currents',
+        /* The speed colourmap paints slow water pale cream, which as a
+           straight overlay lays a white film over the whole ocean and
+           washes the bathymetry out. Multiplying instead drops that pale
+           end away to nothing and keeps only the fast water, so the Gulf
+           Stream and the eddy field read as darker streaks over a basemap
+           that still looks like itself. Blend mode is set in CSS so each
+           theme can pick its own. */
+        opacity: 0.55,
+        maxNativeZoom: 10,
+        attribution: 'Currents: Copernicus Marine — Mercator Ocean',
+      }
+    );
+
     const coastline = L.layerGroup();
     const bases: Record<string, L.Layer> = {
       'Bathymetry (Esri Ocean)': bathymetry,
@@ -85,6 +126,7 @@ import 'leaflet/dist/leaflet.css';
       'Coastline only (no tracking)': coastline,
     };
     bathymetry.addTo(map);
+    currents.addTo(map);
 
     // Lat/lon grid, every 10°.
     const graticule = L.layerGroup();
@@ -102,6 +144,7 @@ import 'leaflet/dist/leaflet.css';
 
     L.control
       .layers(bases, {
+        'Surface currents (Mercator)': currents,
         'Hurricanes': storms,
         'NOAA USVs': usvs,
         'IOOS gliders': gliders,
@@ -320,6 +363,8 @@ import 'leaflet/dist/leaflet.css';
     --map-casing-opacity: 0.4;
     --map-asset-edge: #10161d;
     --map-tiles: none;
+    --map-currents: saturate(0.6);
+    --map-currents-blend: multiply;
 
     height: clamp(24rem, 62vh, 40rem);
     border: 1px solid var(--border);
@@ -342,6 +387,8 @@ import 'leaflet/dist/leaflet.css';
       --map-casing-opacity: 0.55;
       --map-asset-edge: #05080c;
       --map-tiles: brightness(0.62) saturate(0.85) contrast(1.08);
+      --map-currents: saturate(0.55) brightness(1.15);
+      --map-currents-blend: multiply;
     }
   }
 
@@ -355,6 +402,8 @@ import 'leaflet/dist/leaflet.css';
     --map-casing-opacity: 0.55;
     --map-asset-edge: #05080c;
     --map-tiles: brightness(0.62) saturate(0.85) contrast(1.08);
+    --map-currents: saturate(0.55) brightness(1.15);
+    --map-currents-blend: multiply;
   }
 
   #asset-map :global(.leaflet-tile-pane) {
@@ -393,6 +442,16 @@ import 'leaflet/dist/leaflet.css';
 
   #asset-map :global(.map-asset) {
     stroke: var(--map-asset-edge);
+  }
+
+  /* Desaturated so the field reads as texture behind the platforms rather
+     than as another thing competing for attention. */
+  #asset-map :global(.map-currents) {
+    filter: var(--map-currents);
+  }
+
+  #asset-map :global(.leaflet-currents-pane) {
+    mix-blend-mode: var(--map-currents-blend);
   }
 
   .fallback {
@@ -436,6 +495,14 @@ import 'leaflet/dist/leaflet.css';
 
   .key.glider::before {
     background: #e8368f;
+  }
+
+  /* A slice of the speed colourmap rather than a flat dot — the currents
+     are a field, not a point. */
+  .key.current::before {
+    border-radius: 0.15em;
+    width: 1.4em;
+    background: linear-gradient(90deg, #f2eddc, #c9c66a, #4a7a34);
   }
 
   /* Leaflet's chrome, matched to the site's tokens in both themes. */

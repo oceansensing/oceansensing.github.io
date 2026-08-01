@@ -96,7 +96,7 @@ const status = document.getElementById('map-status').textContent;
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
   ['borders + markers drawn', host.querySelectorAll('path').length > 200],
-  ['layer switcher', host.querySelectorAll('.leaflet-control-layers-selector').length >= 9],
+  ['layer switcher', host.querySelectorAll('.leaflet-control-layers-selector').length >= 10],
   ['bathymetry is the default base', !!host.querySelector('.leaflet-tile-pane .leaflet-layer')],
   ['view toggle', host.querySelectorAll('.view-toggle a').length === 2],
   ['data pipeline completed', /assets reporting within/.test(status)],
