@@ -8,8 +8,8 @@ summary: >-
   with uncrewed aerial systems, resolving bloom patchiness at scales ships
   and satellites miss.
 # Photos are grouped into dated surveys and shown on the page as panels by
-# year, then by day. Add `featured: true` to pin a photo into the homepage
-# card's rotation; the cover leads that rotation.
+# year, then by day. Every photo also joins the homepage card's rotation,
+# which shuffles the order and starting photo on each page load.
 cover:
   src: ./hab-2026-07-31-02.jpg
   alt: >-
@@ -44,7 +44,6 @@ surveys:
         alt: >-
           People on the sand and in the water at Gloucester Point Beach,
           with reddish-brown water in the enclosed swimming area.
-        featured: true
       - src: ./hab-2026-07-31-08.jpg
         alt: >-
           The Coleman Bridge and Gloucester Point from upriver, with
@@ -53,7 +52,6 @@ surveys:
         alt: >-
           Reddish-brown water with a sharp edge next to the fishing pier at
           Gloucester Point Beach.
-        featured: true
       - src: ./hab-2026-07-31-10.jpg
         alt: Streaks of reddish-brown water in the York River.
       - src: ./hab-2026-07-31-11.jpg

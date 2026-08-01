@@ -37,9 +37,8 @@ const observations = defineCollection({
       // optional hero image for the observation's own page
       cover: z.object({ src: image(), alt: z.string() }).optional(),
       /* Photos are grouped into dated surveys — the observation page shows
-         them as panels by year, then by day. Mark a photo `featured: true`
-         to pin it into the homepage card's rotation; with none marked, the
-         rotation uses the newest surveys' first photos. */
+         them as panels by year, then by day. Every photo also joins the
+         homepage card's rotation, which shuffles them per page load. */
       surveys: z
         .array(
           z.object({
@@ -52,7 +51,6 @@ const observations = defineCollection({
                   src: image(),
                   alt: z.string(),
                   caption: z.string().optional(),
-                  featured: z.boolean().default(false),
                 })
               )
               .default([]),

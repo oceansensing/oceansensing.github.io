@@ -9,16 +9,11 @@ interface Props {
 const { observation } = Astro.props;
 const { title, short, cover, surveys } = observation.data;
 
-/* Rotation pool: photos explicitly pinned with `featured: true`; failing
-   that, one photo from each survey (newest first), capped so the loop stays
-   a reasonable length. The cover leads if it exists. */
+/* Rotation pool: the whole photo bank — the cover plus every survey photo.
+   Order and starting photo are randomized per page load by the inline
+   script below; without JavaScript it still cycles, just in file order. */
 const newest = [...surveys].sort((a, b) => b.date.valueOf() - a.date.valueOf());
-const pinned = newest.flatMap((s) => s.photos.filter((p) => p.featured));
-const fallback = newest.map((s) => s.photos[0]).filter((p) => p !== undefined);
-const photos = [
-  ...(cover ? [cover] : []),
-  ...(pinned.length > 0 ? pinned : fallback).slice(0, 6),
-];
+const photos = [...(cover ? [cover] : []), ...newest.flatMap((s) => s.photos)];
 
 /* Photo bank rotates with a pure-CSS crossfade — no JavaScript. Each photo
    holds for HOLD seconds; the whole loop is photos.length * HOLD. The
@@ -45,7 +40,9 @@ const keyframes =
 <article>
   <a href={`/observations/${observation.id}/`}>
     <div
-      class="frame"
+      class="frame obs-rotate"
+      data-hold={HOLD}
+      data-fade={FADE}
       data-single={count === 1 ? '' : undefined}
       data-empty={count === 0 ? '' : undefined}
     >
@@ -68,6 +65,43 @@ const keyframes =
     </div>
   </a>
 </article>
+
+{/* Randomizes the photo order and the starting photo on every page load —
+    the one thing CSS can't do on its own. Runs once per page, before
+    paint; if it never runs, the CSS rotation still works in file order. */}
+<script is:inline>
+  (() => {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    for (const frame of document.querySelectorAll('.obs-rotate:not([data-shuffled])')) {
+      frame.dataset.shuffled = '';
+      const slides = frame.querySelectorAll('.slide');
+      if (slides.length < 2) continue;
+
+      const hold = Number(frame.dataset.hold);
+      const fade = Number(frame.dataset.fade);
+      const order = [...slides.keys()];
+      for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+      }
+
+      if (reduce) {
+        // No motion: show one photo, still chosen at random.
+        slides.forEach((el, k) => {
+          el.style.animation = 'none';
+          el.style.opacity = order[k] === 0 ? '1' : '0';
+        });
+        continue;
+      }
+
+      // A random offset into the loop picks the photo shown first.
+      const offset = Math.random() * order.length * hold;
+      slides.forEach((el, k) => {
+        el.style.animationDelay = `${(order[k] * hold - fade - offset).toFixed(2)}s`;
+      });
+    }
+  })();
+</script>
 
 <style>
   article {
