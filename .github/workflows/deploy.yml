@@ -3,12 +3,12 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
-  # Refresh the hurricane / uncrewed-asset map. NHC issues advisories every
-  # six hours; every three keeps the map current without churn. Public repos
-  # get unlimited Actions minutes, and nothing is committed — the data is
-  # fetched into the build, so the repo does not grow.
+  # Refresh the hurricane / uncrewed-asset map hourly. Public repos get
+  # unlimited Actions minutes, and nothing is committed — the data is
+  # fetched into the build, so the repo does not grow with each refresh.
+  # Offset from the hour because scheduled runs bunch up at :00.
   schedule:
-    - cron: '17 */3 * * *'
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 permissions:

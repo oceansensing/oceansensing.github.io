@@ -31,9 +31,16 @@ window.Element.prototype.getBoundingClientRect = () => box;
 Object.defineProperty(window.HTMLElement.prototype, 'clientWidth', { get: () => 800, configurable: true });
 Object.defineProperty(window.HTMLElement.prototype, 'clientHeight', { get: () => 500, configurable: true });
 
-const coast = JSON.parse(fs.readFileSync('public/map/coastline.json', 'utf8'));
-const assets = JSON.parse(fs.readFileSync('public/map/ocean-assets.json', 'utf8'));
-globalThis.fetch = async (u) => ({ json: async () => (String(u).includes('coastline') ? coast : assets) });
+const files = {
+  coastline: JSON.parse(fs.readFileSync('public/map/coastline.json', 'utf8')),
+  boundaries: JSON.parse(fs.readFileSync('public/map/boundaries.json', 'utf8')),
+  'ocean-assets': JSON.parse(fs.readFileSync('public/map/ocean-assets.json', 'utf8')),
+};
+globalThis.fetch = async (u) => {
+  const key = Object.keys(files).find((k) => String(u).includes(k));
+  if (!key) throw new Error('unexpected fetch: ' + u);
+  return { json: async () => files[key] };
+};
 
 const bundle = fs.readdirSync('dist/_astro').find((f) => f.startsWith('AssetMap') && f.endsWith('.js'));
 if (!bundle) {
@@ -47,8 +54,9 @@ const host = document.getElementById('asset-map');
 const status = document.getElementById('map-status').textContent;
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
-  ['vector paths drawn', host.querySelectorAll('path').length > 500],
-  ['layer switcher', host.querySelectorAll('.leaflet-control-layers-selector').length >= 6],
+  ['borders + markers drawn', host.querySelectorAll('path').length > 200],
+  ['layer switcher', host.querySelectorAll('.leaflet-control-layers-selector').length >= 9],
+  ['bathymetry is the default base', !!host.querySelector('.leaflet-tile-pane .leaflet-layer')],
   ['view toggle', host.querySelectorAll('.view-toggle a').length === 2],
   ['data pipeline completed', /assets reporting within/.test(status)],
 ];

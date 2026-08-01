@@ -4,9 +4,10 @@ import 'leaflet/dist/leaflet.css';
 /* Interactive map of active hurricanes and uncrewed ocean assets.
    Data comes from /map/ocean-assets.json, refreshed on every deploy by
    scripts/fetch-ocean-assets.py (see .github/workflows/deploy.yml).
-   Leaflet is bundled from npm — nothing is loaded from a CDN, and the
-   default basemap is the coastline file in /data/, so the page makes no
-   third-party requests unless a tile layer is switched on. */
+   Leaflet itself is bundled from npm rather than a CDN. The default
+   basemap is Esri's Ocean bathymetry, so this page does request tiles;
+   readers who would rather not can switch to "Coastline only", drawn
+   from a file shipped with the site. */
 ---
 
 <figure class="map-figure">
@@ -49,21 +50,29 @@ import 'leaflet/dist/leaflet.css';
 
     map.attributionControl.setPrefix('');
 
-    /* Default basemap: coastlines shipped with the site, so no tile server
-       sees our visitors. Tile layers are offered but never load unless the
-       reader picks one. */
-    const coastline = L.layerGroup().addTo(map);
+    /* Bathymetry is the default, since the point of the map is where the
+       platforms sit relative to the ocean floor. That means tile requests
+       to Esri; the coastline layer below is the offline, no-tracking
+       alternative and is drawn from a file shipped with the site. */
+    const bathymetry = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+      { attribution: 'Esri — GEBCO, NOAA, National Geographic', maxZoom: 13 }
+    );
+    const coastline = L.layerGroup();
     const bases: Record<string, L.Layer> = {
-      'Coastline (no tracking)': coastline,
+      'Bathymetry (Esri Ocean)': bathymetry,
+      'Bathymetry (GEBCO)': L.tileLayer.wms('https://wms.gebco.net/mapserv?', {
+        layers: 'GEBCO_LATEST',
+        format: 'image/png',
+        attribution: 'GEBCO Compilation Group',
+      }),
       OpenStreetMap: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19,
       }),
-      'Esri Ocean': L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
-        { attribution: 'Esri, GEBCO, NOAA', maxZoom: 13 }
-      ),
+      'Coastline only (no tracking)': coastline,
     };
+    bathymetry.addTo(map);
 
     // Lat/lon grid, every 10°.
     const graticule = L.layerGroup();
@@ -74,6 +83,7 @@ import 'leaflet/dist/leaflet.css';
       L.polyline([[lat, -180], [lat, 180]], { weight: 0.5, opacity: 0.35, color: '#7f8c9b' }).addTo(graticule);
     }
 
+    const borders = L.layerGroup().addTo(map);
     const storms = L.layerGroup().addTo(map);
     const usvs = L.layerGroup().addTo(map);
     const gliders = L.layerGroup().addTo(map);
@@ -83,6 +93,7 @@ import 'leaflet/dist/leaflet.css';
         'Hurricanes': storms,
         'NOAA USVs': usvs,
         'IOOS gliders': gliders,
+        'Country & state borders': borders,
         'Lat/lon grid': graticule,
       })
       .addTo(map);
@@ -118,16 +129,28 @@ import 'leaflet/dist/leaflet.css';
       if (allBounds && allBounds.isValid()) map.fitBounds(allBounds.pad(0.1));
     };
 
-    // ---- coastline ----
-    try {
-      const { rings } = await (await fetch('/map/coastline.json')).json();
-      const style = { color: '#8a949f', weight: 0.8, fillColor: '#8a949f', fillOpacity: 0.16 };
-      for (const ring of rings as number[][][]) {
-        L.polygon(ring.map(([x, y]) => [y, x] as [number, number]), style).addTo(coastline);
-      }
-    } catch {
-      if (status) status.textContent = 'Coastline unavailable.';
-    }
+    // ---- coastline (the offline basemap) and borders (overlay) ----
+    const flip = (line: number[][]) => line.map(([x, y]) => [y, x] as [number, number]);
+
+    fetch('/map/coastline.json')
+      .then((r) => r.json())
+      .then(({ rings }) => {
+        const style = { color: '#8a949f', weight: 0.8, fillColor: '#8a949f', fillOpacity: 0.16 };
+        for (const ring of rings as number[][][]) L.polygon(flip(ring), style).addTo(coastline);
+      })
+      .catch(() => {});
+
+    fetch('/map/boundaries.json')
+      .then((r) => r.json())
+      .then(({ countries, states }) => {
+        for (const line of states as number[][][]) {
+          L.polyline(flip(line), { color: '#6b7480', weight: 0.6, opacity: 0.6, dashArray: '3,3' }).addTo(borders);
+        }
+        for (const line of countries as number[][][]) {
+          L.polyline(flip(line), { color: '#4a525c', weight: 1, opacity: 0.75 }).addTo(borders);
+        }
+      })
+      .catch(() => {});
 
     // ---- storms and assets ----
     try {
@@ -136,7 +159,7 @@ import 'leaflet/dist/leaflet.css';
 
       for (const s of data.storms ?? []) {
         if (s.cone?.length) {
-          L.polygon(s.cone.map(([x, y]: number[]) => [y, x] as [number, number]), {
+          L.polygon(flip(s.cone), {
             color: '#d1495b',
             weight: 1,
             fillColor: '#d1495b',
@@ -146,7 +169,7 @@ import 'leaflet/dist/leaflet.css';
             .bindPopup(`<strong>${s.name}</strong><br>Forecast cone`);
         }
         if (s.track?.length) {
-          L.polyline(s.track.map(([x, y]: number[]) => [y, x] as [number, number]), {
+          L.polyline(flip(s.track), {
             color: '#d1495b',
             weight: 2,
             dashArray: '5,4',
