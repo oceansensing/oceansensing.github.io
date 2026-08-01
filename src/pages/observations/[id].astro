@@ -91,13 +91,15 @@ const collapsible = byYear.length > 1;
     <h1>{title}</h1>
     {
       cover && (
-        <Image
-          class="cover"
-          src={cover.src}
-          alt={cover.alt}
-          widths={[800, 1400]}
-          sizes="(max-width: 72rem) 100vw, 1100px"
-        />
+        <figure class="cover">
+          <Image
+            src={cover.src}
+            alt={cover.alt}
+            widths={[800, 1400]}
+            sizes="(max-width: 72rem) 100vw, 1100px"
+          />
+          {cover.credit && <figcaption>{cover.credit}</figcaption>}
+        </figure>
       )
     }
     {map === 'assets' && <AssetMap />}
@@ -224,8 +226,19 @@ const collapsible = byYear.length > 1;
   }
 
   .cover {
-    border-radius: var(--radius);
     margin-block-end: var(--space-lg);
+  }
+
+  .cover img {
+    border-radius: var(--radius);
+    display: block;
+  }
+
+  .cover figcaption {
+    margin-block-start: var(--space-2xs);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
   }
 
   /* Body text spans the container here rather than taking the site's

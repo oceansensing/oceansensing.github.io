@@ -34,8 +34,11 @@ const observations = defineCollection({
       title: z.string(),
       short: z.string(),
       summary: z.string(),
-      // optional hero image for the observation's own page
-      cover: z.object({ src: image(), alt: z.string() }).optional(),
+      // optional hero image for the observation's own page; credit is
+      // shown beneath it, for photos the lab did not take
+      cover: z
+        .object({ src: image(), alt: z.string(), credit: z.string().optional() })
+        .optional(),
       // set to show the live hurricane / uncrewed-asset map on this page
       map: z.enum(['assets']).optional(),
       /* Photos are grouped into dated surveys — the observation page shows

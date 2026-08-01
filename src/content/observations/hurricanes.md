@@ -6,6 +6,13 @@ short: >-
 summary: >-
   Live positions of NOAA uncrewed surface vehicles and IOOS underwater
   gliders, with active National Hurricane Center forecast tracks and cones.
+cover:
+  src: ./hurricane-florence-iss.jpg
+  alt: >-
+    Hurricane Florence seen obliquely from orbit, its eye open at the centre of
+    a broad spiral, with the curve of the Earth's horizon behind it and a solar
+    array of the International Space Station in the foreground.
+  credit: Hurricane Florence, 12 September 2018 — NASA / ISS Expedition 56
 map: assets
 order: 2
 ---
