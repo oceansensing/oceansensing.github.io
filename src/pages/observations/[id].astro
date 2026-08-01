@@ -89,8 +89,12 @@ const collapsible = byYear.length > 1;
   <article class="container">
     <p class="eyebrow">Significant observation</p>
     <h1>{title}</h1>
+    {/* A page with a live map opens on it — the map is what the reader came
+        for, and a hero photo above it just pushes it below the fold. The
+        cover still feeds the homepage card either way. */}
+    {map === 'assets' && <AssetMap />}
     {
-      cover && (
+      !map && cover && (
         <figure class="cover">
           <Image
             src={cover.src}
@@ -102,7 +106,6 @@ const collapsible = byYear.length > 1;
         </figure>
       )
     }
-    {map === 'assets' && <AssetMap />}
     <div class="prose">
       <Content />
     </div>
