@@ -215,6 +215,33 @@ const [kuU, kuV] = currentAt(35.0, 141.0);      // Kuroshio, the far side of the
 const [accU] = currentAt(-55.0, -150.0);        // Antarctic Circumpolar, due east
 const [landU] = currentAt(-25.0, 133.0);        // central Australia
 
+/* Continental interiors must have every surrounding cell null. leaflet-
+   velocity multiplies nulls straight through as zero, so a single ocean
+   corner anywhere near a land point gives it a real velocity and particles
+   stream across the continent — which is exactly what happened over
+   Greenland before the coastal erosion went in. */
+const INLAND = [
+  ['central Greenland', 72.0, -42.0],
+  ['Svalbard interior', 78.5, 16.5],
+  ['central Australia', -25.0, 133.0],
+  ['Sahara', 23.0, 12.0],
+  ['central Asia', 45.0, 85.0],
+  ['Amazon basin', -5.0, -62.0],
+  ['central Africa', 5.0, 22.0],
+];
+const inlandCorners = (lat, lon) => {
+  const fi = Math.floor(((((lon - ch.lo1) % 360) + 360) % 360) / ch.dx);
+  const fj = Math.floor((ch.la1 - lat) / ch.dy);
+  const out = [];
+  for (const j of [fj, fj + 1])
+    for (const i of [fi, fi + 1]) {
+      if (j < 0 || j >= ch.ny) continue;
+      out.push(cu.data[j * ch.nx + (((i % ch.nx) + ch.nx) % ch.nx)]);
+    }
+  return out;
+};
+const dryInland = INLAND.filter(([, lat, lon]) => inlandCorners(lat, lon).every((x) => x === null));
+
 /* Storm history is solid; the forecast is dashed. Distinguishing them by the
    dash attribute is what proves the observed track is actually drawn rather
    than the forecast being counted twice. */
@@ -301,6 +328,13 @@ const checks = [
   ['currents are not upside down (Gulf Stream runs NE, fast)',
     gsU > 0.1 && gsV > 0.4 && Math.hypot(gsU, gsV) > 0.6],
   ['currents mask land', landU === null],
+  ['no flow over continental interiors',
+    dryInland.length === INLAND.length],
+  /* The other direction: erosion aggressive enough to kill the western
+     boundary currents would be worse than the bleed it fixes. Both of these
+     hug their coasts and were lost at the first threshold tried. */
+  ['coastal erosion spared the Gulf Stream', Math.hypot(gsU, gsV) > 0.6],
+  ['coastal erosion spared the Kuroshio', Math.hypot(kuU, kuV) > 0.5],
   /* Global coverage, and it has to close on itself: leaflet-velocity only
      wraps the grid across the antimeridian when it spans a full 360, and
      without that particles pile up at the edge instead of crossing. */

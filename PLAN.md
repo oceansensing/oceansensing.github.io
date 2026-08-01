@@ -66,6 +66,17 @@ active-storm status line, and a server-synchronised UTC clock.
   the attribution survives only in the Markdown front matter. NASA imagery is
   public domain and needs none, but the lab may want it shown somewhere.
 
+### Known limits
+
+- **Currents still bleed slightly over land at high latitude.** The global
+  grid is 0.96°, which cannot represent a fjord coastline; coastal erosion
+  cuts the land carrying flow from 7.8% to 2.1% but cannot eliminate it, and
+  an island smaller than a grid cell (Bjørnøya, for one) sits in open model
+  water regardless. The real fix is finer resolution up there — the detail
+  grid stops at 55°N, so extending it north, or adding a second detail region
+  over the Nordic Seas, would cover both this and the lab's NORSE work. That
+  needs the map to choose among several detail regions rather than one.
+
 ### Needs a human eye
 
 - **Nobody has watched the particles move yet.** They are now verified

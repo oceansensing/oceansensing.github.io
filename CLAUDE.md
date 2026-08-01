@@ -205,7 +205,28 @@ the same data:
 - **Mercator speed raster** (off by default) — the Copernicus WMTS tiles.
   Also what `prefers-reduced-motion` readers get instead of the animation.
 
-Two things about the particles are easy to get wrong and were, both silently:
+**leaflet-velocity does not treat a null as missing.** Its grid hands back
+`[u, v]` — an array, so always truthy, so `isValue()` passes — and its
+bilinear interpolation multiplies straight through, where `null` becomes
+zero. A cell that is partly land therefore yields a reduced but *non-zero*
+velocity defined over the land, and particles advect onto it and keep going.
+Subsampling compounds it: taking every twelfth model node discards the
+model's own 1/12° mask, so at high latitude one sample decides a cell tens of
+km across.
+
+The pipeline compensates by eroding cells wedged into the coastline
+(`COASTAL_DRY_NEIGHBOURS`). The threshold is measured, not chosen: requiring
+one dry neighbour wipes out the Gulf Stream and Kuroshio, two still loses the
+Kuroshio's inshore core, three keeps both and cuts land carrying flow from
+7.8% to 2.1%. `test:map` brackets it from both sides — continental interiors
+must be dry, and those two currents must survive.
+
+It is a mitigation, not a cure: a 0.96° grid cannot represent a fjord
+coastline, and an island smaller than a cell sits in open model water
+whatever the threshold.
+
+Two more things about the particles are easy to get wrong and were, both
+silently:
 
 - **They must composite normally.** The Mercator raster is multiplied over
   the basemap; when the particles shared that pane they were multiplied too,
