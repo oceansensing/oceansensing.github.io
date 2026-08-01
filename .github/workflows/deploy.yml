@@ -52,6 +52,28 @@ jobs:
         continue-on-error: true
         run: python3 scripts/fetch-currents.py
 
+      # The full-resolution tiles are ~92 MB and only change when the model
+      # does, which is once a day at 12Z. Keying the cache on the run id
+      # means the hourly builds restore them instead of pulling them from
+      # HYCOM's public server twenty-four times over.
+      - name: Identify the model run
+        id: model
+        continue-on-error: true
+        run: echo "run=$(python3 scripts/fetch-currents.py --run)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore full-resolution current tiles
+        id: tiles
+        if: steps.model.outputs.run != ''
+        uses: actions/cache@v4
+        with:
+          path: public/map/tiles
+          key: currents-tiles-${{ steps.model.outputs.run }}
+
+      - name: Build full-resolution current tiles
+        if: steps.model.outputs.run != '' && steps.tiles.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: python3 scripts/fetch-currents.py --tiles
+
       - uses: withastro/action@v3
         with:
           node-version: 22

@@ -97,6 +97,29 @@ DETAILS = [
     },
 ]
 
+# Full model resolution, tiled, for close-in views. 20 degrees square is
+# chosen so any viewport at zoom 6 or beyond fits inside one tile — the map
+# uses a tile only when it wholly contains the view, and stitching several
+# would be a lot more code for no visible gain. Measured at 173 KB gzipped
+# for an open-ocean tile, so a reader downloads less than today's regional
+# grid and gets 9 x 4.4 km instead of 27 km.
+TILES = {
+    'dir': 'tiles',
+    'size': 20.0,
+    'west': -180.0,
+    'south': -80.0,
+    'north': 85.0,
+    'minZoom': 7,
+    # 0.08 x 0.08 — true 1/12 degree, and isotropic. The model carries 0.04
+    # in latitude, but taking it doubles the deployed site to 205 MB for a
+    # refinement from 9 km to 4.4 km in one axis only. Change to (1, 1) here
+    # if that is ever worth it.
+    'stride': (1, 2),
+    # Politeness: two requests per tile to a public research server, a few
+    # tiles at a time.
+    'workers': 4,
+}
+
 UA = {'User-Agent': 'oceansensing.org current map (github.com/oceansensing)'}
 
 
@@ -335,15 +358,120 @@ def build(spec: dict, t: int, valid: str, run: str, extra: dict | None = None) -
           f'{out.stat().st_size / 1024:.0f} KB')
 
 
+def build_tile(t: int, valid: str, run: str, south: float, west: float) -> str | None:
+    """One full-resolution tile. Returns its key, or None if it is all land."""
+    north = min(south + TILES['size'], TILES['north'])
+    east = west + TILES['size']
+
+    y0 = axis_index(south, LAT0, DLAT, NLAT)
+    y1 = axis_index(north, LAT0, DLAT, NLAT)
+    x0 = axis_index(west % 360, LON0, DLON, NLON)
+    x1 = axis_index(east % 360, LON0, DLON, NLON)
+    if x0 <= x1:
+        slabs = [(x0, x1)]
+    else:
+        taken = (NLON - 1 - x0) // TILES['stride'][0] + 1
+        slabs = [(x0, NLON - 1), (x0 + taken * TILES['stride'][0] - NLON, x1)]
+
+    stride_lon, stride_lat = TILES['stride']
+
+    def grab(name: str) -> list[list[float | None]]:
+        parts = [component(name, t, y0, y1, a, b, stride_lat, stride_lon) for a, b in slabs]
+        return parts[0] if len(parts) == 1 else [w + e for w, e in zip(*parts)]
+
+    u = grab('water_u')
+    v = grab('water_v')
+    if len(u) != len(v) or len(u[0]) != len(v[0]):
+        raise RuntimeError(f'tile {south}/{west}: u and v disagree in shape')
+
+    if not erode_land(u, v, False):
+        return None                      # nothing but land; do not write a file
+
+    ny, nx = len(u), len(u[0])
+    la1 = LAT0 + (y0 + (ny - 1) * stride_lat) * DLAT
+    lo1 = LON0 + slabs[0][0] * DLON
+
+    def header(number: int) -> dict:
+        return {
+            'parameterCategory': 2, 'parameterNumber': number, 'parameterUnit': 'm.s-1',
+            'nx': nx, 'ny': ny,
+            'lo1': round(lo1, 4), 'la1': round(la1, 4),
+            'dx': round(DLON * stride_lon, 4), 'dy': round(DLAT * stride_lat, 4),
+            'refTime': valid, 'modelRun': run,
+        }
+
+    payload = [
+        {'header': header(2), 'data': [x for row in reversed(u) for x in row]},
+        {'header': header(3), 'data': [x for row in reversed(v) for x in row]},
+    ]
+    key = f'{south:g}_{west:g}'
+    out = MAP_DIR / TILES['dir'] / f'{key}.json'
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(payload, separators=(',', ':')) + '\n')
+    return key
+
+
+def build_tiles(t: int, valid: str, run: str) -> None:
+    """Every tile covering ocean, plus an index the map reads."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    corners = [
+        (south, west)
+        for south in frange(TILES['south'], TILES['north'], TILES['size'])
+        for west in frange(TILES['west'], 180.0, TILES['size'])
+    ]
+    dx, dy = DLON * TILES['stride'][0], DLAT * TILES['stride'][1]
+    print(f'  {len(corners)} tiles at {dx:g} x {dy:g} deg')
+
+    with ThreadPoolExecutor(max_workers=TILES['workers']) as pool:
+        keys = list(pool.map(lambda c: build_tile(t, valid, run, *c), corners))
+
+    available = sorted(k for k in keys if k)
+    index = MAP_DIR / TILES['dir'] / 'index.json'
+    index.write_text(json.dumps({
+        'size': TILES['size'], 'west': TILES['west'],
+        'south': TILES['south'], 'north': TILES['north'],
+        'minZoom': TILES['minZoom'],
+        'deg': round(min(DLON * TILES['stride'][0], DLAT * TILES['stride'][1]), 4),
+        'modelRun': run, 'refTime': valid,
+        # Tiles that are entirely land are never written, so the map can skip
+        # a request it knows would 404.
+        'available': available,
+    }, separators=(',', ':')) + '\n')
+
+    total = sum((MAP_DIR / TILES['dir'] / f'{k}.json').stat().st_size for k in available)
+    print(f'  wrote {len(available)} tiles ({len(corners) - len(available)} all land), '
+          f'{total / 1024 / 1024:.1f} MB')
+
+
+def frange(start: float, stop: float, step: float) -> list[float]:
+    out, x = [], start
+    while x < stop:
+        out.append(x)
+        x += step
+    return out
+
+
 def main() -> int:
+    tiles_only = '--tiles' in sys.argv
     try:
         t, valid, run = pick_time()
+        if '--run' in sys.argv:
+            # Just the model run id, for CI to key its tile cache on. The
+            # tiles only change when the model does, so an hourly build can
+            # restore them instead of pulling 92 MB from HYCOM again.
+            print(run)
+            return 0
         print(f'model step {t} — valid {valid}, from the {run} run')
 
         # The global file advertises the finer grids, so the map learns the
         # regions and their zoom thresholds from the data rather than
         # repeating them in the component where the two could drift apart.
         build(GLOBAL, t, valid, run, extra={
+            # Where the full-resolution tiles live, if a tile run has
+            # happened. They are rebuilt only when the model does, so the
+            # hourly build leaves them alone.
+            'tileIndex': f'/map/{TILES["dir"]}/index.json',
             'details': [
                 {
                     'url': f'/map/{d["name"]}',
@@ -360,6 +488,9 @@ def main() -> int:
                 for d in DETAILS
             ],
         })
+        if tiles_only:
+            build_tiles(t, valid, run)
+            return 0
         for detail in DETAILS:
             build(detail, t, valid, run)
     except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:

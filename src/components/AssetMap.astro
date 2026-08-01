@@ -222,6 +222,94 @@ import 'leaflet/dist/leaflet.css';
         let fetching: string | null = null;
         let showing: string | null = null;
 
+        /* Finest tier: the whole ocean at 1/12 degree, cut into 20 degree
+           tiles. Only ever one tile at a time — a tile is used when it
+           wholly contains the view, which any viewport at its minimum zoom
+           does, so there is nothing to stitch. The index is small and says
+           which tiles exist; the ones that are pure land were never written. */
+        let tiles: {
+          size: number; west: number; south: number; north: number;
+          minZoom: number; deg: number; available: string[];
+        } | null = null;
+
+        /* Which tiles the view touches. Requiring the view to sit inside a
+           single tile does not work: at zoom 7 a viewport is roughly 9
+           degrees across against a 20 degree tile, so it straddles a seam
+           far too often and the map would keep dropping back to the coarse
+           regional grid as you pan. So take every tile the view overlaps —
+           at most four — and join them. */
+        const tileKeys = () => {
+          if (!tiles || map.getZoom() < tiles.minZoom) return null;
+          const { size, south: s0, west: w0 } = tiles;
+          const view = map.getBounds();
+          const floorTo = (v: number, origin: number) =>
+            Math.floor((v - origin) / size) * size + origin;
+
+          const keys: string[] = [];
+          for (let s = floorTo(view.getSouth(), s0); s <= view.getNorth(); s += size) {
+            for (let w = floorTo(view.getWest(), w0); w <= view.getEast(); w += size) {
+              // Longitude wraps; latitude does not.
+              const wrapped = ((((w - w0) % 360) + 360) % 360) + w0;
+              const key = `${s}_${wrapped}`;
+              if (tiles.available.includes(key)) keys.push(key);
+            }
+          }
+          return keys.length ? keys : null;
+        };
+
+        /* Join tiles into one grid. They share a spacing and sit on a common
+           lattice, so this is a copy into the right offsets rather than any
+           resampling. Cells no tile covers stay null, which reads as land. */
+        const assemble = (loaded: { header: any; data: (number | null)[] }[][]) => {
+          const h0 = loaded[0][0].header;
+          const dx = h0.dx;
+          const dy = h0.dy;
+          const lons = loaded.map((g) => g[0].header.lo1);
+          const base = Math.min(...lons.map((l) => (((l - lons[0]) % 360) + 360) % 360 + lons[0]));
+          const north = Math.max(...loaded.map((g) => g[0].header.la1));
+          const south = Math.min(...loaded.map((g) => g[0].header.la1 - (g[0].header.ny - 1) * dy));
+          const east = Math.max(
+            ...loaded.map((g) => {
+              const off = (((g[0].header.lo1 - base) % 360) + 360) % 360;
+              return off + (g[0].header.nx - 1) * dx;
+            })
+          );
+          const nx = Math.round(east / dx) + 1;
+          const ny = Math.round((north - south) / dy) + 1;
+
+          return [0, 1].map((component) => {
+            const data: (number | null)[] = new Array(nx * ny).fill(null);
+            for (const grid of loaded) {
+              const h = grid[component].header;
+              const ox = Math.round(((((h.lo1 - base) % 360) + 360) % 360) / dx);
+              const oy = Math.round((north - h.la1) / dy);
+              for (let j = 0; j < h.ny; j++) {
+                for (let i = 0; i < h.nx; i++) {
+                  const value = grid[component].data[j * h.nx + i];
+                  if (value === null || value === undefined) continue;
+                  const x = ox + i;
+                  const y = oy + j;
+                  if (x < nx && y < ny) data[y * nx + x] = value;
+                }
+              }
+            }
+            return { header: { ...h0, ...loaded[0][component].header, nx, ny, lo1: base, la1: north }, data };
+          });
+        };
+
+        const indexUrl = coarse?.[0]?.header?.tileIndex;
+        if (indexUrl) {
+          fetch(indexUrl)
+            .then((r) => r.json())
+            .then((index) => {
+              tiles = index;
+              applyView(false);
+            })
+            .catch(() => {
+              // No tile run yet, or it failed. The regional grids stand.
+            });
+        }
+
         const layer = flowReady as unknown as { setOptions?: (o: object) => void };
 
         const covers = (d: (typeof details)[number]) => {
@@ -238,26 +326,36 @@ import 'leaflet/dist/leaflet.css';
         };
 
         const applyView = (zoomChanged: boolean) => {
+          // Finest that fits: tiles, else a region, else the globe.
           const wanted = details.find(covers) ?? null;
-          const url = wanted?.url ?? null;
+          const keys = tileKeys();
+          const url = keys ? `tiles:${keys.join(',')}` : (wanted?.url ?? null);
 
           if (url !== showing) {
             if (url && !grids.has(url)) {
               if (fetching !== url) {
                 fetching = url;
-                fetch(url)
-                  .then((r) => r.json())
-                  .then((grid) => {
-                    grids.set(url, grid);
+                const sources = keys
+                  ? keys.map((k) => `/map/tiles/${k}.json`)
+                  : [url];
+                Promise.all(sources.map((u) => fetch(u).then((r) => r.json())))
+                  .then((loaded) => {
+                    grids.set(url, keys ? assemble(loaded) : loaded[0]);
                     fetching = null;
                     // The view may have moved on while that was in flight.
                     applyView(false);
                   })
                   .catch(() => {
-                    // Coarse everywhere is a fine outcome; do not retry in a
-                    // loop over a network that is not answering.
+                    /* Coarse everywhere is a fine outcome; do not retry in a
+                       loop over a network that is not answering. A tile that
+                       will not load is struck off the index, a region is
+                       pushed out of reach. */
                     fetching = null;
-                    wanted!.minZoom = Infinity;
+                    if (keys && tiles) {
+                      tiles.available = tiles.available.filter((k) => !keys.includes(k));
+                    } else if (wanted) {
+                      wanted.minZoom = Infinity;
+                    }
                   });
               }
               return;

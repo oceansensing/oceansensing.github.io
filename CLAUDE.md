@@ -196,7 +196,30 @@ the same data:
   is open; **Copernicus publishes Mercator at the same resolution but its
   numeric access needs credentials**, and the WMTS only serves pictures.
 
-  **A coarse global grid plus finer regional ones, chosen by zoom.**
+  **Three tiers, finest that fits.** At zoom 7 and beyond the map uses
+  1/12° tiles covering the whole ocean; below that, the regional grids; below
+  those, the globe.
+
+  The tiles are 20° square at 0.08° × 0.08°, built by
+  `python3 scripts/fetch-currents.py --tiles`. **They are gitignored** — 92 MB
+  is far too much to carry in the repo — so CI builds them and deploys them
+  with the site, keyed on the model run so the hourly builds restore from
+  cache instead of pulling them from HYCOM twenty-four times a day.
+  `scripts/fetch-currents.py --run` prints that key.
+
+  Two numbers that are easy to confuse: **92 MB is what the site weighs**
+  (raw JSON; Pages gzips on delivery), while a **visitor pays only for the
+  tiles their view touches** — about 116 KB each, one to four at a time.
+  Someone working one region never fetches the other 150.
+
+  The map takes **every tile the view overlaps and joins them**, rather than
+  requiring the view to sit inside one. Containment was tried first and does
+  not work: a zoom-7 viewport is ~9° across against a 20° tile, so it
+  straddles a seam often enough that the map would keep dropping back to the
+  coarse grid as you pan. Tiles share a spacing and a lattice, so joining is
+  a copy into offsets, not a resample.
+
+  **A coarse global grid plus finer regional ones underneath, chosen by zoom.**
   `currents.json` is global at ~0.96° and loads with the page. Each entry in
   `DETAILS` (in `scripts/fetch-currents.py`) becomes another file, fetched
   only when the reader zooms inside it — laziness is what pays for the

@@ -94,6 +94,40 @@ const files = {
   'currents-arctic': JSON.parse(fs.readFileSync('public/map/currents-arctic.json', 'utf8')),
   argo: JSON.parse(fs.readFileSync('public/map/argo.json', 'utf8')),
 };
+
+/* The 1/12 degree tiles are ~92 MB and gitignored — CI builds them, nothing
+   here has them. So the tier logic is exercised against a synthetic index
+   and one synthetic tile: it is the choosing that can break, not the data.
+   The index offers exactly one tile, over the seeded Atlantic view, so
+   flying away from it must fall back. */
+const TILE_KEY = '0_-60';
+const NEIGHBOURS = ['0_-40', '20_-60', '20_-40'];
+files['tiles/index'] = {
+  size: 20, west: -180, south: -80, north: 85, minZoom: 7, deg: 0.08,
+  modelRun: '2026-07-31T12:00:00Z',
+  available: [TILE_KEY, ...NEIGHBOURS],
+};
+{
+  // A real tile's spacing, so "finer than the region it beat" means something.
+  const nx = 251;
+  const ny = 251;
+  const head = (n) => ({
+    parameterCategory: 2, parameterNumber: n, nx, ny,
+    lo1: 300, la1: 20, dx: 0.08, dy: 0.08, refTime: '2026-08-01T21:00:00Z',
+  });
+  const flat = (f) => Array.from({ length: nx * ny }, (_, i) => f(i));
+  const corner = (key) => {
+    const [s, w] = key.split('_').map(Number);
+    return { lo1: ((w % 360) + 360) % 360, la1: s + 20 };
+  };
+  for (const key of [TILE_KEY, ...NEIGHBOURS]) {
+    const { lo1, la1 } = corner(key);
+    files[`tiles/${key}`] = [
+      { header: { ...head(2), lo1, la1 }, data: flat(() => 0.4) },
+      { header: { ...head(3), lo1, la1 }, data: flat(() => 0.3) },
+    ];
+  }
+}
 globalThis.fetch = async (u) => {
   // Longest key first: "currents" is a substring of "currents-detail", so
   // insertion order would hand the detail request the coarse grid.
@@ -120,9 +154,15 @@ for (const id of [...assets.storms.map((s) => s.id), 'zz992026']) {
    map comes back to it instead of resetting to the basin. Every overlay is
    listed so the rest of the checks still have their layers. */
 const SEEDED_VIEW = {
-  lat: 12.34,
-  lng: -45.67,
-  zoom: 6,
+  /* Sat on the corner where four tiles meet, so the view spans all four and
+     the join is exercised rather than a single tile being handed straight
+     through. Still inside the Atlantic region, so the tier ordering is a
+     real choice. */
+  lat: 20.0,
+  lng: -40.0,
+  // Zoom 7: past the tiles' minimum, and narrow enough that the view sits
+  // inside the single tile the synthetic index advertises.
+  zoom: 7,
   // Deliberately NOT the default basemap — restoring the default would
   // prove nothing.
   base: 'Bathymetry (Esri Ocean)',
@@ -160,6 +200,7 @@ const velocityLayer = (() => {
   return found;
 })();
 const gridOf = () => velocityLayer?.options?.data?.[0]?.header ?? null;
+const tileHeader = files[`tiles/${TILE_KEY}`][0].header;
 
 /* The seeded view sits at zoom 6 inside the Atlantic detail region, so by
    now the fine grid should have been lazily fetched and swapped in. */
@@ -376,10 +417,18 @@ const checks = [
       const atlantic = advertised.find((d) => d.url.includes('atlantic'));
       return arcticRegion.south < atlantic.north;
     })()],
-  ['inside the region, the fine grid is the one in use',
-    !!gridInsideRegion && gridInsideRegion.dx === fineHeader.dx],
-  ['panned outside it, the layer falls back to the global grid',
+  /* Three tiers, finest that fits. The seeded view is zoom 6 inside the one
+     advertised tile, so the tile beats the Atlantic region beats the globe. */
+  ['inside a tile, the tile is the one in use',
+    !!gridInsideRegion && gridInsideRegion.dx === tileHeader.dx],
+  ['the tile really is finer than the region it beat', tileHeader.dx < fineHeader.dx],
+  ['tiles spanning the view are joined into one grid',
+    !!gridInsideRegion && gridInsideRegion.nx > tileHeader.nx &&
+      gridInsideRegion.ny > tileHeader.ny],
+  ['flown off the tile and out of every region, it falls back to the globe',
     !!gridOutsideRegion && gridOutsideRegion.dx === coarseHeader.dx],
+  ['the global grid says where the tiles live',
+    typeof coarseHeader.tileIndex === 'string' && coarseHeader.tileIndex.includes('tiles')],
   // One shared window drives storm history, glider tracks and USV tracks.
   ['history window is published once', typeof assets.historyDays === 'number' && !('activeWindowDays' in assets)],
   ['storms carry observed history', withHistory.length === assets.storms.length],

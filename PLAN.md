@@ -68,8 +68,12 @@ active-storm status line, and a server-synchronised UTC clock.
 
 ### Known limits
 
+- **Full-resolution tiles are cached in CI, not committed.** If the Actions
+  cache is evicted (7 days unused) the next build rebuilds all 159 tiles,
+  which adds about a minute. Nothing breaks; it is just slower that once.
 - **Currents can still bleed slightly over land**, though much less than
-  they did. Coastal erosion plus the finer regional grids cut it hard — over
+  they did — and far less again at 1/12°, which is what any view at zoom 7+
+  now gets. Coastal erosion plus the finer regional grids cut it hard — over
   Greenland–Svalbard from 3.1% of land to 0.6%, peak 0.91 to 0.34 m/s — but
   an island smaller than a grid cell (Bjørnøya) sits in open model water
   whatever the resolution. Adding another region is a list entry in
