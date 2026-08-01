@@ -111,6 +111,59 @@ import 'leaflet/dist/leaflet.css';
       }
     );
 
+    /* The animated field. Particles are drawn from a u/v grid rather than
+       rendered server-side, so this is the one current layer that can move.
+       It comes from the US Navy's global ESPC-D forecast rather than
+       Mercator: Copernicus publishes numeric u/v only behind credentials,
+       while the Navy model is open at the same 1/12 degree resolution. Both
+       layers name their model in the switcher so the difference is visible.
+
+       Cool, desaturated particles: the assets are magenta and orange, and
+       the flow has to stay behind them. Same pane as the raster, so it sits
+       above the basemap and below every track and marker. */
+    const flow = L.layerGroup();
+    let flowReady: L.Layer | null = null;
+
+    /* leaflet-velocity is a UMD plugin: it reaches for Leaflet on the
+       global object, which the bundled ESM build never sets. A static
+       import is hoisted above any assignment, so the global has to be put
+       in place first and the plugin pulled in dynamically after. Without
+       this the built bundle dies on "L is not defined" — the dev server
+       hides it by serving Leaflet's UMD build, which does set the global. */
+    const loadPlugin = async () => {
+      // globalThis rather than window: it is window in a browser and works
+      // in the headless harness too, where the two are different objects.
+      (globalThis as unknown as { L: typeof L }).L = L;
+      await import('leaflet-velocity');
+    };
+
+    Promise.all([fetch('/map/currents.json').then((r) => r.json()), loadPlugin()])
+      .then(([grid]) => {
+        flowReady = L.velocityLayer({
+          data: grid,
+          paneName: 'currents',
+          displayValues: false,
+          /* Currents run an order of magnitude slower than wind, so the
+             plugin's wind-tuned default leaves particles moving a fifth of
+             a pixel per frame — invisible. Measured against the live field:
+             this puts the Gulf Stream at ~1.4 px/frame. The plugin scales
+             it by map area, so the apparent drift holds across zooms. */
+          velocityScale: 0.08,
+          minVelocity: 0,
+          maxVelocity: 1.5,
+          colorScale: ['#dfe9f2', '#bcd6ea', '#93c0e0', '#6aa8d6', '#4b91c8'],
+          particleAge: 64,
+          particleMultiplier: 1 / 260,
+          lineWidth: 1.1,
+          frameRate: 18,
+        });
+        flow.addLayer(flowReady);
+      })
+      .catch(() => {
+        // No field: the switcher still lists the layer, it is simply empty,
+        // and the Mercator raster is there as the fallback depiction.
+      });
+
     const coastline = L.layerGroup();
     const bases: Record<string, L.Layer> = {
       'Bathymetry (Esri Ocean)': bathymetry,
@@ -126,7 +179,12 @@ import 'leaflet/dist/leaflet.css';
       'Coastline only (no tracking)': coastline,
     };
     bathymetry.addTo(map);
-    currents.addTo(map);
+
+    /* Animation is the default, but a continuously moving field is exactly
+       what prefers-reduced-motion is about; those readers get the static
+       speed raster instead, which depicts the same currents without motion. */
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) currents.addTo(map);
+    else flow.addTo(map);
 
     // Lat/lon grid, every 10°.
     const graticule = L.layerGroup();
@@ -144,7 +202,8 @@ import 'leaflet/dist/leaflet.css';
 
     L.control
       .layers(bases, {
-        'Surface currents (Mercator)': currents,
+        'Surface currents (animated)': flow,
+        'Current speed (Mercator)': currents,
         'Hurricanes': storms,
         'NOAA USVs': usvs,
         'IOOS gliders': gliders,

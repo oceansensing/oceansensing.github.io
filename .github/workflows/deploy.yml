@@ -48,6 +48,10 @@ jobs:
         continue-on-error: true
         run: python3 scripts/fetch-ocean-assets.py
 
+      - name: Refresh surface current field
+        continue-on-error: true
+        run: python3 scripts/fetch-currents.py
+
       - uses: withastro/action@v3
         with:
           node-version: 22

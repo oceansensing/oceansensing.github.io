@@ -14,7 +14,8 @@
     "test:map": "node scripts/test-map.mjs",
     "test:clock": "node scripts/test-clock.mjs",
     "check:docs": "node scripts/check-docs.mjs",
-    "verify": "npm run build && npm run check && npm run check:docs && npm run test:map && npm run test:clock"
+    "verify": "npm run build && npm run check && npm run check:docs && npm run test:map && npm run test:clock",
+    "data:currents": "python3 scripts/fetch-currents.py"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",
@@ -24,6 +25,7 @@
     "@retorquere/bibtex-parser": "^10.0.0",
     "astro": "^7.0.7",
     "leaflet": "^1.9.4",
+    "leaflet-velocity": "^2.1.4",
     "yaml": "^2.9.0"
   },
   "devDependencies": {

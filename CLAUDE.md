@@ -11,6 +11,7 @@ npm run build        # production build into dist/
 npm run check        # astro check — type-checks .astro and .ts; must be 0 errors
 npm run check:docs   # docs reference real scripts, real paths, the right URL
 npm run data         # regenerate public/map/ocean-assets.json from NOAA/IOOS live
+npm run data:currents # regenerate public/map/currents.json from HYCOM/Navy ESPC
 npm run test:map     # headless test of the built map bundle
 npm run test:clock   # headless test of the built UTC clock
 ```
@@ -115,6 +116,31 @@ data rather than an empty map.
 is committed by CI** — the data is fetched into the build, so the repo does not
 grow. A snapshot of `ocean-assets.json` is committed so local and offline builds
 work.
+
+### Surface currents
+
+Two layers, two models, both labelled in the switcher because they are not
+the same data:
+
+- **Animated particles** (default) — `leaflet-velocity` over a u/v grid in
+  `public/map/currents.json`, built by `scripts/fetch-currents.py` from the
+  US Navy ESPC-D-V02 global forecast via HYCOM's OPeNDAP. Chosen because it
+  is open; **Copernicus publishes Mercator at the same resolution but its
+  numeric access needs credentials**, and the WMTS only serves pictures.
+- **Mercator speed raster** (off by default) — the Copernicus WMTS tiles.
+  Also what `prefers-reduced-motion` readers get instead of the animation.
+
+`velocityScale` is tuned for currents, not wind. The plugin's default leaves
+the Gulf Stream drifting a fifth of a pixel per frame — invisible. Measured
+values live in the component comment; re-measure rather than guess if the
+region or zoom behaviour changes.
+
+**leaflet-velocity is UMD and reads Leaflet off the global object**, which
+the bundled ESM build never sets. It is therefore loaded by dynamic import
+*after* `globalThis.L` is assigned — a static import would be hoisted above
+the assignment and the built bundle would die on `L is not defined`. The
+dev server hides this by serving Leaflet's UMD build, so **this breaks only
+in `dist/`**; `npm run test:map` covers it.
 
 ### Known upstream quirks
 

@@ -25,6 +25,17 @@ for (const k of ['HTMLElement', 'Element', 'Node', 'SVGElement', 'Event', 'Mouse
 globalThis.getComputedStyle = window.getComputedStyle.bind(window);
 window.matchMedia ??= (query) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {} });
 window.Element.prototype.scrollIntoView = function () {};
+/* jsdom has no canvas backend, and the particle layer wants a 2d context
+   the moment it starts. A no-op context lets it construct and run its setup
+   for real — which is what catches plugin-loading regressions — while the
+   drawing goes nowhere. Installing the native `canvas` package just to
+   render particles nobody looks at is not worth the CI fragility. */
+const noopContext = new Proxy(
+  {},
+  { get: (_, key) => (key === 'canvas' ? null : () => {}), set: () => true }
+);
+window.HTMLCanvasElement.prototype.getContext = () => noopContext;
+
 globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
 globalThis.cancelAnimationFrame = clearTimeout;
 
@@ -37,6 +48,7 @@ const files = {
   coastline: JSON.parse(fs.readFileSync('public/map/coastline.json', 'utf8')),
   boundaries: JSON.parse(fs.readFileSync('public/map/boundaries.json', 'utf8')),
   'ocean-assets': JSON.parse(fs.readFileSync('public/map/ocean-assets.json', 'utf8')),
+  currents: JSON.parse(fs.readFileSync('public/map/currents.json', 'utf8')),
 };
 globalThis.fetch = async (u) => {
   const key = Object.keys(files).find((k) => String(u).includes(k));
@@ -92,6 +104,18 @@ if (known[0] && target) {
 }
 const near = (a, b) => a !== null && Math.abs(a) < b;
 
+/* The animated current field. Reading the grid directly catches a pipeline
+   that silently flips north for south — the particles would still animate,
+   just with the Gulf Stream running the wrong way. */
+const [cu, cv] = files.currents;
+const ch = cu.header;
+const currentAt = (lat, lon) => {
+  const k = Math.round((ch.la1 - lat) / ch.dy) * ch.nx + Math.round((lon - ch.lo1) / ch.dx);
+  return [cu.data[k], cv.data[k]];
+};
+const [gsU, gsV] = currentAt(35.5, -74.5);   // Gulf Stream off Hatteras
+const [landU] = currentAt(32.5, -83.5);      // inland Georgia
+
 const status = document.getElementById('map-status').textContent;
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
@@ -116,6 +140,16 @@ const checks = [
   ['zoom button hidden for an unknown storm', !!unknown && unknown.hidden],
   ['clicking a zoom button centres that storm',
     !!movedTo && near(movedTo.lat - target.lat, 1) && near(movedTo.lng - target.lon, 1)],
+  /* leaflet-velocity is UMD and wants Leaflet on the global, which the
+     bundled build does not set. Without the workaround the bundle throws
+     "L is not defined" on load and no canvas is ever created. */
+  ['animated current layer loaded', !!host.querySelector('.leaflet-currents-pane canvas')],
+  ['currents grid is well formed',
+    files.currents.length === 2 && cu.header.parameterNumber === 2 && cv.header.parameterNumber === 3 &&
+    cu.data.length === ch.nx * ch.ny && cv.data.length === ch.nx * ch.ny],
+  ['currents are not upside down (Gulf Stream runs NE, fast)',
+    gsU > 0.1 && gsV > 0.4 && Math.hypot(gsU, gsV) > 0.6],
+  ['currents mask land', landU === null],
 ];
 let ok = true;
 for (const [name, pass] of checks) {

@@ -46,23 +46,30 @@ active-storm status line, and a server-synchronised UTC clock.
 
 ### Decisions to make
 
-- **Surface currents cost 707 KB on first view** of the hurricane map (nine
-  Copernicus tiles at the default basin extent, measured). They are on by
-  default at the lab's request. Browser- and CDN-cached afterwards, but it is
-  the heaviest thing on the page by some margin on a site whose premise is
-  speed. Options: leave it, default the layer off, or accept it and move on.
+- **The animated current layer is not Mercator.** Mercator was the original
+  ask, and the static speed raster still is — but that layer is rendered
+  tiles, and particles need numeric u/v. Copernicus publishes those only
+  behind credentials; their old open OPeNDAP hosts are dead. So the animation
+  runs on the US Navy ESPC-D-V02 global forecast (via HYCOM), which is open
+  and the same 1/12 degree resolution. Both layers name their model in the
+  switcher. If Mercator specifically matters for the animation, it is doable:
+  add Copernicus Marine credentials as GitHub secrets and the pipeline can
+  pull u/v from the toolbox instead. That needs a Copernicus account.
+- **Payload moved in the right direction.** The animated field is 232 KB and
+  loads by default; the Mercator raster's 707 KB of tiles is now opt-in, so
+  the default view is lighter than it was.
 - **The Hurricane Florence cover has no visible credit.** The page now opens
   on the map, and the credit line lived under the hero that was removed, so
   the attribution survives only in the Markdown front matter. NASA imagery is
   public domain and needs none, but the lab may want it shown somewhere.
 
-### Housekeeping
+### Needs a human eye
 
-- **`README.md` has drifted.** It still says the site is live at
-  `oceansensing.github.io`, still describes the site as having "no client-side
-  JavaScript except the theme toggle" (there is now a map, a lightbox, a photo
-  shuffle, and a clock), and still carries a "Custom domain (when ready)"
-  section for a cutover that happened on 2026-07-14.
+- **Nobody has watched the particles move yet.** The data, grid geometry,
+  land masking, pane order, plugin loading and per-frame drift were all
+  verified numerically, but the headless browser here never paints — it
+  reports zero animation frames per second — so the animation itself was
+  never observed. Worth a look on the live site.
 
 ## Conventions worth keeping
 
