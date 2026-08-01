@@ -378,6 +378,8 @@ const arcticRegion = advertised.find((d) => d.url.includes('arctic'));
    calls all happened. */
 const palette = JSON.parse(fs.readFileSync('src/data/map-palette.json', 'utf8'));
 const sortedSegments = [...drawn.segments].sort((a, b) => a - b);
+// Kept because driftAt() below empties the recorder for each window.
+const openingSegments = sortedSegments;
 const medianSegment = sortedSegments.length ? sortedSegments[Math.floor(sortedSegments.length / 2)] : 0;
 /* Every stroke on the canvas is either a particle or an Argo dot's outline
    — nothing else strokes there. Checking membership rather than "all of them
@@ -415,19 +417,33 @@ const spansLongitudes =
    crossing the map every second. Sample two zooms and compare. */
 const p90 = (xs) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length * 0.9)] : 0);
 const driftAt = async (zoom) => {
-  const from = drawn.segments.length;
+  /* Empty the recorder rather than slicing from a mark. It stops recording
+     at 400k segments to stay within memory, and two windows are enough to
+     reach that — so a third sample read an empty tail and looked like a
+     field that had stopped drawing, when the recorder had simply stopped
+     listening. */
+  drawn.segments.length = 0;
   host._map.setZoom(zoom);
   // The layer rebuilds its interpolated field after a zoom, in slices, so
   // give it room before sampling.
   await new Promise((r) => setTimeout(r, 3000));
-  const got = drawn.segments.slice(from);
+  const got = [...drawn.segments];
   console.log(`   [z${zoom}] ${got.length} segments captured`);
   return p90(got);
 };
 const driftNear = await driftAt(8);
 const driftFar = await driftAt(5);
-const driftRatio =
-  driftNear > 0 && driftFar > 0 ? Math.max(driftNear / driftFar, driftFar / driftNear) : Infinity;
+/* And a third, right out at the globe, which is where a real failure hid.
+   Two samples in the middle of the range both looked fine while zoom 2 drew
+   123k particle strokes of exactly zero length — every draw call happening
+   and nothing appearing. The Jacobian was measured with an API that rounds
+   to whole pixels, and at zoom 2 a tenth of a degree is 0.28 px, so the
+   probe collapsed to zero and the scale blew up by ~200x. */
+const driftGlobe = await driftAt(2);
+const drifts = [driftNear, driftFar, driftGlobe];
+const driftRatio = drifts.every((d) => d > 0)
+  ? Math.max(...drifts) / Math.min(...drifts)
+  : Infinity;
 
 /* Measuring. Two legs from a known start, checked against distances and
    bearings computed independently below — a transposed sin/cos in the
@@ -719,14 +735,15 @@ for (const [name, pass] of checks) {
   console.log(`${pass ? 'ok  ' : 'FAIL'}  ${name}`);
   ok &&= pass;
 }
-const lens = [...drawn.segments].sort((a, b) => a - b);
+const lens = openingSegments;
 const at = (q) => (lens.length ? lens[Math.floor(lens.length * q)].toFixed(2) : 'n/a');
 console.log(
   `particles: ${drawn.stroke} strokes, ${drawn.lineTo} segments — ` +
     `px/frame p10 ${at(0.1)} median ${at(0.5)} p90 ${at(0.9)} max ${at(0.999)}`
 );
 console.log(
-  `drift vs zoom: p90 ${driftNear.toFixed(2)} px/frame at z8 vs ${driftFar.toFixed(2)} at z5 ` +
+  `drift vs zoom: p90 ${driftNear.toFixed(2)} px/frame at z8, ${driftFar.toFixed(2)} at z5, ` +
+    `${driftGlobe.toFixed(2)} at z2 ` +
     `(ratio ${driftRatio.toFixed(1)}, want < 4)`
 );
 console.log(

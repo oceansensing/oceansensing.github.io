@@ -347,9 +347,9 @@ barely above the 0.64 random directions would give, 0.71 at 0.24°, 0.73 on
 the Arctic band. GEBCO also draws a far finer coastline than the model masks,
 so flow parallel to the model's coast reads as oblique to the one on screen.
 
-#### Particle rendering, three ways to get it wrong
+#### Particle rendering, four ways to get it wrong
 
-All three were shipped and all three were silent:
+All four were shipped and all four were silent:
 
 - **They must composite normally.** The Mercator raster is multiplied over
   the basemap; while the particles shared that pane they were multiplied too,
@@ -369,6 +369,16 @@ All three were shipped and all three were silent:
   dendritic streamlines rather than a flowing field. `scaleForView()` now
   divides out both, **measuring** the Jacobian off the map rather than
   assuming a projection.
+- **The Jacobian must be measured with an unrounded API.**
+  `latLngToContainerPoint()` rounds to whole pixels. The probe spans 0.1° of
+  longitude, which is 0.28 px at zoom 2 — so the difference between the two
+  probes rounded to **zero**, the Jacobian fell to its `1e-6` floor and
+  `velocityScale` came out ~200× too high. Particles then crossed the map
+  between frames, landed off-grid, and were respawned in place: 123k strokes
+  of exactly zero length, a globe view with no currents on it, and no error
+  anywhere. `map.project()` returns fractional pixel coordinates and is what
+  the plugin distorts by. `test:map` samples **zoom 2** for this — z5 and z8
+  both looked healthy throughout.
 - **It is UMD and reads Leaflet off the global object**, which the bundled
   ESM build never sets. So it is loaded by dynamic import *after*
   `globalThis.L` is assigned — a static import would hoist above the
@@ -376,11 +386,16 @@ All three were shipped and all three were silent:
   server hides this by serving Leaflet's UMD build, so **it breaks only in
   `dist/`**.
 
-`npm run test:map` catches all three by recording the canvas draw calls: it
+`npm run test:map` catches all four by recording the canvas draw calls: it
 prints the per-frame displacement distribution, fails if particles go
-sub-pixel, and **samples two zoom levels and compares** — the single-zoom
-check that preceded it could not tell a field that holds still from one that
-runs away, which is exactly how the acceleration shipped. Trail length is age
+sub-pixel, and **samples three zoom levels — 8, 5 and 2 — and compares**. A
+single zoom could not tell a field that holds still from one that runs away,
+which is how the acceleration shipped; two in the middle of the range could
+not see the globe view collapse, which is how the rounded Jacobian shipped.
+The recorder is **emptied per window** rather than sliced from a mark: it
+stops recording at 400k segments, two windows reach that, and a third then
+reads an empty tail that looks exactly like a field which stopped drawing.
+Trail length is age
 × speed, so a runaway speed and an over-long lifetime look identical on
 screen; measure the speed before touching `particleAge`.
 
