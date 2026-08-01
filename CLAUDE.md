@@ -199,26 +199,54 @@ clear over the rest of the ocean.
 Water palettes are sampled offline into `src/data/basemap-ocean.json`, so the
 gate needs no network. Re-run `npm run data:basemaps` if a basemap changes.
 
-### Surface currents
+### Currents
 
-Two depictions, from two different models, both named in the layer switcher
+Three depictions, from two different models, all named in the layer switcher
 because they are not the same data:
 
-- **Animated particles** (default) — `leaflet-velocity` over u/v grids built
-  by `scripts/fetch-currents.py` from the **US Navy ESPC-D-V02** global
-  forecast via HYCOM's OPeNDAP. Chosen because it is open; Copernicus
+- **Animated surface particles** (default) — `leaflet-velocity` over u/v
+  grids built by `scripts/fetch-currents.py` from the **US Navy ESPC-D-V02**
+  global forecast via HYCOM's OPeNDAP. Chosen because it is open; Copernicus
   publishes Mercator at the same resolution but its **numeric** access needs
   credentials, and its WMTS serves only pictures.
+- **Animated 60 m particles** (off by default) — the same product one depth
+  down, below the wind-driven layer and about where a glider flies.
 - **Mercator speed raster** (off by default) — the Copernicus WMTS tiles.
   Also what `prefers-reduced-motion` readers get instead of the animation.
+
+#### Depth is a dimension, not a second copy
+
+`LEVELS` in `scripts/fetch-currents.py` is the only knob: every product below
+is built once per entry, so adding `{'metres': 200, 'index': 22, ...}` builds
+a 200 m global grid, regions and tiles with nothing else to change. Files are
+suffixed (`currents-60m.json`, `tiles-60m/`); the surface keeps the bare
+names. `check_depths()` verifies each level's index against the model's own
+depth axis at run time — a shifted axis would otherwise publish the wrong
+water under the right filename, which nothing downstream could detect.
+
+**Each depth's global file links only to that depth's regions and tiles**, so
+one chain of links is followed per layer and the tiers cannot cross. The tile
+directory is derived from that file's `tileIndex`, not hardcoded: hardcoding
+`/map/tiles/` had the 60 m layer drawing surface tiles — the right particle
+count in the right places, all at the wrong depth, and nothing on screen said
+so. `test:map` reads a synthetic tile whose velocity differs per depth, which
+is what makes that detectable.
+
+The two animated fields are **mutually exclusive** — two sets of drifting
+lines over the same water cannot be told apart. That is enforced on
+`overlayadd`, **deferred by a tick**: the layers control applies every ticked
+box in one pass and re-adds anything it finds missing, so removing the other
+field from inside that pass is undone, and the two adds then chase each other
+until one tears down a layer whose first redraw is still queued. Waiting also
+lets the control repaint its boxes, which it skips while handling a click.
 
 #### Three tiers, finest that fits
 
 | tier | spacing | used at | fetched |
 | --- | --- | --- | --- |
-| `tiles/<south>_<west>.json` | 0.08° (1/12°) | zoom ≥ 7 | on demand, per view |
-| `currents-atlantic.json`, `currents-arctic.json` | 0.24°, 0.48°×0.12° | zoom ≥ 5 inside the region | on demand, once |
-| `currents.json` | 0.96°, global | everywhere else | with the page |
+| `tiles[-60m]/<south>_<west>.json` | 0.08° (1/12°) | zoom ≥ 7 | on demand, per view |
+| `currents-atlantic[-60m].json`, `currents-arctic[-60m].json` | 0.24°, 0.48°×0.12° | zoom ≥ 5 inside the region | on demand, once |
+| `currents[-60m].json` | 0.96°, global | everywhere else | with the page |
 
 **The two upper tiers are chosen differently, and the difference matters.**
 A *region* is used only when it contains the **whole** viewport — a partly
@@ -248,17 +276,23 @@ fixing Greenland while the Bering Strait stayed broken showed.
 
 #### What the tiles cost
 
-Built by `npm run data:tiles`; 159 of 162 exist, the other three being pure
-land. **They are gitignored** — 92 MB has no business in the repo — so CI
-builds them and deploys them with the site, keyed on the model run so hourly
-builds restore from cache instead of pulling 92 MB from HYCOM twenty-four
+Built by `npm run data:tiles`; 159 of 162 exist per depth, the other three
+being pure land. **They are gitignored** — 92 MB has no business in the repo
+— so CI builds them and deploys them with the site, keyed on the model run so
+hourly builds restore from cache instead of pulling from HYCOM twenty-four
 times a day. `scripts/fetch-currents.py --run` prints that key.
+
+Two depths means **two tile sets**, so the artifact and the daily tile run
+both roughly double. The request *rate* on HYCOM's public server does not:
+the depths are built one after another under the same four workers, so only
+the wall clock doubles. Both sets share one cache entry, so a partial run is
+never half-restored.
 
 Two numbers that are easy to confuse, and I did confuse them when first
 estimating this:
 
-- **92 MB is what the site weighs** — raw JSON in the deploy artifact, which
-  Pages gzips on delivery. A build-and-deploy cost.
+- **92 MB per depth is what the site weighs** — raw JSON in the deploy
+  artifact, which Pages gzips on delivery. A build-and-deploy cost.
 - **79–144 KB is what a visitor pays**, per tile, one to four at a time.
   Someone working a single region never fetches the other 150.
 
@@ -361,7 +395,9 @@ great-circle: a rhumb line is what you would steer, but quoting the two from
 different geometries invites the reader to combine them.
 
 **Right-click, or long-press on touch**, reports position, seafloor depth and
-the surface current. Leaflet raises `contextmenu` for the mouse; **iOS Safari
+the current **at the depth of whichever animated field is on** — the readout
+names it, because calling 60 m water "surface current" would be wrong with
+nothing on screen to give it away. Leaflet raises `contextmenu` for the mouse; **iOS Safari
 does not raise it reliably from a long press**, so touch is timed manually
 (550 ms, cancelled by a drag of more than 10 px so a pan is not a press).
 

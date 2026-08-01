@@ -120,7 +120,42 @@ TILES = {
     'workers': 4,
 }
 
+# Depths published. ESPC-D carries forty standard levels; these are the two
+# the map offers. 60 m is chosen to sit below the wind-driven surface layer —
+# where the flow is the ocean's own rather than this morning's weather — and
+# close to where a glider spends most of a dive. Every product below is built
+# once per entry, so this list is the only knob: adding 200 m here builds a
+# 200 m global grid, regions and tiles with no other change.
+#
+# 'index' is checked against the model's depth axis at run time rather than
+# trusted. A silent shift in the axis would publish the wrong water at the
+# right filename, which nothing downstream could detect.
+LEVELS = [
+    {'metres': 0, 'index': 0, 'suffix': '', 'label': 'Surface'},
+    {'metres': 60, 'index': 15, 'suffix': '-60m', 'label': '60 m'},
+]
+
 UA = {'User-Agent': 'oceansensing.org current map (github.com/oceansensing)'}
+
+
+def at_depth(name: str, suffix: str) -> str:
+    """currents-atlantic.json -> currents-atlantic-60m.json"""
+    return name[:-len('.json')] + suffix + '.json' if suffix else name
+
+
+def check_depths() -> None:
+    """Confirm each level's index really is the depth it claims."""
+    body = get(f'{BASE}.ascii?depth', timeout=60)
+    tail = [line for line in body.splitlines() if line.strip()][-1]
+    axis = [float(t) for t in tail.split(',') if t.strip()]
+    for level in LEVELS:
+        i = level['index']
+        if i >= len(axis) or axis[i] != level['metres']:
+            got = axis[i] if i < len(axis) else 'past the end of the axis'
+            raise RuntimeError(
+                f'depth index {i} is {got}, not {level["metres"]} m — '
+                'the model axis moved; fix LEVELS'
+            )
 
 
 def get(url: str, timeout: int = 180) -> str:
@@ -269,9 +304,9 @@ def pick_time() -> tuple[int, str, str]:
     return index, when(hours[index]), run
 
 
-def component(name: str, t: int, y0: int, y1: int, x0: int, x1: int,
+def component(name: str, t: int, z: int, y0: int, y1: int, x0: int, x1: int,
               stride_lat: int, stride_lon: int) -> list[list[float | None]]:
-    url = (f'{BASE}.ascii?{name}[{t}][0]'
+    url = (f'{BASE}.ascii?{name}[{t}][{z}]'
            f'[{y0}:{stride_lat}:{y1}][{x0}:{stride_lon}:{x1}]')
     grid = rows(get(url))
     if not grid:
@@ -279,10 +314,11 @@ def component(name: str, t: int, y0: int, y1: int, x0: int, x1: int,
     return grid
 
 
-def build(spec: dict, t: int, valid: str, run: str, extra: dict | None = None) -> None:
-    """Fetch one grid and write it in leaflet-velocity's format."""
+def build(spec: dict, t: int, level: dict, valid: str, run: str,
+          extra: dict | None = None) -> None:
+    """Fetch one grid at one depth and write it in leaflet-velocity's format."""
     stride_lon, stride_lat = spec['stride']
-    out = MAP_DIR / spec['name']
+    out = MAP_DIR / at_depth(spec['name'], level['suffix'])
 
     y0 = axis_index(spec['south'], LAT0, DLAT, NLAT)
     y1 = axis_index(spec['north'], LAT0, DLAT, NLAT)
@@ -304,7 +340,10 @@ def build(spec: dict, t: int, valid: str, run: str, extra: dict | None = None) -
             slabs = [(x0, NLON - 1), (x0 + taken * stride_lon - NLON, x1)]
 
     def fetch_component(name: str) -> list[list[float | None]]:
-        parts = [component(name, t, y0, y1, a, b, stride_lat, stride_lon) for a, b in slabs]
+        parts = [
+            component(name, t, level['index'], y0, y1, a, b, stride_lat, stride_lon)
+            for a, b in slabs
+        ]
         if len(parts) == 1:
             return parts[0]
         return [west + east for west, east in zip(*parts)]
@@ -312,7 +351,7 @@ def build(spec: dict, t: int, valid: str, run: str, extra: dict | None = None) -
     u = fetch_component('water_u')
     v = fetch_component('water_v')
     if len(u) != len(v) or len(u[0]) != len(v[0]):
-        raise RuntimeError(f'{spec["name"]}: u and v grids disagree in shape')
+        raise RuntimeError(f'{out.name}: u and v grids disagree in shape')
 
     before = sum(1 for row in u for value in row if value is not None)
     after = erode_land(u, v, spec['wrap'])
@@ -341,6 +380,9 @@ def build(spec: dict, t: int, valid: str, run: str, extra: dict | None = None) -
             # Which daily run produced this, so the page can say how fresh
             # the field is rather than leaving the reader to assume.
             'modelRun': run,
+            # The depth this field is for. The map labels its layer from
+            # this rather than from the filename it happened to fetch.
+            'depth': level['metres'],
             **(extra or {}),
         }
 
@@ -353,12 +395,13 @@ def build(spec: dict, t: int, valid: str, run: str, extra: dict | None = None) -
 
     spans = nx * dx
     extent = 'wraps' if spans >= 360 else f'{spans:.0f} deg of longitude'
-    print(f'  {spec["name"]}: {nx}x{ny} at {dx:.2f}x{dy:.2f} deg, {extent}, '
+    print(f'  {out.name}: {nx}x{ny} at {dx:.2f}x{dy:.2f} deg, {extent}, '
           f'{after} wet points after coastal erosion (from {before}), '
           f'{out.stat().st_size / 1024:.0f} KB')
 
 
-def build_tile(t: int, valid: str, run: str, south: float, west: float) -> str | None:
+def build_tile(t: int, level: dict, valid: str, run: str,
+               south: float, west: float) -> str | None:
     """One full-resolution tile. Returns its key, or None if it is all land."""
     north = min(south + TILES['size'], TILES['north'])
     east = west + TILES['size']
@@ -376,7 +419,10 @@ def build_tile(t: int, valid: str, run: str, south: float, west: float) -> str |
     stride_lon, stride_lat = TILES['stride']
 
     def grab(name: str) -> list[list[float | None]]:
-        parts = [component(name, t, y0, y1, a, b, stride_lat, stride_lon) for a, b in slabs]
+        parts = [
+            component(name, t, level['index'], y0, y1, a, b, stride_lat, stride_lon)
+            for a, b in slabs
+        ]
         return parts[0] if len(parts) == 1 else [w + e for w, e in zip(*parts)]
 
     u = grab('water_u')
@@ -397,7 +443,7 @@ def build_tile(t: int, valid: str, run: str, south: float, west: float) -> str |
             'nx': nx, 'ny': ny,
             'lo1': round(lo1, 4), 'la1': round(la1, 4),
             'dx': round(DLON * stride_lon, 4), 'dy': round(DLAT * stride_lat, 4),
-            'refTime': valid, 'modelRun': run,
+            'refTime': valid, 'modelRun': run, 'depth': level['metres'],
         }
 
     payload = [
@@ -405,14 +451,14 @@ def build_tile(t: int, valid: str, run: str, south: float, west: float) -> str |
         {'header': header(3), 'data': [x for row in reversed(v) for x in row]},
     ]
     key = f'{south:g}_{west:g}'
-    out = MAP_DIR / TILES['dir'] / f'{key}.json'
+    out = MAP_DIR / (TILES['dir'] + level['suffix']) / f'{key}.json'
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, separators=(',', ':')) + '\n')
     return key
 
 
-def build_tiles(t: int, valid: str, run: str) -> None:
-    """Every tile covering ocean, plus an index the map reads."""
+def build_tiles(t: int, level: dict, valid: str, run: str) -> None:
+    """Every tile covering ocean at one depth, plus an index the map reads."""
     from concurrent.futures import ThreadPoolExecutor
 
     corners = [
@@ -421,25 +467,30 @@ def build_tiles(t: int, valid: str, run: str) -> None:
         for west in frange(TILES['west'], 180.0, TILES['size'])
     ]
     dx, dy = DLON * TILES['stride'][0], DLAT * TILES['stride'][1]
-    print(f'  {len(corners)} tiles at {dx:g} x {dy:g} deg')
+    tile_dir = MAP_DIR / (TILES['dir'] + level['suffix'])
+    print(f"  {len(corners)} tiles at {dx:g} x {dy:g} deg, {level['label']}")
 
+    # The worker count is per depth, not shared across them: the levels are
+    # built one after another, so the request rate this puts on a public
+    # research server is the same as it was with one depth. Only the wall
+    # clock doubles.
     with ThreadPoolExecutor(max_workers=TILES['workers']) as pool:
-        keys = list(pool.map(lambda c: build_tile(t, valid, run, *c), corners))
+        keys = list(pool.map(lambda c: build_tile(t, level, valid, run, *c), corners))
 
     available = sorted(k for k in keys if k)
-    index = MAP_DIR / TILES['dir'] / 'index.json'
+    index = tile_dir / 'index.json'
     index.write_text(json.dumps({
         'size': TILES['size'], 'west': TILES['west'],
         'south': TILES['south'], 'north': TILES['north'],
         'minZoom': TILES['minZoom'],
         'deg': round(min(DLON * TILES['stride'][0], DLAT * TILES['stride'][1]), 4),
-        'modelRun': run, 'refTime': valid,
+        'modelRun': run, 'refTime': valid, 'depth': level['metres'],
         # Tiles that are entirely land are never written, so the map can skip
         # a request it knows would 404.
         'available': available,
     }, separators=(',', ':')) + '\n')
 
-    total = sum((MAP_DIR / TILES['dir'] / f'{k}.json').stat().st_size for k in available)
+    total = sum((tile_dir / f'{k}.json').stat().st_size for k in available)
     print(f'  wrote {len(available)} tiles ({len(corners) - len(available)} all land), '
           f'{total / 1024 / 1024:.1f} MB')
 
@@ -463,36 +514,43 @@ def main() -> int:
             print(run)
             return 0
         print(f'model step {t} — valid {valid}, from the {run} run')
+        check_depths()
 
-        # The global file advertises the finer grids, so the map learns the
-        # regions and their zoom thresholds from the data rather than
-        # repeating them in the component where the two could drift apart.
-        build(GLOBAL, t, valid, run, extra={
-            # Where the full-resolution tiles live, if a tile run has
-            # happened. They are rebuilt only when the model does, so the
-            # hourly build leaves them alone.
-            'tileIndex': f'/map/{TILES["dir"]}/index.json',
-            'details': [
-                {
-                    'url': f'/map/{d["name"]}',
-                    'label': d['label'],
-                    # A band spanning every longitude advertises the full
-                    # range, so the containment test below always passes on
-                    # longitude and turns on latitude alone.
-                    'west': d.get('west', -180.0), 'east': d.get('east', 180.0),
-                    'south': d['south'], 'north': d['north'],
-                    'minZoom': d['minZoom'],
-                    # So the map can prefer the finest region when two overlap.
-                    'deg': round(min(DLON * d['stride'][0], DLAT * d['stride'][1]), 4),
-                }
-                for d in DETAILS
-            ],
-        })
-        if tiles_only:
-            build_tiles(t, valid, run)
-            return 0
-        for detail in DETAILS:
-            build(detail, t, valid, run)
+        # Each depth gets the same three tiers, under its own filenames. The
+        # global file for a depth advertises that depth's regions and tiles,
+        # so the map follows one chain of links per layer and cannot end up
+        # drawing 60 m particles over a surface grid.
+        for level in LEVELS:
+            print(f"{level['label']}:")
+            if tiles_only:
+                build_tiles(t, level, valid, run)
+                continue
+            # The global file advertises the finer grids, so the map learns
+            # the regions and their zoom thresholds from the data rather than
+            # repeating them in the component where the two could drift apart.
+            build(GLOBAL, t, level, valid, run, extra={
+                # Where the full-resolution tiles live, if a tile run has
+                # happened. They are rebuilt only when the model does, so the
+                # hourly build leaves them alone.
+                'tileIndex': f'/map/{TILES["dir"]}{level["suffix"]}/index.json',
+                'details': [
+                    {
+                        'url': f'/map/{at_depth(d["name"], level["suffix"])}',
+                        'label': d['label'],
+                        # A band spanning every longitude advertises the full
+                        # range, so the containment test below always passes
+                        # on longitude and turns on latitude alone.
+                        'west': d.get('west', -180.0), 'east': d.get('east', 180.0),
+                        'south': d['south'], 'north': d['north'],
+                        'minZoom': d['minZoom'],
+                        # So the map can prefer the finest region when two overlap.
+                        'deg': round(min(DLON * d['stride'][0], DLAT * d['stride'][1]), 4),
+                    }
+                    for d in DETAILS
+                ],
+            })
+            for detail in DETAILS:
+                build(detail, t, level, valid, run)
     except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:
         print(f'! currents unavailable: {exc}', file=sys.stderr)
         if (MAP_DIR / GLOBAL['name']).exists():

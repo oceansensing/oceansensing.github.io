@@ -94,6 +94,9 @@ const files = {
   currents: JSON.parse(fs.readFileSync('public/map/currents.json', 'utf8')),
   'currents-atlantic': JSON.parse(fs.readFileSync('public/map/currents-atlantic.json', 'utf8')),
   'currents-arctic': JSON.parse(fs.readFileSync('public/map/currents-arctic.json', 'utf8')),
+  'currents-60m': JSON.parse(fs.readFileSync('public/map/currents-60m.json', 'utf8')),
+  'currents-atlantic-60m': JSON.parse(fs.readFileSync('public/map/currents-atlantic-60m.json', 'utf8')),
+  'currents-arctic-60m': JSON.parse(fs.readFileSync('public/map/currents-arctic-60m.json', 'utf8')),
   argo: JSON.parse(fs.readFileSync('public/map/argo.json', 'utf8')),
 };
 
@@ -125,11 +128,19 @@ files['tiles/index'] = {
   for (const key of [TILE_KEY, ...NEIGHBOURS]) {
     const { lo1, la1 } = corner(key);
     files[`tiles/${key}`] = [
-      { header: { ...head(2), lo1, la1 }, data: flat(() => 0.4) },
-      { header: { ...head(3), lo1, la1 }, data: flat(() => 0.3) },
+      { header: { ...head(2), lo1, la1, depth: 0 }, data: flat(() => 0.4) },
+      { header: { ...head(3), lo1, la1, depth: 0 }, data: flat(() => 0.3) },
+    ];
+    /* The 60 m tiles carry a deliberately different velocity. It is the only
+       way to tell whether the readout sampled the layer the reader has on or
+       just whichever grid loaded last. */
+    files[`tiles-60m/${key}`] = [
+      { header: { ...head(2), lo1, la1, depth: 60 }, data: flat(() => 0.1) },
+      { header: { ...head(3), lo1, la1, depth: 60 }, data: flat(() => 0.0) },
     ];
   }
 }
+files['tiles-60m/index'] = { ...files['tiles/index'], depth: 60 };
 globalThis.fetch = async (u) => {
   // Longest key first: "currents" is a substring of "currents-detail", so
   // insertion order would hand the detail request the coarse grid.
@@ -468,6 +479,12 @@ measureButton?.dispatchEvent(new window.MouseEvent('click', { bubbles: true, can
 assetDot?._path.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
 await new Promise((r) => setTimeout(r, 150));
 const measuringTookTheClick = (measureReadout?.textContent ?? '') === 'Click a second point';
+// And it lands on the asset, not wherever in its hit circle the tap fell.
+const vertex = Object.values(host._map._layers).find(
+  (l) => l.options?.radius === 4 && l.options?.fillColor === '#ffffff'
+);
+const measuredAtTheAsset =
+  !!vertex && !!assetDot && vertex.getLatLng().equals(assetDot.getLatLng());
 const measuringSuppressedPopup = !host.querySelector('.leaflet-popup');
 
 // Escape must put the map back the way it was.
@@ -491,6 +508,36 @@ globalThis.fetch = async (u, ...rest) => {
 host._map.fire('contextmenu', { latlng: window.L.latLng(36.5, -74.5) });
 await new Promise((r) => setTimeout(r, 300));
 const readoutHtml = host.querySelector('.point-readout .leaflet-popup-content')?.innerHTML ?? '';
+const identifyAtReadout = identifyUrl;
+
+/* Depth. Two animated fields, mutually exclusive, and the readout has to
+   name and sample whichever one is on — reporting 60 m water as "surface
+   current" would be wrong with nothing on screen to give it away.
+
+   The synthetic tiles carry a different velocity per depth (0.4/0.3 at the
+   surface, 0.1/0 at 60 m), so the number in the readout says which chain of
+   files the layer actually followed. A 60 m layer that fell back to the
+   surface tile index would read 0.50, and a label check alone would miss it. */
+host._map.setView([10, -50], 8);          // inside the synthetic tile 0_-60
+await new Promise((r) => setTimeout(r, 600));
+host._map.closePopup();
+host._map.fire('contextmenu', { latlng: window.L.latLng(10, -50) });
+await new Promise((r) => setTimeout(r, 200));
+const surfaceRead = host.querySelector('.point-readout .leaflet-popup-content')?.textContent ?? '';
+
+const overlayLabels = [...host.querySelectorAll('.leaflet-control-layers-overlays label')];
+const deepToggle = overlayLabels.find((l) => /60 m/.test(l.textContent));
+const surfaceToggle = overlayLabels.find((l) => /Surface currents/.test(l.textContent));
+deepToggle?.querySelector('input')?.click();
+await new Promise((r) => setTimeout(r, 600));
+const labelled = (re) =>
+  [...host.querySelectorAll('.leaflet-control-layers-overlays label')].find((l) => re.test(l.textContent));
+// The control rebuilds its inputs on redraw, so re-find rather than reuse.
+const surfaceOffWithDeepOn = labelled(/Surface currents/)?.querySelector('input')?.checked === false;
+host._map.closePopup();
+host._map.fire('contextmenu', { latlng: window.L.latLng(11, -51) });
+await new Promise((r) => setTimeout(r, 200));
+const deepRead = host.querySelector('.point-readout .leaflet-popup-content')?.textContent ?? '';
 
 const status = document.getElementById('map-status').textContent;
 const checks = [
@@ -509,6 +556,7 @@ const checks = [
   [`argo hit tolerance catches a miss by ${OFFSET} px`, argoCoversOffset === true],
   ['measuring takes a click on an asset', measuringTookTheClick],
   ['measuring suppresses the asset popup', measuringSuppressedPopup],
+  ['the measured point snaps to the asset, not the tap', measuredAtTheAsset],
   ['popup links the dataset', /href="https?:[^"]*erddap[^"]*"/i.test(popupHtml)],
   // Theme-driven layers carry a class instead of a baked-in colour, so the
   // stylesheet can restyle them when the reader switches to dark mode.
@@ -641,12 +689,23 @@ const checks = [
   ['right-click opens a readout with the position',
     /36\.5000°N/.test(readoutHtml) && /74\.5000°W/.test(readoutHtml)],
   ['the readout carries the current from the loaded grid, with no request',
-    /Surface current/.test(readoutHtml) && /m\/s toward/.test(readoutHtml)],
+    /Current at surface/.test(readoutHtml) && /m\/s toward/.test(readoutHtml)],
+  ['a 60 m field is offered alongside the surface one', !!deepToggle],
+  ['turning 60 m on turns the surface off', surfaceOffWithDeepOn],
+  ['readout names the surface and reads the surface grid',
+    /Current at surface/.test(surfaceRead) && /0\.50 m\/s/.test(surfaceRead)],
+  ['readout names 60 m and reads the 60 m grid',
+    /Current at 60 m/.test(deepRead) && /0\.10 m\/s/.test(deepRead) &&
+    /11\.0000°N/.test(deepRead)],
+  ['the 60 m grid is published at 60 m', files['currents-60m'][0].header.depth === 60],
+  ['the 60 m grid points only at 60 m products',
+    files['currents-60m'][0].header.tileIndex.includes('-60m') &&
+    files['currents-60m'][0].header.details.every((d) => d.url.includes('-60m'))],
   ['the readout asks NOAA for the depth at that point',
     (() => {
       // The geometry is percent-encoded JSON, so decode before matching.
-      if (!identifyUrl) return false;
-      const geom = decodeURIComponent(identifyUrl);
+      if (!identifyAtReadout) return false;
+      const geom = decodeURIComponent(identifyAtReadout);
       return geom.includes('"y":36.5') && geom.includes('"x":-74.5');
     })()],
   ['view is written back for the next reload',

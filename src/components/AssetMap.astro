@@ -140,8 +140,15 @@ import 'leaflet/dist/leaflet.css';
        Cool, desaturated particles: the assets are magenta and orange, and
        the flow has to stay behind them. Same pane as the raster, so it sits
        above the basemap and below every track and marker. */
+    /* One group per depth. Two particle fields drawn at once would be
+       unreadable — two sets of drifting lines over the same water, with no
+       way to tell which is which — so the switcher below keeps them
+       mutually exclusive. */
     const flow = L.layerGroup();
-    let flowReady: L.Layer | null = null;
+    const flowDeep = L.layerGroup();
+    /* Both animated fields, so the point readout can sample whichever one
+       the reader has on rather than a fixed depth. */
+    const flows: { group: L.LayerGroup; layer: L.Layer | null }[] = [];
 
     /* leaflet-velocity is a UMD plugin: it reaches for Leaflet on the
        global object, which the bundled ESM build never sets. A static
@@ -191,15 +198,26 @@ import 'leaflet/dist/leaflet.css';
       await import('leaflet-velocity');
     };
 
-    Promise.all([fetch('/map/currents.json').then((r) => r.json()), loadPlugin()])
+    /* Everything below is per depth: fetch that depth's global grid, build
+       its particle layer, then keep swapping in the finest grid covering the
+       view. Both depths run this same code. Each global file names its own
+       regions and tiles, so the chain of links cannot cross between depths
+       and leave 60 m particles drifting over a surface grid. */
+    const buildFlow = (url: string, group: L.LayerGroup) => {
+      const entry: { group: L.LayerGroup; layer: L.Layer | null } = { group, layer: null };
+      flows.push(entry);
+      Promise.all([fetch(url).then((r) => r.json()), loadPlugin()])
       .then(([coarse]) => {
         // Name the run in the attribution: ESPC publishes once a day at 12Z,
         // so this is how a reader can tell how fresh the field actually is.
         const run = coarse?.[0]?.header?.modelRun?.slice(0, 16).replace('T', ' ');
-        flowReady = L.velocityLayer({
+        // Depth comes from the data, not the filename this happened to fetch.
+        const metres = coarse?.[0]?.header?.depth ?? 0;
+        const flowReady = L.velocityLayer({
           data: coarse,
           attribution:
-            'Currents: US Navy ESPC-D-V02' + (run ? ` — ${run}Z run` : ''),
+            `Currents: US Navy ESPC-D-V02 at ${metres ? `${metres} m` : 'the surface'}` +
+            (run ? ` — ${run}Z run` : ''),
           paneName: 'currents',
           displayValues: false,
           velocityScale: scaleForView(),
@@ -213,7 +231,8 @@ import 'leaflet/dist/leaflet.css';
           lineWidth: 2.2,
           frameRate: 18,
         });
-        flow.addLayer(flowReady);
+        group.addLayer(flowReady);
+        entry.layer = flowReady;
 
         /* Two grids. The coarse one covers the globe and came with the page;
            the fine one is four times sharper but only over the Atlantic and
@@ -311,6 +330,11 @@ import 'leaflet/dist/leaflet.css';
         };
 
         const indexUrl = coarse?.[0]?.header?.tileIndex;
+        /* Tiles live beside their index, so the directory comes from the
+           link this depth's own grid gave us. Hardcoding /map/tiles/ here
+           had the 60 m layer quietly drawing surface tiles: the right
+           particle count in the right places, all at the wrong depth. */
+        const tileBase = (indexUrl ?? '').replace(/index\.json$/, '');
         if (indexUrl) {
           fetch(indexUrl)
             .then((r) => r.json())
@@ -348,9 +372,7 @@ import 'leaflet/dist/leaflet.css';
             if (url && !grids.has(url)) {
               if (fetching !== url) {
                 fetching = url;
-                const sources = keys
-                  ? keys.map((k) => `/map/tiles/${k}.json`)
-                  : [url];
+                const sources = keys ? keys.map((k) => `${tileBase}${k}.json`) : [url];
                 Promise.all(sources.map((u) => fetch(u).then((r) => r.json())))
                   .then((loaded) => {
                     grids.set(url, keys ? assemble(loaded) : loaded[0]);
@@ -393,6 +415,10 @@ import 'leaflet/dist/leaflet.css';
         // No field: the switcher still lists the layer, it is simply empty,
         // and the Mercator raster is there as the fallback depiction.
       });
+    };
+
+    buildFlow('/map/currents.json', flow);
+    buildFlow('/map/currents-60m.json', flowDeep);
 
     const coastline = L.layerGroup();
     const gebco = L.tileLayer.wms('https://wms.gebco.net/mapserv?', {
@@ -464,13 +490,16 @@ import 'leaflet/dist/leaflet.css';
          reported as "0.00 km" — so the feature has to claim the click. */
       layer.options.bubblingMouseEvents = false;
       layer.on('click', (e: L.LeafletMouseEvent) => {
+        /* Anchored on the feature, not the click, so a tap on the edge of a
+           wide hit circle still refers to the dot it belongs to. That holds
+           for the measurement too: a leg drawn to a glider should end where
+           the glider is, not 20 px away where the finger landed. Tracks are
+           lines with no one position, so those take the click. */
+        const at = (layer as L.CircleMarker).getLatLng?.() ?? e.latlng;
         if (measuring) {
-          addMeasurePoint(e.latlng);
+          addMeasurePoint(at);
           return;
         }
-        // Anchored on the feature, not the click, so a tap on the edge of a
-        // wide hit circle still points at the dot it belongs to.
-        const at = (layer as L.CircleMarker).getLatLng?.() ?? e.latlng;
         L.popup().setLatLng(at).setContent(html).openOn(map);
       });
       return layer;
@@ -542,6 +571,7 @@ import 'leaflet/dist/leaflet.css';
 
     const overlays: Record<string, L.Layer> = {
       'Surface currents (animated)': flow,
+      'Currents at 60 m (animated)': flowDeep,
       'Current speed (Mercator)': currents,
       'Hurricanes': storms,
       'NOAA USVs': usvs,
@@ -551,6 +581,27 @@ import 'leaflet/dist/leaflet.css';
       'Lat/lon grid': graticule,
     };
     L.control.layers(bases, overlays).addTo(map);
+
+    /* The two animated fields are exclusive. Both at once is two sets of
+       drifting lines over the same water with nothing to tell them apart,
+       and turning one on is a clear enough statement that the reader wants
+       to look at that depth. Done by listening rather than by a radio
+       control, so the choice still survives the saved view, which records
+       overlays by name. */
+    map.on('overlayadd', (e: L.LayersControlEvent) => {
+      const other = e.layer === flow ? flowDeep : e.layer === flowDeep ? flow : null;
+      if (!other || !map.hasLayer(other)) return;
+      /* Deferred by a tick, deliberately. The control applies every ticked
+         box in one pass and re-adds anything it finds missing, so removing
+         the other field from inside that pass is immediately undone — and
+         the two adds then chase each other until one tears down a layer
+         whose first redraw is still queued, which throws. Waiting for the
+         pass to end also lets the control repaint its boxes, which it skips
+         while handling a click, so the switcher agrees with the map. */
+      setTimeout(() => {
+        if (map.hasLayer(e.layer) && map.hasLayer(other)) map.removeLayer(other);
+      }, 0);
+    });
 
     /* The page reloads itself when the hourly rebuild lands (below), so the
        reader's setup is stashed first and restored here — otherwise every
@@ -743,16 +794,19 @@ import 'leaflet/dist/leaflet.css';
        Leaflet raises contextmenu for the mouse; iOS Safari does not raise it
        reliably from a long press, so touch is timed here instead. */
     const describePoint = (ll: L.LatLng) => {
-      const flow = currentAt(ll);
+      const water = currentAt(ll);
       const popup = L.popup({ className: 'point-readout' })
         .setLatLng(ll)
         .setContent(
           `<strong>${coordText(ll)}</strong><dl>` +
             `<dt>Seafloor</dt><dd data-depth>fetching…</dd>` +
-            (flow
-              ? `<dt>Surface current</dt><dd>${flow.speed.toFixed(2)} m/s toward ` +
-                `${flow.toward.toFixed(0)}°T</dd>`
-              : `<dt>Surface current</dt><dd>no data here</dd>`) +
+            /* Named for the depth actually sampled — the reader may have
+               the 60 m field on, and calling that "surface current" would be
+               wrong in a way nothing on screen would give away. */
+            (water
+              ? `<dt>Current at ${water.depth ? `${water.depth} m` : 'surface'}</dt>` +
+                `<dd>${water.speed.toFixed(2)} m/s toward ${water.toward.toFixed(0)}°T</dd>`
+              : `<dt>Current</dt><dd>no data here</dd>`) +
             `</dl>`
         )
         .openOn(map);
@@ -1035,7 +1089,8 @@ import 'leaflet/dist/leaflet.css';
     /* The surface current under a point, read out of whichever grid is
        loaded — no request, and it is the same field the particles follow. */
     const currentAt = (ll: L.LatLng) => {
-      const grid = (flowReady as unknown as { options?: { data?: any } })?.options?.data;
+      const shown = flows.find((f) => map.hasLayer(f.group))?.layer;
+      const grid = (shown as unknown as { options?: { data?: any } })?.options?.data;
       const head = grid?.[0]?.header;
       if (!head) return null;
       const i = Math.round(((((ll.lng - head.lo1) % 360) + 360) % 360) / head.dx);
@@ -1045,7 +1100,12 @@ import 'leaflet/dist/leaflet.css';
       const u = grid[0].data[k];
       const v = grid[1].data[k];
       if (typeof u !== 'number' || typeof v !== 'number') return null;
-      return { speed: Math.hypot(u, v), toward: (Math.atan2(u, v) / rad + 360) % 360, deg: head.dx };
+      return {
+        speed: Math.hypot(u, v),
+        toward: (Math.atan2(u, v) / rad + 360) % 360,
+        deg: head.dx,
+        depth: head.depth ?? 0,
+      };
     };
 
     const stamp = (t?: string) => (t ? `${t.slice(0, 16).replace('T', ' ')}Z` : 'unknown');

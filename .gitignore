@@ -23,3 +23,4 @@ node_modules/
 # ~100 MB of full-resolution current tiles, rebuilt by CI once per model
 # run and deployed with the site. Far too large to carry in the repo.
 public/map/tiles/
+public/map/tiles-60m/

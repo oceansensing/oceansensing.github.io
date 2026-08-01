@@ -16,7 +16,7 @@ tools, per-person CVs at `/cv/<person-id>/`, and Significant Observations
 
 The hurricane page carries a live map: NHC forecast tracks and cones with
 5-day observed storm history, NOAA saildrones, IOOS gliders, ~2,000 Argo
-floats, and animated global surface currents that sharpen to 1/12° as you
+floats, and animated global currents — surface or 60 m — that sharpen to 1/12° as you
 zoom in. Above it, an active-storm status line that updates without a reload;
 beside that, a server-synchronised UTC clock. The page refreshes itself when
 a new build lands, keeping your basemap, layers and position.
