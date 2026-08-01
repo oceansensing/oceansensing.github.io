@@ -208,8 +208,25 @@ import 'leaflet/dist/leaflet.css';
         pts.push([a.lat, a.lon]);
 
         // Where it has been over the active window, then where it is now.
+        // The track is drawn twice: a dark casing underneath so the line
+        // stays legible over pale Esri Ocean and dark GEBCO alike, then the
+        // colour on top.
         if (a.track?.length > 1) {
-          L.polyline(flip(a.track), { color: tint, weight: 1.5, opacity: 0.6 })
+          const path = flip(a.track);
+          L.polyline(path, {
+            color: '#0d1218',
+            weight: 4.5,
+            opacity: 0.4,
+            lineCap: 'round',
+            lineJoin: 'round',
+          }).addTo(layer);
+          L.polyline(path, {
+            color: tint,
+            weight: 2.5,
+            opacity: 0.95,
+            lineCap: 'round',
+            lineJoin: 'round',
+          })
             .addTo(layer)
             .bindPopup(`<strong>${a.id}</strong><br>Track, last ${data.activeWindowDays} days`);
         }
