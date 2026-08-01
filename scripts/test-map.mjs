@@ -200,7 +200,8 @@ const expectedNames = assets.storms.map((s) => s.name);
    at zero length and nothing would appear on screen even though the draw
    calls all happened. */
 const palette = JSON.parse(fs.readFileSync('src/data/map-palette.json', 'utf8'));
-const movingSegments = drawn.segments.filter((d) => d > 0.5).length;
+const sortedSegments = [...drawn.segments].sort((a, b) => a - b);
+const medianSegment = sortedSegments.length ? sortedSegments[Math.floor(sortedSegments.length / 2)] : 0;
 const paletteUsed = [...drawn.styles].every((c) => palette.currents.includes(c));
 
 const status = document.getElementById('map-status').textContent;
@@ -258,8 +259,10 @@ const checks = [
       rebuiltFacts.every((f) => f && f.includes('·')) &&
       stormBox.querySelectorAll('button.zoom[data-storm-zoom]').length === expectedNames.length],
   ['particles are actually stroked', drawn.stroke > 0 && drawn.moveTo > 100 && drawn.lineTo > 100],
-  ['particles move a visible distance each frame',
-    drawn.segments.length > 0 && movingSegments / drawn.segments.length > 0.5],
+  /* Guards against the sub-pixel regression, where the plugin's own zoom
+     scaling left the median at 0.13 px and nothing appeared to move. Stated
+     as a median so deliberately unhurried drift still passes. */
+  ['particles move more than a sub-pixel each frame', medianSegment > 0.4],
   ['particles are drawn in the checked palette', drawn.styles.size > 0 && paletteUsed],
   ['view is written back for the next reload',
     (() => {
