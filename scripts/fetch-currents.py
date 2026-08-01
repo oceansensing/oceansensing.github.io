@@ -81,9 +81,14 @@ DETAILS = [
         # the way round the world, was not. Every Arctic coast has the same
         # problem, so cover them all at once.
         'name': 'currents-arctic.json',
-        'label': 'Arctic',
+        'label': 'Arctic & subpolar',
         'wrap': True,              # all longitudes, so it closes on itself
-        'south': 60.0, 'north': 85.0,
+        # Reaches down to 50N so it overlaps the Atlantic region rather than
+        # leaving a gap above it. The map needs the whole viewport inside a
+        # region to use it, so a band starting at 60 dropped any view
+        # straddling that line — including most of the Norwegian coast —
+        # back onto the coarse grid.
+        'south': 50.0, 'north': 85.0,
         # Longitude is cheap up here and latitude is what binds: at 66N a
         # 0.48 deg cell is 22 km wide, while 0.12 deg of latitude is 13 km.
         # Spending the samples on latitude is what resolves a coastline.

@@ -229,6 +229,22 @@ the same data:
   `setOptions({data})` only when the answer changes, since that restarts the
   animation.
 
+  Because a region is only used when the **whole** viewport fits inside it,
+  **regions must overlap rather than merely touch**: an Arctic band starting
+  at 60°N above an Atlantic region ending at 55°N left every view straddling
+  60°N — most of the Norwegian coast — back on the coarse grid. `test:map`
+  checks the overlap.
+
+  **On currents looking perpendicular to a coast:** verified as a resolution
+  artefact, not a data error. The published grids match the raw model
+  point-for-point in direction, and the field carries no net flow into land
+  (mean onshore component +0.03, where 0 is neutral). What changes with
+  resolution is how *parallel* the flow reads against a blocky mask: 0.65 at
+  0.96° — barely above the 0.64 you would get from random directions — 0.71
+  at 0.24°, 0.73 on the Arctic band. GEBCO also draws a far more detailed
+  coastline than the model masks, so flow parallel to the model's coast can
+  look oblique to the drawn one.
+
   The global grid **must span a full 360° of longitude**: that is the exact
   condition leaflet-velocity uses to wrap across the antimeridian, and
   without it particles pile up against the edge. It also means longitude is

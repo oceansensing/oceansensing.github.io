@@ -368,6 +368,14 @@ const checks = [
   ['arctic grid is a band spanning every longitude',
     Math.floor(arcticHeader.nx * arcticHeader.dx) >= 360 &&
       arcticRegion.west <= -180 && arcticRegion.east >= 180],
+  /* The map only uses a region when the whole viewport fits inside it, so
+     regions that merely touch leave a strip where any straddling view drops
+     back to the coarse grid. They have to overlap. */
+  ['detail regions overlap in latitude, leaving no coarse strip',
+    (() => {
+      const atlantic = advertised.find((d) => d.url.includes('atlantic'));
+      return arcticRegion.south < atlantic.north;
+    })()],
   ['inside the region, the fine grid is the one in use',
     !!gridInsideRegion && gridInsideRegion.dx === fineHeader.dx],
   ['panned outside it, the layer falls back to the global grid',
