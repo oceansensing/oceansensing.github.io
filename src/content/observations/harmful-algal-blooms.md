@@ -11,10 +11,10 @@ summary: >-
 # year, then by day. Every photo also joins the homepage card's rotation,
 # which shuffles the order and starting photo on each page load.
 cover:
-  src: ./hab-2026-07-31-02.jpg
+  src: ./hab-2017-08-31-02.jpg
   alt: >-
-    Vehicles on the Coleman Bridge over the York River, with reddish-brown
-    water beneath and beyond the span.
+    Dense orange-brown water swirling offshore of a green, wooded shoreline
+    on the York River.
 surveys:
   - date: 2026-07-31
     location: Lower York River, Gloucester Point
