@@ -56,7 +56,7 @@ import 'leaflet/dist/leaflet.css';
       worldCopyJump: true,
       minZoom: 2,
       attributionControl: true,
-    }).fitBounds(BASIN);
+    });
 
     map.attributionControl.setPrefix('');
 
@@ -195,6 +195,7 @@ import 'leaflet/dist/leaflet.css';
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) currents.addTo(map);
     else flow.addTo(map);
 
+
     // Lat/lon grid, every 10°.
     const graticule = L.layerGroup();
     for (let lon = -180; lon <= 180; lon += 10) {
@@ -209,17 +210,71 @@ import 'leaflet/dist/leaflet.css';
     const usvs = L.layerGroup().addTo(map);
     const gliders = L.layerGroup().addTo(map);
 
-    L.control
-      .layers(bases, {
-        'Surface currents (animated)': flow,
-        'Current speed (Mercator)': currents,
-        'Hurricanes': storms,
-        'NOAA USVs': usvs,
-        'IOOS gliders': gliders,
-        'Country & state borders': borders,
-        'Lat/lon grid': graticule,
-      })
-      .addTo(map);
+    const overlays: Record<string, L.Layer> = {
+      'Surface currents (animated)': flow,
+      'Current speed (Mercator)': currents,
+      'Hurricanes': storms,
+      'NOAA USVs': usvs,
+      'IOOS gliders': gliders,
+      'Country & state borders': borders,
+      'Lat/lon grid': graticule,
+    };
+    L.control.layers(bases, overlays).addTo(map);
+
+    /* The page reloads itself when the hourly rebuild lands (below), so the
+       reader's setup is stashed first and restored here — otherwise every
+       refresh would throw away their basemap, their layer choices and
+       wherever they had panned to. Per-tab, so a fresh visit still opens on
+       the basin rather than in someone's week-old view. */
+    const VIEW_KEY = 'asset-map-view';
+
+    const saveView = () => {
+      try {
+        const centre = map.getCenter();
+        sessionStorage.setItem(
+          VIEW_KEY,
+          JSON.stringify({
+            lat: +centre.lat.toFixed(4),
+            lng: +centre.lng.toFixed(4),
+            zoom: map.getZoom(),
+            base: Object.keys(bases).find((name) => map.hasLayer(bases[name]!)),
+            overlays: Object.keys(overlays).filter((name) => map.hasLayer(overlays[name]!)),
+          })
+        );
+      } catch {
+        // Private browsing can refuse storage; the map still works.
+      }
+    };
+
+    const restoreView = () => {
+      let saved;
+      try {
+        saved = JSON.parse(sessionStorage.getItem(VIEW_KEY) ?? 'null');
+      } catch {
+        return false;
+      }
+      if (!saved || typeof saved.zoom !== 'number') return false;
+
+      const base = saved.base && bases[saved.base];
+      if (base) {
+        for (const layer of Object.values(bases)) if (map.hasLayer(layer)) map.removeLayer(layer);
+        map.addLayer(base);
+      }
+      if (Array.isArray(saved.overlays)) {
+        for (const [name, layer] of Object.entries(overlays)) {
+          const wanted = saved.overlays.includes(name);
+          if (wanted && !map.hasLayer(layer)) map.addLayer(layer);
+          else if (!wanted && map.hasLayer(layer)) map.removeLayer(layer);
+        }
+      }
+      map.setView([saved.lat, saved.lng], saved.zoom);
+      return true;
+    };
+
+    const restored = restoreView();
+    map.on('moveend zoomend baselayerchange overlayadd overlayremove', saveView);
+
+    if (!restored) map.fitBounds(BASIN);
 
     L.control.scale({ imperial: false }).addTo(map);
 
@@ -274,6 +329,55 @@ import 'leaflet/dist/leaflet.css';
         }
       })
       .catch(() => {});
+
+    /* The site rebuilds every hour with new storm positions and asset fixes.
+       A reader who leaves the page open would otherwise sit on a stale map,
+       and the storm status line above it is baked in at build time, so only
+       a real reload refreshes that.
+
+       Reloading on a timer alone would be rude — it would interrupt someone
+       mid-pan or mid-read. So the reload waits for a moment when it costs
+       nothing: the tab hidden, or a couple of minutes without input. The
+       view is saved first, so they come back to the same map. */
+    const scheduleRefresh = (loadedStamp?: string) => {
+      const CHECK_EVERY = 60 * 60 * 1000;
+      const SETTLE_EVERY = 30 * 1000;
+      const IDLE_ENOUGH = 2 * 60 * 1000;
+
+      let newerAvailable = false;
+      let lastInput = Date.now();
+      const touched = () => {
+        lastInput = Date.now();
+      };
+      for (const event of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart']) {
+        window.addEventListener(event, touched, { passive: true });
+      }
+
+      const reloadIfUnobtrusive = () => {
+        if (!newerAvailable) return;
+        const idle = Date.now() - lastInput > IDLE_ENOUGH;
+        if (document.visibilityState !== 'hidden' && !idle) return;
+        saveView();
+        location.reload();
+      };
+
+      const lookForNewer = async () => {
+        try {
+          const url = `/map/ocean-assets.json?_=${Date.now()}`;
+          const fresh = await (await fetch(url, { cache: 'no-store' })).json();
+          if (fresh?.updated && fresh.updated !== loadedStamp) newerAvailable = true;
+        } catch {
+          // Offline or mid-deploy; just try again on the next tick.
+        }
+        reloadIfUnobtrusive();
+      };
+
+      window.setInterval(lookForNewer, CHECK_EVERY);
+      // Once something new is waiting, take the first quiet moment rather
+      // than sitting on it for another hour.
+      window.setInterval(reloadIfUnobtrusive, SETTLE_EVERY);
+      document.addEventListener('visibilitychange', reloadIfUnobtrusive);
+    };
 
     const stamp = (t?: string) => (t ? `${t.slice(0, 16).replace('T', ' ')}Z` : 'unknown');
     // "· 11 days" — how long the platform has been out at its last fix.
@@ -424,6 +528,8 @@ import 'leaflet/dist/leaflet.css';
       const n = (data.assets ?? []).length;
       const s = (data.storms ?? []).length;
       if (status) {
+        // Start watching for the next hourly rebuild.
+        scheduleRefresh(data.updated);
         const when = (data.updated ?? '').slice(0, 16).replace('T', ' ');
         status.innerHTML =
           `${s} active storm${s === 1 ? '' : 's'} · ${n} assets reporting within ` +

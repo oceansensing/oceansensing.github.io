@@ -166,6 +166,21 @@ the assignment and the built bundle would die on `L is not defined`. The
 dev server hides this by serving Leaflet's UMD build, so **this breaks only
 in `dist/`**; `npm run test:map` covers it.
 
+### Hourly self-refresh
+
+The map page reloads itself when a newer build lands, because the storm
+status line is rendered at build time and only a real reload updates it.
+
+Two constraints shape it. It **waits for a quiet moment** — tab hidden, or
+two minutes without input — so it never yanks the page away mid-read; once
+it knows something is waiting it re-checks every 30 s rather than sitting on
+it for another hour. And it **saves the reader's view first**
+(`sessionStorage`, key `asset-map-view`: centre, zoom, basemap, overlays)
+and restores it on load, so a refresh does not dump them back at the basin.
+`fitBounds(BASIN)` therefore runs only when nothing was restored.
+
+`npm run test:map` seeds a saved view and asserts the map comes back to it.
+
 ### Known upstream quirks
 
 Both were found the hard way; do not re-derive them.

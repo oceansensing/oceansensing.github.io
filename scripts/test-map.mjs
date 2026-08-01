@@ -23,6 +23,9 @@ Object.defineProperty(globalThis, 'navigator', { value: window.navigator, config
 for (const k of ['HTMLElement', 'Element', 'Node', 'SVGElement', 'Event', 'MouseEvent', 'KeyboardEvent', 'DOMParser'])
   globalThis[k] = window[k];
 globalThis.getComputedStyle = window.getComputedStyle.bind(window);
+// Browser globals the bundle uses bare; in jsdom they hang off window only.
+globalThis.sessionStorage = window.sessionStorage;
+globalThis.localStorage = window.localStorage;
 window.matchMedia ??= (query) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {} });
 window.Element.prototype.scrollIntoView = function () {};
 /* jsdom has no canvas backend, and the particle layer wants a 2d context
@@ -68,6 +71,26 @@ for (const id of [...assets.storms.map((s) => s.id), 'zz992026']) {
   b.hidden = true;
   statusEl.after(b);
 }
+/* Seed a saved view, as the hourly auto-reload leaves behind, and check the
+   map comes back to it instead of resetting to the basin. Every overlay is
+   listed so the rest of the checks still have their layers. */
+const SEEDED_VIEW = {
+  lat: 12.34,
+  lng: -45.67,
+  zoom: 6,
+  base: 'Bathymetry (GEBCO)',
+  overlays: [
+    'Surface currents (animated)',
+    'Current speed (Mercator)',
+    'Hurricanes',
+    'NOAA USVs',
+    'IOOS gliders',
+    'Country & state borders',
+    'Lat/lon grid',
+  ],
+};
+window.sessionStorage.setItem('asset-map-view', JSON.stringify(SEEDED_VIEW));
+
 const bundle = fs.readdirSync('dist/_astro').find((f) => f.startsWith('AssetMap') && f.endsWith('.js'));
 if (!bundle) {
   console.error('no AssetMap bundle in dist/_astro — run `npm run build` first');
@@ -77,6 +100,11 @@ await import('./' + path.join('..', 'dist', '_astro', bundle));
 await new Promise((r) => setTimeout(r, 1500));
 
 const host = document.getElementById('asset-map');
+
+// Read the restored view before anything below moves the map.
+const restoredCentre = host._map?.getCenter?.() ?? null;
+const restoredZoom = host._map?.getZoom?.() ?? null;
+const restoredBase = !!host.querySelector('img[src*="gebco"], .leaflet-tile-pane img[src*="gebco"]');
 
 // Open a marker popup for real, then read what it rendered.
 let popupHtml = '';
@@ -163,6 +191,19 @@ const checks = [
   ['storms carry observed history', withHistory.length === assets.storms.length],
   ['observed storm track drawn solid, forecast dashed',
     solidStorm.length >= withHistory.length && dashedStorm.length > 0],
+  /* The hourly auto-reload saves the reader's view first; without this the
+     refresh would silently dump them back at the basin every time. */
+  ['saved view is restored, not reset to the basin',
+    !!restoredCentre &&
+      Math.abs(restoredCentre.lat - SEEDED_VIEW.lat) < 0.5 &&
+      Math.abs(restoredCentre.lng - SEEDED_VIEW.lng) < 0.5 &&
+      restoredZoom === SEEDED_VIEW.zoom],
+  ['saved basemap choice is restored', restoredBase],
+  ['view is written back for the next reload',
+    (() => {
+      const saved = JSON.parse(window.sessionStorage.getItem('asset-map-view') ?? 'null');
+      return !!saved && typeof saved.zoom === 'number' && Array.isArray(saved.overlays);
+    })()],
 ];
 let ok = true;
 for (const [name, pass] of checks) {

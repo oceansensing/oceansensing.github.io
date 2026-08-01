@@ -1,5 +1,5 @@
 {
-  "_comment": "Representative ocean colours per basemap with the share of water each covers, used by scripts/test-contrast.mjs. Regenerate with: npm run data:basemaps. Sampled from live Esri Ocean tiles and GEBCO WMS renders over the North Atlantic, Gulf and Caribbean; only blue-dominant (water) pixels are counted, since map features are drawn over water and land contrast is irrelevant to them.",
+  "_comment": "Representative ocean colours per basemap with the share of water each covers, checked against by scripts/test-contrast.mjs. Regenerate with: npm run data:basemaps (GEBCO renders its WMS on demand and can take several minutes). Only blue-dominant water pixels are counted \u2014 features are drawn over water, so land contrast is moot.",
   "basemaps": {
     "Bathymetry (Esri Ocean)": {
       "tone": "light",

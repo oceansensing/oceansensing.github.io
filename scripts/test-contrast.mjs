@@ -25,6 +25,21 @@ import fs from 'node:fs';
 const palette = JSON.parse(fs.readFileSync('src/data/map-palette.json', 'utf8'));
 const basemaps = JSON.parse(fs.readFileSync('src/data/basemap-ocean.json', 'utf8')).basemaps;
 
+/* Fail with something readable if the palette is the wrong shape — an older
+   sampler emitted bare colour strings instead of {colour, share} pairs, and
+   without this the first thing anyone sees is a TypeError deep in a colour
+   conversion. */
+for (const [name, info] of Object.entries(basemaps)) {
+  const bad = !Array.isArray(info?.ocean) || info.ocean.some((o) => typeof o?.colour !== 'string' || typeof o?.share !== 'number');
+  if (bad) {
+    console.error(
+      `FAIL  ${name}: basemap-ocean.json is not in the expected {colour, share} form.` +
+        '\n      Regenerate it with: npm run data:basemaps'
+    );
+    process.exit(1);
+  }
+}
+
 /* Separation a feature needs from the water behind it, and how much of that
    water it has to clear. Calibrated against colours already known to read
    well on both maps — the storm red, USV orange and glider magenta all clear
