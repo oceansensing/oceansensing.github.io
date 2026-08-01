@@ -159,6 +159,14 @@ import 'leaflet/dist/leaflet.css';
       })
       .catch(() => {});
 
+    const stamp = (t?: string) => (t ? `${t.slice(0, 16).replace('T', ' ')}Z` : 'unknown');
+    // "· 11 days" — how long the platform has been out at its last fix.
+    const elapsed = (from?: string, to?: string) => {
+      if (!from || !to) return '';
+      const days = Math.floor((Date.parse(to) - Date.parse(from)) / 86400000);
+      return Number.isFinite(days) && days >= 0 ? ` · day ${days + 1}` : '';
+    };
+
     // ---- storms and assets ----
     try {
       const data = await (await fetch('/map/ocean-assets.json')).json();
@@ -239,9 +247,17 @@ import 'leaflet/dist/leaflet.css';
         })
           .addTo(layer)
           .bindPopup(
-            `<strong>${a.id}</strong><br>${a.title ?? ''}<br>` +
-              `<span class="muted">${a.institution ?? ''}</span><br>` +
-              `${a.lat.toFixed(3)}, ${a.lon.toFixed(3)} · ${(a.time ?? '').slice(0, 16).replace('T', ' ')}Z<br>` +
+            `<strong>${a.id}</strong>` +
+              // many DAC datasets title themselves with their own id
+              (a.title && a.title !== a.id ? `<br>${a.title}` : '') +
+              (a.institution ? `<br><span class="muted">${a.institution}</span>` : '') +
+              `<dl>` +
+              (a.deployed
+                ? `<dt>Deployed</dt><dd>${stamp(a.deployed)}${elapsed(a.deployed, a.time)}</dd>`
+                : '') +
+              `<dt>Last fix</dt><dd>${stamp(a.time)}</dd>` +
+              `<dt>Position</dt><dd>${a.lat.toFixed(3)}, ${a.lon.toFixed(3)}</dd>` +
+              `</dl>` +
               `<a href="${a.info}">ERDDAP dataset</a>`
           );
       }
@@ -350,6 +366,25 @@ import 'leaflet/dist/leaflet.css';
 
   #asset-map :global(.leaflet-popup-content .muted) {
     color: var(--text-muted);
+  }
+
+  /* Deployment / last fix / position, as a compact label-value grid. */
+  #asset-map :global(.leaflet-popup-content dl) {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.1rem var(--space-sm);
+    margin-block: var(--space-xs);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+
+  #asset-map :global(.leaflet-popup-content dt) {
+    color: var(--text-muted);
+  }
+
+  #asset-map :global(.leaflet-popup-content dd) {
+    margin: 0;
+    white-space: nowrap;
   }
 
   #asset-map :global(.leaflet-control-attribution) {

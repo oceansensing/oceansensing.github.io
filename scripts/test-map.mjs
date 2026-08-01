@@ -52,6 +52,18 @@ await import('./' + path.join('..', 'dist', '_astro', bundle));
 await new Promise((r) => setTimeout(r, 1500));
 
 const host = document.getElementById('asset-map');
+
+// Open a marker popup for real, then read what it rendered.
+let popupHtml = '';
+const marker = [...host.querySelectorAll('path')].find(
+  (p) => p.getAttribute('fill') === '#f08c00' || p.getAttribute('fill') === '#e8368f'
+);
+if (marker) {
+  marker.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+  await new Promise((r) => setTimeout(r, 300));
+  popupHtml = host.querySelector('.leaflet-popup-content')?.innerHTML ?? '';
+}
+
 const status = document.getElementById('map-status').textContent;
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
@@ -62,6 +74,8 @@ const checks = [
   ['data pipeline completed', /assets reporting within/.test(status)],
   ['asset tracks drawn', host.querySelectorAll('path[stroke="#e8368f"], path[stroke="#f08c00"]').length >= assets.assets.length],
   ['glider colour is not the old teal', !host.querySelector('path[stroke="#0a7d8c"]')],
+  ['popup shows deployment date', popupHtml.includes('Deployed')],
+  ['popup links the dataset', /href="https?:[^"]*erddap[^"]*"/i.test(popupHtml)],
 ];
 let ok = true;
 for (const [name, pass] of checks) {
@@ -69,4 +83,5 @@ for (const [name, pass] of checks) {
   ok &&= pass;
 }
 console.log(`status: ${status}`);
+console.log('popup:', popupHtml.replace(/<[^>]+>/g,' | ').replace(/\s+/g,' ').trim().slice(0,240));
 process.exit(ok ? 0 : 1);

@@ -215,7 +215,7 @@ def latest_position(base: str, dataset_id: str) -> dict | None:
 
 
 def collect_erddap(base: str, kind: str, match: re.Pattern | None = None) -> list[dict]:
-    fields = 'datasetID,title,institution,maxTime'
+    fields = 'datasetID,title,institution,minTime,maxTime'
     try:
         table = get_json(f'{base}/tabledap/allDatasets.json?{fields}', timeout=120)['table']
     except Exception as exc:  # noqa: BLE001
@@ -237,6 +237,8 @@ def collect_erddap(base: str, kind: str, match: re.Pattern | None = None) -> lis
         candidates.append({
             'id': ds,
             'kind': kind,
+            # dataset start = when the platform went in the water
+            'deployed': row[idx['minTime']],
             'title': title,
             'institution': row[idx['institution']] or '',
             'info': f'{base}/info/{ds}/index.html',
