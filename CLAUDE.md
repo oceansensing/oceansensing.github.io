@@ -1,0 +1,129 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+```sh
+npm run dev          # dev server at localhost:4321
+npm run build        # production build into dist/
+npm run check        # astro check — type-checks .astro and .ts; must be 0 errors
+npm run data         # regenerate public/map/ocean-assets.json from NOAA/IOOS live
+npm run test:map     # headless test of the built map bundle
+npm run test:clock   # headless test of the built UTC clock
+```
+
+Both test scripts run against `dist/`, so **`npm run build` first** or they test
+stale code. There is no watch mode and no per-test filter — each script is a
+single file that prints one `ok`/`FAIL` line per check and exits non-zero on any
+failure.
+
+`npm run check` truncates long diagnostics when piped through `tail`; read the
+whole output or grep for `^- [0-9]+ error`.
+
+## Architecture
+
+Astro static site, deployed to GitHub Pages at oceansensing.org. Content is
+data-driven throughout: adding a paper, person, project, dataset, or CV line
+means editing a Markdown/YAML/BibTeX file, never layout code. `README.md` has
+the content-editing table for that.
+
+### Content layer
+
+`src/content.config.ts` defines ~20 collections through four loader kinds:
+
+- `glob()` — Markdown collections (`projects`, `people`, `news`, `observations`)
+- `file()` — YAML data (`presentations`, `datasets`, `software`, `interns`).
+  **The `file()` loader does not preserve YAML document order**, so pages that
+  care about order sort explicitly.
+- `bibtexLoader` (`src/lib/bibtexLoader.ts`) — parses `src/data/publications.bib`
+  with `@retorquere/bibtex-parser`. Must be called with `sentenceCase: false`
+  or the parser lowercases every title.
+- `cvSectionLoader(section)` (`src/lib/cvLoader.ts`) — one collection per CV
+  section, reading `src/data/cv/<person-id>/<section>.yaml` across every person
+  directory. `<person-id>` matches that person's file in `src/content/people/`,
+  which is what makes `/cv/<person-id>/` appear.
+
+### Styling
+
+Vanilla CSS with semantic tokens in `src/styles/tokens.css`. Light/dark comes
+from `prefers-color-scheme` **plus** a `data-theme` attribute override applied
+before first paint. Any theme-sensitive rule therefore needs both forms:
+
+```css
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) … }
+:root[data-theme='dark'] … 
+```
+
+Site metadata, navigation, and the author names bolded in citations live in
+`src/config.ts`.
+
+### JavaScript
+
+The site is near-zero-JS by intent. The exceptions are the theme toggle, the
+observation photo shuffle and lightbox, `AssetMap.astro`, and `UtcClock.astro`.
+Prefer no JS, but do not contort a design to avoid it.
+
+Astro inlines small component scripts into the page HTML and bundles larger ones
+into `dist/_astro/*.js`. `AssetMap` is large enough to be bundled; `UtcClock` is
+inlined. The two test harnesses locate their code accordingly — if a component
+crosses that threshold, its harness needs updating.
+
+### The map (`src/components/AssetMap.astro`)
+
+Leaflet, self-hosted from npm. Reads `public/map/ocean-assets.json`, plus
+`coastline.json` and `boundaries.json` (Natural Earth, RDP-simplified, committed).
+
+Vector layers carry a **`className`, never a colour** — CSS owns their stroke and
+fill so a theme switch restyles every path with no redraw. Adding a hardcoded
+`color:` to a Leaflet path breaks dark mode; `npm run test:map` asserts against
+this.
+
+Layer stacking is deliberate: currents render in a custom pane at z-index 250,
+between the basemap tiles (200) and the vectors (400), so platforms are never
+obscured whichever basemap is selected.
+
+The Leaflet map instance is hung on the container element as `_map`. Nothing on
+the page reads it; the test harness does, and it makes the map pokeable from the
+console.
+
+### Data pipeline (`scripts/fetch-ocean-assets.py`)
+
+Standard library only, so CI needs no Python dependencies. Aggregates NHC storms
+(via KMZ), NOAA PMEL saildrones, and IOOS gliders into one JSON. It runs
+**server-side because NHC and PMEL send no CORS headers** — a browser cannot read
+them directly. It also decimates ERDDAP queries server-side
+(`orderByClosest("time/1hours")`) to keep the payload small, and falls back to
+the previous file when a source is unreachable so an outage degrades to stale
+data rather than an empty map.
+
+`.github/workflows/deploy.yml` runs it hourly before the Astro build. **Nothing
+is committed by CI** — the data is fetched into the build, so the repo does not
+grow. A snapshot of `ocean-assets.json` is committed so local and offline builds
+work.
+
+### Known upstream quirks
+
+Both were found the hard way; do not re-derive them.
+
+- **The CDN in front of GitHub Pages regenerates the `Date` header on every
+  response while still counting `Age` up.** Adding the two double-counts. This
+  is why `UtcClock` uses `Date` alone. Covered by `test:clock`.
+- **A cache-busting query string does not force a fresh response** from GitHub
+  Pages — it answers `x-cache: HIT` regardless.
+
+## Verifying work
+
+Browser preview is often unavailable. When it is, verify by inspecting built
+HTML in `dist/`, or with a Node/jsdom harness — see `scripts/test-map.mjs` and
+`scripts/test-clock.mjs`, which execute the actual built bundles against real
+data rather than reimplementing the logic.
+
+A test that stubs away the condition it is meant to catch proves nothing: the
+clock's original harness passed while the clock was wrong, because it stubbed
+`Age: 0`. When adding a regression test, confirm it **fails** against the
+unfixed code.
+
+After deploying, GitHub Pages serves stale HTML for a while — poll with a
+cache-busting query parameter, and check for a string that survives
+minification (comments do not).
