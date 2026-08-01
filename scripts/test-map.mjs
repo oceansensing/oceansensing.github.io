@@ -370,6 +370,68 @@ const driftFar = await driftAt(5);
 const driftRatio =
   driftNear > 0 && driftFar > 0 ? Math.max(driftNear / driftFar, driftFar / driftNear) : Infinity;
 
+/* Measuring. Two legs from a known start, checked against distances and
+   bearings computed independently below — a transposed sin/cos in the
+   bearing formula gives numbers that look perfectly reasonable. */
+const measureButton = host.querySelector('.measure-control a');
+const measureReadout = host.querySelector('.measure-readout');
+const clickMap = (lat, lng) => host._map.fire('click', { latlng: window.L ? window.L.latLng(lat, lng) : { lat, lng } });
+
+measureButton?.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+const measureArmed = measureButton?.getAttribute('aria-pressed') === 'true';
+const beforeMeasure = host.querySelectorAll('path').length;
+// Norfolk -> Bermuda -> Halifax, roughly.
+for (const [lat, lng] of [[36.9, -76.3], [32.3, -64.8], [44.6, -63.6]]) clickMap(lat, lng);
+await new Promise((r) => setTimeout(r, 200));
+const measureText = measureReadout?.textContent ?? '';
+const measureDrew = host.querySelectorAll('path').length > beforeMeasure;
+
+// Independent great-circle maths, deliberately not the component's.
+const toRad = (d) => (d * Math.PI) / 180;
+const haversine = (a, b) => {
+  const R = 6371008.8;
+  const dLat = toRad(b[0] - a[0]);
+  const dLon = toRad(b[1] - a[1]);
+  const h = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+};
+const legs = haversine([36.9, -76.3], [32.3, -64.8]) + haversine([32.3, -64.8], [44.6, -63.6]);
+const shownKm = Number((measureText.match(/([\d.]+)\s*km/) || [])[1]);
+const shownNm = Number((measureText.match(/([\d.]+)\s*nm/) || [])[1]);
+const shownBearing = Number((measureText.match(/(\d+)°T/) || [])[1]);
+
+// Independent initial great-circle bearing, Norfolk -> Halifax.
+const bearing = (a, b) => {
+  const [φ1, φ2, dλ] = [toRad(a[0]), toRad(b[0]), toRad(b[1] - a[1])];
+  const y = Math.sin(dλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(dλ);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+};
+const expectedBearing = bearing([36.9, -76.3], [44.6, -63.6]);
+
+// Escape must put the map back the way it was.
+document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+await new Promise((r) => setTimeout(r, 100));
+const measureCleared = (measureReadout?.textContent ?? '') === '' &&
+  measureButton?.getAttribute('aria-pressed') === 'false';
+
+/* The right-click readout. The depth lookup is stubbed; what matters here is
+   that a popup opens with the position and the current already filled from
+   the loaded grid, without waiting on the network. */
+let identifyUrl = null;
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (u, ...rest) => {
+  if (String(u).includes('ImageServer/identify')) {
+    identifyUrl = String(u);
+    return { json: async () => ({ value: '-2431.5' }) };
+  }
+  return realFetch(u, ...rest);
+};
+host._map.fire('contextmenu', { latlng: window.L.latLng(36.5, -74.5) });
+await new Promise((r) => setTimeout(r, 300));
+const readoutHtml = host.querySelector('.point-readout .leaflet-popup-content')?.innerHTML ?? '';
+
 const status = document.getElementById('map-status').textContent;
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
@@ -496,6 +558,31 @@ const checks = [
   ['particles move more than a sub-pixel each frame', medianSegment > 0.4],
   ['drift barely changes with zoom', driftRatio < 4],
   ['particles are drawn in the checked palette', drawn.styles.size > 0 && paletteUsed],
+  // Measuring, and the point readout.
+  ['measure button arms the tool', measureArmed],
+  ['measuring draws a line', measureDrew],
+  ['measured distance matches an independent great-circle sum',
+    Number.isFinite(shownKm) && Math.abs(shownKm - legs / 1000) / (legs / 1000) < 0.02],
+  ['distance is given in nautical miles too',
+    Number.isFinite(shownNm) && Math.abs(shownNm - legs / 1852) / (legs / 1852) < 0.02],
+  /* The value, not just the format: a transposed sin/cos still prints a
+     plausible "123°T", and the format-only check this replaced sailed past
+     exactly that mutation. */
+  ['bearing matches an independent calculation',
+    Number.isFinite(shownBearing) &&
+      Math.abs(((shownBearing - expectedBearing + 540) % 360) - 180) < 2],
+  ['escape clears the measurement', measureCleared],
+  ['right-click opens a readout with the position',
+    /36\.5000°N/.test(readoutHtml) && /74\.5000°W/.test(readoutHtml)],
+  ['the readout carries the current from the loaded grid, with no request',
+    /Surface current/.test(readoutHtml) && /m\/s toward/.test(readoutHtml)],
+  ['the readout asks NOAA for the depth at that point',
+    (() => {
+      // The geometry is percent-encoded JSON, so decode before matching.
+      if (!identifyUrl) return false;
+      const geom = decodeURIComponent(identifyUrl);
+      return geom.includes('"y":36.5') && geom.includes('"x":-74.5');
+    })()],
   ['view is written back for the next reload',
     (() => {
       const saved = JSON.parse(window.sessionStorage.getItem('asset-map-view') ?? 'null');

@@ -47,8 +47,10 @@ import 'leaflet/dist/leaflet.css';
      storms under the common forms of colour blindness. */
   import palette from '../data/map-palette.json';
   import { stormLines, stormLabel, NO_STORMS } from '../lib/stormStatus';
-  const { storm: STORM, usv: USV, glider: GLIDER, argo: ARGO, argoEdge: ARGO_EDGE } =
-    palette.features;
+  const {
+    storm: STORM, usv: USV, glider: GLIDER,
+    argo: ARGO, argoEdge: ARGO_EDGE, measure: MEASURE,
+  } = palette.features;
 
   const el = document.getElementById('asset-map');
   const status = document.getElementById('map-status');
@@ -577,6 +579,196 @@ import 'leaflet/dist/leaflet.css';
 
     L.control.scale({ imperial: false }).addTo(map);
 
+    /* ---- measuring, and the point readout ----------------------------- */
+
+    const measured = L.layerGroup().addTo(map);
+    let measuring = false;
+    let points: L.LatLng[] = [];
+    let readout: HTMLElement | null = null;
+
+    const drawMeasurement = () => {
+      measured.clearLayers();
+      if (!points.length) return;
+
+      if (points.length > 1) {
+        /* A light halo under a dark line, so the measurement reads on the
+           pale Esri basemap and the dark GEBCO one alike. The halo is an
+           outline, themed in CSS like the track casings rather than gated
+           as a feature colour. */
+        L.polyline(points, { className: 'map-measure-halo', weight: 6, lineCap: 'round' }).addTo(measured);
+        L.polyline(points, {
+          color: MEASURE,
+          weight: 2.5,
+          dashArray: '7,5',
+          lineCap: 'round',
+        }).addTo(measured);
+      }
+
+      points.forEach((point, i) => {
+        L.circleMarker(point, {
+          radius: 4,
+          color: MEASURE,
+          weight: 2,
+          fillColor: '#ffffff',
+          fillOpacity: 1,
+        })
+          .addTo(measured)
+          .bindTooltip(
+            i === 0
+              ? `Start · ${coordText(point)}`
+              : `Leg ${i}: ${spanText(points[i - 1]!.distanceTo(point))} · ` +
+                `${bearingFrom(points[i - 1]!, point).toFixed(0)}°T<br>${coordText(point)}`,
+            { direction: 'top' }
+          );
+      });
+
+      if (readout) {
+        const total = points.reduce(
+          (sum, point, i) => (i ? sum + points[i - 1]!.distanceTo(point) : 0),
+          0
+        );
+        const legs = points.length - 1;
+        readout.textContent =
+          legs < 1
+            ? 'Click a second point'
+            : `${spanText(total)}${legs > 1 ? ` over ${legs} legs` : ''} · ` +
+              `${bearingFrom(points[0]!, points[points.length - 1]!).toFixed(0)}°T direct`;
+      }
+    };
+
+    const setMeasuring = (on: boolean) => {
+      measuring = on;
+      host.style.cursor = on ? 'crosshair' : '';
+      if (!on) {
+        points = [];
+        measured.clearLayers();
+      }
+      if (readout) readout.textContent = on ? 'Click a point to start' : '';
+      if (button) {
+        button.setAttribute('aria-pressed', String(on));
+        button.classList.toggle('active', on);
+      }
+    };
+
+    let button: HTMLAnchorElement | null = null;
+    const Measure = L.Control.extend({
+      options: { position: 'topleft' },
+      onAdd() {
+        const bar = L.DomUtil.create('div', 'leaflet-bar measure-control');
+        button = L.DomUtil.create('a', '', bar) as HTMLAnchorElement;
+        button.href = '#';
+        button.textContent = '📏';
+        button.title = 'Measure distance and bearing';
+        button.setAttribute('role', 'button');
+        button.setAttribute('aria-label', 'Measure distance and bearing');
+        button.setAttribute('aria-pressed', 'false');
+        readout = L.DomUtil.create('span', 'measure-readout', bar);
+        L.DomEvent.on(button, 'click', (e) => {
+          L.DomEvent.stop(e);
+          setMeasuring(!measuring);
+        });
+        L.DomEvent.disableClickPropagation(bar);
+        return bar;
+      },
+    });
+    map.addControl(new Measure());
+
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      if (!measuring) return;
+      points.push(e.latlng);
+      drawMeasurement();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && measuring) setMeasuring(false);
+    });
+
+    /* Right-click, or a long press on a touch screen, reports the position.
+       Leaflet raises contextmenu for the mouse; iOS Safari does not raise it
+       reliably from a long press, so touch is timed here instead. */
+    const describePoint = (ll: L.LatLng) => {
+      const flow = currentAt(ll);
+      const popup = L.popup({ className: 'point-readout' })
+        .setLatLng(ll)
+        .setContent(
+          `<strong>${coordText(ll)}</strong><dl>` +
+            `<dt>Seafloor</dt><dd data-depth>fetching…</dd>` +
+            (flow
+              ? `<dt>Surface current</dt><dd>${flow.speed.toFixed(2)} m/s toward ` +
+                `${flow.toward.toFixed(0)}°T</dd>`
+              : `<dt>Surface current</dt><dd>no data here</dd>`) +
+            `</dl>`
+        )
+        .openOn(map);
+
+      /* NOAA's DEM mosaic, queried a point at a time. It is the only
+         bathymetry service reached from the browser that sends CORS —
+         GEBCO's WMS advertises GetFeatureInfo but returns nothing, and
+         neither HYCOM nor OpenTopoData allows cross-origin reads. */
+      const lon = ((((ll.lng + 180) % 360) + 360) % 360) - 180;
+      const query =
+        'https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_global_mosaic/ImageServer/identify' +
+        `?geometry=${encodeURIComponent(JSON.stringify({ x: lon, y: ll.lat, spatialReference: { wkid: 4326 } }))}` +
+        '&geometryType=esriGeometryPoint&returnGeometry=false&f=json';
+
+      fetch(query)
+        .then((r) => r.json())
+        .then((info) => {
+          const cell = popup.getElement()?.querySelector('[data-depth]');
+          if (!cell) return;
+          const value = Number(info?.value);
+          if (!Number.isFinite(value)) {
+            cell.textContent = 'no data';
+            return;
+          }
+          cell.textContent =
+            value < 0
+              ? `${Math.round(-value).toLocaleString()} m deep`
+              : `${Math.round(value).toLocaleString()} m above sea level`;
+        })
+        .catch(() => {
+          const cell = popup.getElement()?.querySelector('[data-depth]');
+          if (cell) cell.textContent = 'unavailable';
+        });
+    };
+
+    map.on('contextmenu', (e: L.LeafletMouseEvent) => {
+      if (measuring) return;
+      describePoint(e.latlng);
+    });
+
+    let pressTimer: number | undefined;
+    let pressStart: { x: number; y: number } | null = null;
+    const container = map.getContainer();
+    container.addEventListener(
+      'touchstart',
+      (e: TouchEvent) => {
+        if (measuring || e.touches.length !== 1) return;
+        const touch = e.touches[0]!;
+        pressStart = { x: touch.clientX, y: touch.clientY };
+        pressTimer = window.setTimeout(() => {
+          const point = map.mouseEventToLatLng({
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+          } as MouseEvent);
+          describePoint(point);
+        }, 550);
+      },
+      { passive: true }
+    );
+    const cancelPress = (e?: TouchEvent) => {
+      // A drag is a pan, not a press.
+      if (e && pressStart && e.touches.length === 1) {
+        const touch = e.touches[0]!;
+        if (Math.hypot(touch.clientX - pressStart.x, touch.clientY - pressStart.y) < 10) return;
+      }
+      window.clearTimeout(pressTimer);
+      pressStart = null;
+    };
+    container.addEventListener('touchmove', cancelPress, { passive: true });
+    container.addEventListener('touchend', () => cancelPress(), { passive: true });
+    container.addEventListener('touchcancel', () => cancelPress(), { passive: true });
+
     // View toggle: the Atlantic basin vs everything currently reporting.
     const Views = L.Control.extend({
       options: { position: 'topleft' },
@@ -752,6 +944,52 @@ import 'leaflet/dist/leaflet.css';
       const order = ['storms', 'assets', 'argo', 'updated'];
       const line = order.map((k) => statusParts[k]).filter(Boolean).join(' · ');
       if (line) status.textContent = line;
+    };
+
+    const rad = Math.PI / 180;
+
+    /* Great-circle initial bearing. A rhumb line would be the one to steer,
+       but the distance beside it is great-circle, and quoting the two from
+       different geometries invites the reader to combine them. */
+    const bearingFrom = (a: L.LatLng, b: L.LatLng) => {
+      const φ1 = a.lat * rad;
+      const φ2 = b.lat * rad;
+      const dλ = (b.lng - a.lng) * rad;
+      const y = Math.sin(dλ) * Math.cos(φ2);
+      const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(dλ);
+      return (Math.atan2(y, x) / rad + 360) % 360;
+    };
+
+    // Kilometres and nautical miles: the chart unit belongs on an ocean map.
+    const spanText = (metres: number) => {
+      const km = metres / 1000;
+      const nm = metres / 1852;
+      const round = (v: number) => (v < 10 ? v.toFixed(2) : v < 100 ? v.toFixed(1) : Math.round(v));
+      return `${round(km)} km · ${round(nm)} nm`;
+    };
+
+    const coordText = (ll: L.LatLng) => {
+      const lon = ((((ll.lng + 180) % 360) + 360) % 360) - 180;
+      return (
+        `${Math.abs(ll.lat).toFixed(4)}°${ll.lat >= 0 ? 'N' : 'S'}, ` +
+        `${Math.abs(lon).toFixed(4)}°${lon >= 0 ? 'E' : 'W'}`
+      );
+    };
+
+    /* The surface current under a point, read out of whichever grid is
+       loaded — no request, and it is the same field the particles follow. */
+    const currentAt = (ll: L.LatLng) => {
+      const grid = (flowReady as unknown as { options?: { data?: any } })?.options?.data;
+      const head = grid?.[0]?.header;
+      if (!head) return null;
+      const i = Math.round(((((ll.lng - head.lo1) % 360) + 360) % 360) / head.dx);
+      const j = Math.round((head.la1 - ll.lat) / head.dy);
+      if (i < 0 || i >= head.nx || j < 0 || j >= head.ny) return null;
+      const k = j * head.nx + i;
+      const u = grid[0].data[k];
+      const v = grid[1].data[k];
+      if (typeof u !== 'number' || typeof v !== 'number') return null;
+      return { speed: Math.hypot(u, v), toward: (Math.atan2(u, v) / rad + 360) % 360, deg: head.dx };
     };
 
     const stamp = (t?: string) => (t ? `${t.slice(0, 16).replace('T', ' ')}Z` : 'unknown');
@@ -947,6 +1185,7 @@ import 'leaflet/dist/leaflet.css';
     --map-asset-edge: #10161d;
     --map-tiles: none;
     --map-currents: saturate(0.6);
+    --map-measure-halo: #ffffff;
     --map-currents-blend: multiply;
 
     height: clamp(24rem, 62vh, 40rem);
@@ -972,6 +1211,7 @@ import 'leaflet/dist/leaflet.css';
       --map-tiles: brightness(0.62) saturate(0.85) contrast(1.08);
       --map-currents: saturate(0.55) brightness(1.15);
       --map-currents-blend: multiply;
+      --map-measure-halo: #e8eef5;
     }
   }
 
@@ -987,6 +1227,7 @@ import 'leaflet/dist/leaflet.css';
     --map-tiles: brightness(0.62) saturate(0.85) contrast(1.08);
     --map-currents: saturate(0.55) brightness(1.15);
     --map-currents-blend: multiply;
+    --map-measure-halo: #ffffff;
   }
 
   /* Only light basemaps get dimmed in dark mode — see markBasemapTone. */
@@ -1026,6 +1267,53 @@ import 'leaflet/dist/leaflet.css';
 
   #asset-map :global(.map-asset) {
     stroke: var(--map-asset-edge);
+  }
+
+  /* The measuring line's halo. An outline rather than a feature colour, so
+     it is themed here like the track casings instead of being gated — it is
+     only ever seen as a fringe around the dark line it sits under. */
+  #asset-map :global(.map-measure-halo) {
+    stroke: var(--map-measure-halo, #ffffff);
+    stroke-opacity: 0.85;
+    fill: none;
+  }
+
+  #asset-map :global(.measure-control) {
+    display: flex;
+    align-items: stretch;
+  }
+
+  #asset-map :global(.measure-control a) {
+    font-size: 1rem;
+  }
+
+  #asset-map :global(.measure-control a.active) {
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+
+  /* Only takes space once there is something to say. */
+  #asset-map :global(.measure-readout:not(:empty)) {
+    display: flex;
+    align-items: center;
+    padding: 0 var(--space-xs);
+    background: var(--bg);
+    color: var(--text);
+    border-left: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    white-space: nowrap;
+  }
+
+  #asset-map :global(.point-readout dl) {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 0 var(--space-xs);
+    margin: var(--space-2xs) 0 0;
+  }
+
+  #asset-map :global(.point-readout dt) {
+    color: var(--text-muted);
   }
 
   /* Desaturated so the field reads as texture behind the platforms rather

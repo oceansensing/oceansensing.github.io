@@ -98,6 +98,15 @@ a new build lands, keeping your basemap, layers and position.
   never observed. Worth a look on the live site, along with whether the
   particles now read as prominently as intended.
 
+### Depends on someone else's service
+
+- **Seafloor depth in the point readout** comes from NOAA's ArcGIS
+  ImageServer DEM mosaic, live, per click. It is the only bathymetry service
+  reachable from a browser that sends CORS. If it goes away the readout says
+  "unavailable" and everything else still works; the fallback would be
+  pre-generating ETOPO tiles, about 35 MB, which is why it was worth checking
+  for a live source first.
+
 ## Conventions worth keeping
 
 - Content is data. Adding a paper, person, project, dataset, or CV line should

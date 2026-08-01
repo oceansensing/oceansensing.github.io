@@ -350,6 +350,39 @@ runs away, which is exactly how the acceleration shipped. Trail length is age
 × speed, so a runaway speed and an over-long lifetime look identical on
 screen; measure the speed before touching `particleAge`.
 
+### Measuring, and the point readout
+
+Two tools on the hurricane map, both in `AssetMap.astro`.
+
+**Measure** (📏 in the top-left bar) takes clicks and reports great-circle
+distance per leg and overall, in **km and nautical miles**, with the initial
+bearing in degrees true. Escape clears it. Distance and bearing are both
+great-circle: a rhumb line is what you would steer, but quoting the two from
+different geometries invites the reader to combine them.
+
+**Right-click, or long-press on touch**, reports position, seafloor depth and
+the surface current. Leaflet raises `contextmenu` for the mouse; **iOS Safari
+does not raise it reliably from a long press**, so touch is timed manually
+(550 ms, cancelled by a drag of more than 10 px so a pan is not a press).
+
+The current comes out of whichever grid is already loaded — no request, and
+it is the same field the particles follow. **Depth is the only part that
+needs the network**, and the source was not free to choose: GEBCO's WMS
+advertises `GetFeatureInfo` on a queryable layer but returns "no results" in
+every geometry; OpenTopoData answers correctly but sends no
+`Access-Control-Allow-Origin`; HYCOM's THREDDS sends none either. NOAA's
+**ArcGIS ImageServer DEM mosaic** does, and answers a point in under a
+second, which removed a planned 35 MB of pre-generated bathymetry tiles.
+Depth fills in asynchronously, so a slow or failed lookup never delays the
+position.
+
+The measuring line is **dark with a light halo**. Charcoal was the only
+candidate clearing both bathymetries while staying clear of every feature
+colour. The halo is an outline, so like the track casings it is themed in CSS
+rather than gated — and note it needs its variable in **all three** theme
+blocks; it was first added to only the dark ones, which left light mode
+drawing a stroke with no colour.
+
 ### Hourly self-refresh
 
 The map page reloads itself when a newer build lands, because the storm
