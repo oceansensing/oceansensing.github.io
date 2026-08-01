@@ -1,0 +1,16 @@
+{
+  "_comment": "Every colour the asset map draws in. Single source of truth: AssetMap.astro imports this and scripts/test-contrast.mjs checks each entry against the sampled ocean colours of every basemap in basemap-ocean.json. Add a colour here, not in the component.",
+  "features": {
+    "storm": "#d1495b",
+    "usv": "#f08c00",
+    "glider": "#e8368f"
+  },
+  "_currents": "Warm pale amber, slow to fast. Amber rather than blue because the two bathymetries are opposite in tone \u2014 Esri Ocean is light, GEBCO dark \u2014 and no blue clears both: any blue pale enough to show on GEBCO's navy lands inside Esri's ocean, and GEBCO's own water runs blue through cyan to the pale mint it paints shallow banks. Amber sits outside that whole range, so one ramp serves both maps and there is no basemap switching to get wrong. Kept pale rather than saturated so the particles are not mistaken for the orange USV markers.",
+  "currents": [
+    "#ecd7ab",
+    "#f1dfbb",
+    "#f5e6ca",
+    "#f9edd9",
+    "#fcf2e3"
+  ]
+}

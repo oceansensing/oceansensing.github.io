@@ -1,0 +1,99 @@
+{
+  "_comment": "Representative ocean colours per basemap with the share of water each covers, used by scripts/test-contrast.mjs. Regenerate with: npm run data:basemaps. Sampled from live Esri Ocean tiles and GEBCO WMS renders over the North Atlantic, Gulf and Caribbean; only blue-dominant (water) pixels are counted, since map features are drawn over water and land contrast is irrelevant to them.",
+  "basemaps": {
+    "Bathymetry (Esri Ocean)": {
+      "tone": "light",
+      "ocean": [
+        {
+          "colour": "#90b0d0",
+          "share": 0.315
+        },
+        {
+          "colour": "#b0d0f0",
+          "share": 0.293
+        },
+        {
+          "colour": "#7090d0",
+          "share": 0.1627
+        },
+        {
+          "colour": "#70b0d0",
+          "share": 0.1254
+        },
+        {
+          "colour": "#d0d0f0",
+          "share": 0.0279
+        },
+        {
+          "colour": "#b0d0d0",
+          "share": 0.0199
+        },
+        {
+          "colour": "#90b0f0",
+          "share": 0.0177
+        },
+        {
+          "colour": "#d0d0d0",
+          "share": 0.0119
+        },
+        {
+          "colour": "#d0f0f0",
+          "share": 0.0109
+        }
+      ]
+    },
+    "Bathymetry (GEBCO)": {
+      "tone": "dark",
+      "ocean": [
+        {
+          "colour": "#305090",
+          "share": 0.3226
+        },
+        {
+          "colour": "#3070b0",
+          "share": 0.1563
+        },
+        {
+          "colour": "#b0f0d0",
+          "share": 0.0782
+        },
+        {
+          "colour": "#3090b0",
+          "share": 0.0781
+        },
+        {
+          "colour": "#307090",
+          "share": 0.0732
+        },
+        {
+          "colour": "#305070",
+          "share": 0.0424
+        },
+        {
+          "colour": "#70d090",
+          "share": 0.0248
+        },
+        {
+          "colour": "#50b0d0",
+          "share": 0.0229
+        },
+        {
+          "colour": "#90d0d0",
+          "share": 0.0207
+        },
+        {
+          "colour": "#90d0b0",
+          "share": 0.0188
+        },
+        {
+          "colour": "#70d0d0",
+          "share": 0.016
+        },
+        {
+          "colour": "#105070",
+          "share": 0.0146
+        }
+      ]
+    }
+  }
+}

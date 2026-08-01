@@ -5,13 +5,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
-npm run verify       # build + check + check:docs + test:map + test:clock
+npm run verify       # build + check + check:docs + test:contrast + test:map + test:clock
 npm run dev          # dev server at localhost:4321
 npm run build        # production build into dist/
 npm run check        # astro check — type-checks .astro and .ts; must be 0 errors
 npm run check:docs   # docs reference real scripts, real paths, the right URL
 npm run data         # regenerate public/map/ocean-assets.json from NOAA/IOOS live
 npm run data:currents # regenerate public/map/currents.json from HYCOM/Navy ESPC
+npm run data:basemaps # re-sample basemap ocean colours (needs Pillow; slow, GEBCO's WMS)
+npm run test:contrast # map colours stay visible on both bathymetries
 npm run test:map     # headless test of the built map bundle
 npm run test:clock   # headless test of the built UTC clock
 ```
@@ -116,6 +118,28 @@ data rather than an empty map.
 is committed by CI** — the data is fetched into the build, so the repo does not
 grow. A snapshot of `ocean-assets.json` is committed so local and offline builds
 work.
+
+### Map colour, and the contrast gate
+
+**Never inline a colour in `AssetMap.astro`.** They live in
+`src/data/map-palette.json`, which the component imports and
+`npm run test:contrast` checks — a hardcoded colour is invisible to the gate.
+
+The map offers two bathymetries of opposite tone: Esri Ocean is light (ocean
+luminance ~0.33) and GEBCO is dark (~0.10, though it paints shallow banks a
+pale mint). A colour that reads on one can vanish on the other, which is what
+happened to the first pass at the current particles.
+
+The gate uses **CIEDE2000 distance, not WCAG contrast ratio**. WCAG compares
+luminance only and would fail the storm red and glider magenta on both maps
+despite both being obvious — their separation is hue. CIE76 is the easy
+substitute but understates differences in exactly the blue region these
+backgrounds occupy. It also judges by **prevalence-weighted coverage** rather
+than worst case, so one uncommon water tone cannot veto a colour that is
+clear over the rest of the ocean.
+
+Water palettes are sampled offline into `src/data/basemap-ocean.json`, so the
+gate needs no network. Re-run `npm run data:basemaps` if a basemap changes.
 
 ### Surface currents
 

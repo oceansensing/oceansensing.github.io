@@ -38,12 +38,14 @@ import 'leaflet/dist/leaflet.css';
     [45, -20],
   ];
 
-  // Magenta rather than teal for gliders: teal vanishes into GEBCO's
-  // blue-green, and magenta stays separable from the orange USVs and the
-  // red storms under the common forms of colour blindness.
-  const GLIDER = '#e8368f';
-  const USV = '#f08c00';
-  const STORM = '#d1495b';
+  /* Every colour the map draws in lives in one file, which
+     scripts/test-contrast.mjs checks against the sampled water colours of
+     both bathymetries. Do not inline a colour here — the gate cannot see it.
+     Magenta for gliders rather than teal: teal vanishes into GEBCO's
+     blue-green, and magenta stays separable from the orange USVs and the red
+     storms under the common forms of colour blindness. */
+  import palette from '../data/map-palette.json';
+  const { storm: STORM, usv: USV, glider: GLIDER } = palette.features;
 
   const el = document.getElementById('asset-map');
   const status = document.getElementById('map-status');
@@ -139,8 +141,13 @@ import 'leaflet/dist/leaflet.css';
 
     Promise.all([fetch('/map/currents.json').then((r) => r.json()), loadPlugin()])
       .then(([grid]) => {
+        // Name the run in the attribution: ESPC publishes once a day at 12Z,
+        // so this is how a reader can tell how fresh the field actually is.
+        const run = grid?.[0]?.header?.modelRun?.slice(0, 16).replace('T', ' ');
         flowReady = L.velocityLayer({
           data: grid,
+          attribution:
+            'Currents: US Navy ESPC-D-V02' + (run ? ` — ${run}Z run` : ''),
           paneName: 'currents',
           displayValues: false,
           /* Currents run an order of magnitude slower than wind, so the
@@ -151,10 +158,12 @@ import 'leaflet/dist/leaflet.css';
           velocityScale: 0.08,
           minVelocity: 0,
           maxVelocity: 1.5,
-          colorScale: ['#dfe9f2', '#bcd6ea', '#93c0e0', '#6aa8d6', '#4b91c8'],
-          particleAge: 64,
-          particleMultiplier: 1 / 260,
-          lineWidth: 1.1,
+          colorScale: palette.currents,
+          // Denser, longer-lived and thicker than the plugin's wind defaults:
+          // ocean particles move slowly, so they need weight to register.
+          particleAge: 90,
+          particleMultiplier: 1 / 140,
+          lineWidth: 2.2,
           frameRate: 18,
         });
         flow.addLayer(flowReady);
@@ -299,6 +308,27 @@ import 'leaflet/dist/leaflet.css';
             dashArray: '5,4',
           }).addTo(storms);
         }
+        /* Observed track, drawn solid against the dashed forecast: solid is
+           where it has been, dashed is where it is going. Same casing as the
+           glider and USV tracks, so all three read as one kind of thing. */
+        if (s.history?.length > 1) {
+          const past = flip(s.history);
+          L.polyline(past, {
+            weight: 4.5,
+            lineCap: 'round',
+            lineJoin: 'round',
+            className: 'map-casing',
+          }).addTo(storms);
+          L.polyline(past, {
+            color: STORM,
+            weight: 2.5,
+            opacity: 0.95,
+            lineCap: 'round',
+            lineJoin: 'round',
+          })
+            .addTo(storms)
+            .bindPopup(`<strong>${s.name}</strong><br>Observed track, last ${data.historyDays} days`);
+        }
         if (typeof s.lat === 'number' && typeof s.lon === 'number') {
           pts.push([s.lat, s.lon]);
           stormAt.set(s.id, [s.lat, s.lon]);
@@ -363,7 +393,7 @@ import 'leaflet/dist/leaflet.css';
             lineJoin: 'round',
           })
             .addTo(layer)
-            .bindPopup(`<strong>${a.id}</strong><br>Track, last ${data.activeWindowDays} days`);
+            .bindPopup(`<strong>${a.id}</strong><br>Track, last ${data.historyDays} days`);
         }
         L.circleMarker([a.lat, a.lon], {
           radius: isUsv ? 6 : 4.5,
@@ -397,7 +427,7 @@ import 'leaflet/dist/leaflet.css';
         const when = (data.updated ?? '').slice(0, 16).replace('T', ' ');
         status.innerHTML =
           `${s} active storm${s === 1 ? '' : 's'} · ${n} assets reporting within ` +
-          `${data.activeWindowDays} days · updated ${when}Z`;
+          `${data.historyDays} days · updated ${when}Z`;
       }
     } catch {
       if (status) status.textContent = 'Asset data unavailable.';
@@ -561,7 +591,7 @@ import 'leaflet/dist/leaflet.css';
   .key.current::before {
     border-radius: 0.15em;
     width: 1.4em;
-    background: linear-gradient(90deg, #f2eddc, #c9c66a, #4a7a34);
+    background: linear-gradient(90deg, #ecd7ab, #f5e6ca, #fcf2e3);
   }
 
   /* Leaflet's chrome, matched to the site's tokens in both themes. */

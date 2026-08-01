@@ -116,6 +116,14 @@ const currentAt = (lat, lon) => {
 const [gsU, gsV] = currentAt(35.5, -74.5);   // Gulf Stream off Hatteras
 const [landU] = currentAt(32.5, -83.5);      // inland Georgia
 
+/* Storm history is solid; the forecast is dashed. Distinguishing them by the
+   dash attribute is what proves the observed track is actually drawn rather
+   than the forecast being counted twice. */
+const stormPaths = [...host.querySelectorAll('path[stroke="#d1495b"]')];
+const solidStorm = stormPaths.filter((p) => !p.getAttribute('stroke-dasharray'));
+const dashedStorm = stormPaths.filter((p) => p.getAttribute('stroke-dasharray'));
+const withHistory = assets.storms.filter((s) => (s.history?.length ?? 0) > 1);
+
 const status = document.getElementById('map-status').textContent;
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
@@ -150,6 +158,11 @@ const checks = [
   ['currents are not upside down (Gulf Stream runs NE, fast)',
     gsU > 0.1 && gsV > 0.4 && Math.hypot(gsU, gsV) > 0.6],
   ['currents mask land', landU === null],
+  // One shared window drives storm history, glider tracks and USV tracks.
+  ['history window is published once', typeof assets.historyDays === 'number' && !('activeWindowDays' in assets)],
+  ['storms carry observed history', withHistory.length === assets.storms.length],
+  ['observed storm track drawn solid, forecast dashed',
+    solidStorm.length >= withHistory.length && dashedStorm.length > 0],
 ];
 let ok = true;
 for (const [name, pass] of checks) {

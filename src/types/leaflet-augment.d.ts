@@ -29,6 +29,7 @@ declare module 'leaflet' {
     lineWidth?: number;
     frameRate?: number;
     opacity?: number;
+    attribution?: string;
   }
 
   function velocityLayer(options: VelocityLayerOptions): Layer;

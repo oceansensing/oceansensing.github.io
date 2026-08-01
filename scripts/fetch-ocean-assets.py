@@ -34,8 +34,11 @@ NHC_STORMS = 'https://www.nhc.noaa.gov/CurrentStorms.json'
 PMEL = 'https://data.pmel.noaa.gov/pmel/erddap'
 IOOS = 'https://gliders.ioos.us/erddap'
 
-# A dataset counts as active if it has reported within this window.
-ACTIVE_DAYS = 5
+# The trailing window, and the single knob for it. Governs every asset the
+# map draws: how much glider and USV track is fetched, how far back a storm's
+# observed path is drawn, and how recently a dataset must have reported to
+# count as active. Change it here and the whole map follows.
+HISTORY_DAYS = 5
 UA = {'User-Agent': 'oceansensing.org asset map (github.com/oceansensing)'}
 NOW = datetime.now(timezone.utc)
 
@@ -61,7 +64,7 @@ def parse_time(value: str | None) -> datetime | None:
 
 def is_active(max_time: str | None) -> bool:
     t = parse_time(max_time)
-    return bool(t and NOW - t < timedelta(days=ACTIVE_DAYS))
+    return bool(t and NOW - t < timedelta(days=HISTORY_DAYS))
 
 
 # --------------------------------------------------------------------------
@@ -128,6 +131,47 @@ def simplify(points: list[list[float]], tol: float = 0.02) -> list[list[float]]:
     return [p for p, k in zip(points, keep) if k]
 
 
+def best_track(kmz_url: str) -> list[list[float]]:
+    """Where the storm has actually been, over the last HISTORY_DAYS.
+
+    The best-track KMZ carries one placemark per synoptic hour, each with an
+    <atcfdtg> stamp (YYYYMMDDHH) alongside its position — so unlike the
+    forecast KMZ this one can be trimmed to the window rather than drawn
+    whole. Storms run for weeks; the map only shows the recent past.
+    """
+    try:
+        blob = get(kmz_url, timeout=60)
+    except (urllib.error.URLError, TimeoutError) as exc:
+        print(f'  ! {kmz_url}: {exc}', file=sys.stderr)
+        return []
+
+    cutoff = NOW - timedelta(days=HISTORY_DAYS)
+    points: list[tuple[datetime, list[float]]] = []
+    with zipfile.ZipFile(io.BytesIO(blob)) as z:
+        for name in z.namelist():
+            if not name.lower().endswith('.kml'):
+                continue
+            text = z.read(name).decode('utf-8', 'replace')
+            for mark in re.findall(r'<Placemark>.*?</Placemark>', text, re.S):
+                def tag(name: str) -> str | None:
+                    m = re.search(rf'<{name}>([^<]*)</{name}>', mark)
+                    return m.group(1) if m else None
+
+                stamp, lat, lon = tag('atcfdtg'), tag('lat'), tag('lon')
+                if not (stamp and lat and lon):
+                    continue
+                try:
+                    when = datetime.strptime(stamp, '%Y%m%d%H').replace(tzinfo=timezone.utc)
+                    position = [round(float(lon), 3), round(float(lat), 3)]
+                except ValueError:
+                    continue
+                if when >= cutoff:
+                    points.append((when, position))
+
+    points.sort(key=lambda p: p[0])
+    return [p for _, p in points]
+
+
 def collect_storms() -> list[dict]:
     try:
         active = get_json(NHC_STORMS, timeout=45).get('activeStorms', [])
@@ -159,9 +203,12 @@ def collect_storms() -> list[dict]:
         if cone:
             polys = kml_lines(cone)
             storm['cone'] = simplify(max(polys, key=len)) if polys else []
+        history = (s.get('bestTrackGIS') or {}).get('kmzFile')
+        storm['history'] = best_track(history) if history else []
         storms.append(storm)
         print(f'  storm {storm["name"]}: track {len(storm.get("track", []))} pts, '
-              f'cone {len(storm.get("cone", []))} pts')
+              f'cone {len(storm.get("cone", []))} pts, '
+              f'history {len(storm["history"])} pts')
     return storms
 
 
@@ -179,7 +226,7 @@ def latest_position(base: str, dataset_id: str) -> dict | None:
     a dataset rejects the decimation.
     """
     ds = urllib.parse.quote(dataset_id)
-    since = (NOW - timedelta(days=ACTIVE_DAYS)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    since = (NOW - timedelta(days=HISTORY_DAYS)).strftime('%Y-%m-%dT%H:%M:%SZ')
     q = (f'{base}/tabledap/{ds}.json?time,latitude,longitude'
          f'&time%3E={since}&orderByClosest(%22time/1hours%22)')
     rows = []
@@ -283,7 +330,7 @@ def main() -> int:
 
     payload = {
         'updated': NOW.strftime('%Y-%m-%dT%H:%M:%SZ'),
-        'activeWindowDays': ACTIVE_DAYS,
+        'historyDays': HISTORY_DAYS,
         'storms': storms,
         'assets': sorted(usvs + gliders, key=lambda a: (a['kind'], a['id'])),
         'sources': {

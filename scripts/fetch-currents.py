@@ -86,11 +86,16 @@ def axis_index(value: float, origin: float, step: float, count: int) -> int:
     return max(0, min(count - 1, round((value - origin) / step)))
 
 
-def pick_time() -> tuple[int, str]:
-    """Index of the model step nearest now, and its timestamp.
+def pick_time() -> tuple[int, str, str]:
+    """Index of the model step nearest now, its valid time, and its model run.
 
-    The forecast covers several days, so "nearest" rather than "latest" —
-    the last step is days ahead.
+    The forecast covers several days, so "nearest" rather than "latest" — the
+    last step is days ahead.
+
+    ESPC-D-V02 runs once a day at 12Z and lands on THREDDS a few hours after
+    that, so the deploy does not need its own schedule: the hourly build
+    picks a new run up within the hour. Reporting which run the field came
+    from is what makes that verifiable rather than assumed.
     """
     das = get(f'{BASE}.das', timeout=60)
     marker = 'hours since '
@@ -100,16 +105,22 @@ def pick_time() -> tuple[int, str]:
 
     # The values sit on the last non-blank line, after a "time[129]" label
     # and a rule of dashes.
-    body = get(f'{BASE}.ascii?time[0:1:128]', timeout=90)
-    tail = [line for line in body.splitlines() if line.strip()][-1]
-    hours = [float(t) for t in tail.split(',') if t.strip()]
+    def axis(name: str) -> list[float]:
+        body = get(f'{BASE}.ascii?{name}[0:1:128]', timeout=90)
+        tail = [line for line in body.splitlines() if line.strip()][-1]
+        return [float(t) for t in tail.split(',') if t.strip()]
+
+    hours = axis('time')
     if not hours:
         raise RuntimeError('no time axis')
+    runs = axis('time_run')
 
     now = datetime.now(timezone.utc)
     target = (now - epoch).total_seconds() / 3600
     index = min(range(len(hours)), key=lambda i: abs(hours[i] - target))
-    return index, (epoch + timedelta(hours=hours[index])).strftime('%Y-%m-%dT%H:%M:%SZ')
+    stamp = lambda h: (epoch + timedelta(hours=h)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    run = stamp(runs[index]) if index < len(runs) else ''
+    return index, stamp(hours[index]), run
 
 
 def component(name: str, t: int, y0: int, y1: int, x0: int, x1: int) -> list[list[float | None]]:
@@ -123,8 +134,8 @@ def component(name: str, t: int, y0: int, y1: int, x0: int, x1: int) -> list[lis
 
 def main() -> int:
     try:
-        t, valid = pick_time()
-        print(f'model step {t} — valid {valid}')
+        t, valid, run = pick_time()
+        print(f'model step {t} — valid {valid}, from the {run} run')
 
         # 0-360 longitudes in the model; the region is west of the meridian.
         x0 = axis_index(WEST + 360, LON0, DLON, NLON)
@@ -164,6 +175,9 @@ def main() -> int:
             'lo1': round(lo1, 4), 'la1': round(la1, 4),
             'dx': round(dx, 4), 'dy': round(dy, 4),
             'refTime': valid,
+            # Which daily run produced this, so the page can say how fresh
+            # the field is rather than leaving the reader to assume.
+            'modelRun': run,
         }
 
     payload = [
