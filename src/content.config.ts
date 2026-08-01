@@ -35,7 +35,7 @@ const observations = defineCollection({
       short: z.string(),
       summary: z.string(),
       photos: z.array(z.object({ src: image(), alt: z.string() })).default([]),
-      links: z.array(z.object({ label: z.string(), url: z.string().url() })).default([]),
+      links: z.array(z.object({ label: z.string(), url: z.url() })).default([]),
       order: z.number().default(99),
     }),
 });
@@ -148,7 +148,7 @@ const software = defineCollection({
 // member, same section files each; rendered at /cv/<person>/.
 // Publications and presentations are NOT duplicated here; the CV pulls
 // those from the collections above, filtered by the member's surname.
-const cvSection = (name: string, schema: z.AnyZodObject) =>
+const cvSection = <T extends z.ZodRawShape>(name: string, schema: z.ZodObject<T>) =>
   defineCollection({
     loader: cvSectionLoader(name),
     schema: schema.extend({ person: z.string() }),
