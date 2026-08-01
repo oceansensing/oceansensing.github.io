@@ -90,7 +90,14 @@ const coords = (lat: number, lon: number) =>
                         class="shot"
                         href={photo.full}
                         data-alt={photo.alt}
-                        data-when={[photo.time, survey.location].filter(Boolean).join(' · ')}
+                        data-when={[
+                          photo.time
+                            ? `${day(survey.date)}, ${photo.time}${survey.timezone ? ` ${survey.timezone}` : ''}`
+                            : day(survey.date),
+                          survey.location,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
                         data-where={[
                           photo.center && `scene ≈ ${coords(photo.center.lat, photo.center.lon)}`,
                           photo.camera &&

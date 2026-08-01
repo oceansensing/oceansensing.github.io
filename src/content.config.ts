@@ -44,6 +44,9 @@ const observations = defineCollection({
           z.object({
             date: z.coerce.date(),
             location: z.string().optional(),
+            /* Photo clocks carry no zone, so name it here if known —
+               it is shown alongside each photo's time. */
+            timezone: z.string().optional(),
             note: z.string().optional(),
             photos: z
               .array(

@@ -18,6 +18,8 @@ cover:
 surveys:
   - date: 2026-07-31
     location: Lower York River, Gloucester Point
+    # The photo files carry no timezone; local zone for the date and place.
+    timezone: EDT
     note: >-
       Drone survey, 17:59–18:14, from the Coleman Bridge past Gloucester
       Point Beach to the VIMS campus.
