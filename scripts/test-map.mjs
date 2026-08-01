@@ -90,7 +90,8 @@ const files = {
   boundaries: JSON.parse(fs.readFileSync('public/map/boundaries.json', 'utf8')),
   'ocean-assets': JSON.parse(fs.readFileSync('public/map/ocean-assets.json', 'utf8')),
   currents: JSON.parse(fs.readFileSync('public/map/currents.json', 'utf8')),
-  'currents-detail': JSON.parse(fs.readFileSync('public/map/currents-detail.json', 'utf8')),
+  'currents-atlantic': JSON.parse(fs.readFileSync('public/map/currents-atlantic.json', 'utf8')),
+  'currents-nordic': JSON.parse(fs.readFileSync('public/map/currents-nordic.json', 'utf8')),
   argo: JSON.parse(fs.readFileSync('public/map/argo.json', 'utf8')),
 };
 globalThis.fetch = async (u) => {
@@ -264,7 +265,10 @@ const expectedNames = assets.storms.map((s) => s.name);
    fallen back to the coarse grid, which tests the swap the other way. */
 const gridOutsideRegion = gridOf();
 const coarseHeader = files.currents[0].header;
-const fineHeader = files['currents-detail'][0].header;
+const fineHeader = files['currents-atlantic'][0].header;
+const nordicHeader = files['currents-nordic'][0].header;
+const advertised = coarseHeader.details ?? [];
+const nordicRegion = advertised.find((d) => d.url.includes('nordic'));
 
 /* Particle animation. Segment lengths are the give-away: if the field were
    dead, or the velocity scale far too small, the particles would be stroked
@@ -343,13 +347,22 @@ const checks = [
     kuU > 0.2 && kuV > 0.2 && Math.hypot(kuU, kuV) > 0.5],
   ['Antarctic Circumpolar runs eastward', accU !== null && accU > 0],
   // Two grids, picked by zoom.
-  ['global grid advertises the detail grid',
-    !!coarseHeader.detail && typeof coarseHeader.detail.minZoom === 'number' &&
-      coarseHeader.detail.url.includes('currents-detail')],
-  ['detail grid is genuinely finer', fineHeader.dx < coarseHeader.dx],
-  ['detail grid covers the region it advertises',
-    Math.abs(fineHeader.lo1 - (coarseHeader.detail.west + 360)) < fineHeader.dx &&
-      fineHeader.la1 >= coarseHeader.detail.north - fineHeader.dy - 0.5],
+  ['global grid advertises every detail region',
+    advertised.length >= 2 && advertised.every((d) => typeof d.minZoom === 'number' && d.url && d.deg)],
+  ['detail grids are genuinely finer', fineHeader.dx < coarseHeader.dx && nordicHeader.dy < coarseHeader.dy],
+  /* High latitude needs a finer latitude step than longitude: at 75N a 0.24
+     deg cell is 7 km wide but 27 km tall, so latitude is what limits how
+     close to a coastline the flow can be resolved. */
+  ['nordic grid resolves latitude more finely than the atlantic one',
+    nordicHeader.dy < fineHeader.dy],
+  ['nordic grid spans the prime meridian without a seam',
+    (() => {
+      // It wraps in the model's 0-360 longitudes, so it is fetched as two
+      // slabs; an unevenly joined seam would show up as the wrong width.
+      const spanned = nordicHeader.nx * nordicHeader.dx;
+      const asked = nordicRegion.east - nordicRegion.west;
+      return nordicRegion.west < 0 && nordicRegion.east > 0 && Math.abs(spanned - asked) < 1;
+    })()],
   ['inside the region, the fine grid is the one in use',
     !!gridInsideRegion && gridInsideRegion.dx === fineHeader.dx],
   ['panned outside it, the layer falls back to the global grid',

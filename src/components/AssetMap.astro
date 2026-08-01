@@ -210,52 +210,62 @@ import 'leaflet/dist/leaflet.css';
            Swap only when the answer changes: setOptions restarts the
            animation, and doing that on every pan would make the field
            stutter as you drag. */
-        const detail = coarse?.[0]?.header?.detail;
-        let fine: unknown = null;
-        let fetchingFine = false;
-        let showingFine = false;
+        /* Finest first, so a viewport inside two regions gets the sharper
+           one. Containment assumes a region does not straddle the
+           antimeridian; none does, and one that did would need its own
+           wrap-aware test. */
+        const details = [...(coarse?.[0]?.header?.details ?? [])].sort(
+          (a, b) => a.deg - b.deg
+        );
+        const grids = new Map<string, unknown>();
+        let fetching: string | null = null;
+        let showing: string | null = null;
 
         const layer = flowReady as unknown as { setOptions?: (o: object) => void };
 
-        const fineFits = () => {
-          if (!detail || map.getZoom() < detail.minZoom) return false;
-          // The whole viewport must be inside the fine grid, or the parts
+        const covers = (d: (typeof details)[number]) => {
+          if (map.getZoom() < d.minZoom) return false;
+          // The whole viewport must be inside the region, or the parts
           // outside it would simply have no flow.
           const view = map.getBounds();
           return (
-            view.getWest() >= detail.west &&
-            view.getEast() <= detail.east &&
-            view.getSouth() >= detail.south &&
-            view.getNorth() <= detail.north
+            view.getWest() >= d.west &&
+            view.getEast() <= d.east &&
+            view.getSouth() >= d.south &&
+            view.getNorth() <= d.north
           );
         };
 
         const applyView = (zoomChanged: boolean) => {
-          const wants = fineFits();
+          const wanted = details.find(covers) ?? null;
+          const url = wanted?.url ?? null;
 
-          if (wants !== showingFine) {
-            if (wants && !fine) {
-              if (!fetchingFine) {
-                fetchingFine = true;
-                fetch(detail.url)
+          if (url !== showing) {
+            if (url && !grids.has(url)) {
+              if (fetching !== url) {
+                fetching = url;
+                fetch(url)
                   .then((r) => r.json())
                   .then((grid) => {
-                    fine = grid;
-                    fetchingFine = false;
+                    grids.set(url, grid);
+                    fetching = null;
                     // The view may have moved on while that was in flight.
                     applyView(false);
                   })
                   .catch(() => {
                     // Coarse everywhere is a fine outcome; do not retry in a
                     // loop over a network that is not answering.
-                    fetchingFine = false;
-                    detail.minZoom = Infinity;
+                    fetching = null;
+                    wanted!.minZoom = Infinity;
                   });
               }
               return;
             }
-            showingFine = wants;
-            layer.setOptions?.({ data: wants ? fine : coarse, velocityScale: scaleForView() });
+            showing = url;
+            layer.setOptions?.({
+              data: url ? grids.get(url) : coarse,
+              velocityScale: scaleForView(),
+            });
             return;
           }
 

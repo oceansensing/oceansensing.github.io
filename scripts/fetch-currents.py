@@ -57,15 +57,33 @@ GLOBAL = {
     'stride': (12, 24),
 }
 
-DETAIL = {
-    'name': 'currents-detail.json',
-    'wrap': False,
-    'west': -100.0, 'east': -10.0, 'south': 5.0, 'north': 55.0,
-    'stride': (3, 6),
-    # Below this the coarse grid looks the same, so do not make anyone pay
-    # for the download.
-    'minZoom': 5,
-}
+# Finer grids over the places worth resolving. Each is fetched only when the
+# reader zooms inside it, so adding one costs nothing to anybody else — the
+# list is the knob for coverage.
+#
+# Resolution is set per region because a degree is not a fixed distance. At
+# 35N a 0.24 deg cell is about 22 km across; at 75N it is 7 km wide but still
+# 27 km tall, and latitude becomes the binding constraint. The Nordic grid
+# therefore halves the latitude step again, which is what makes a fjord
+# coastline representable at all.
+DETAILS = [
+    {
+        'name': 'currents-atlantic.json',
+        'label': 'Atlantic & Gulf',
+        'wrap': False,
+        'west': -100.0, 'east': -10.0, 'south': 5.0, 'north': 55.0,
+        'stride': (3, 6),          # 0.24 x 0.24 deg
+        'minZoom': 5,
+    },
+    {
+        'name': 'currents-nordic.json',
+        'label': 'Nordic Seas, Greenland & Svalbard',
+        'wrap': False,
+        'west': -45.0, 'east': 30.0, 'south': 55.0, 'north': 83.0,
+        'stride': (3, 3),          # 0.24 x 0.12 deg — half the latitude step
+        'minZoom': 5,
+    },
+]
 
 UA = {'User-Agent': 'oceansensing.org current map (github.com/oceansensing)'}
 
@@ -231,16 +249,33 @@ def build(spec: dict, t: int, valid: str, run: str, extra: dict | None = None) -
     stride_lon, stride_lat = spec['stride']
     out = MAP_DIR / spec['name']
 
-    if spec['wrap']:
-        x0, x1 = 0, NLON - 1
-    else:
-        x0 = axis_index(spec['west'] + 360, LON0, DLON, NLON)
-        x1 = axis_index(spec['east'] + 360, LON0, DLON, NLON)
     y0 = axis_index(spec['south'], LAT0, DLAT, NLAT)
     y1 = axis_index(spec['north'], LAT0, DLAT, NLAT)
 
-    u = component('water_u', t, y0, y1, x0, x1, stride_lat, stride_lon)
-    v = component('water_v', t, y0, y1, x0, x1, stride_lat, stride_lon)
+    if spec['wrap']:
+        slabs = [(0, NLON - 1)]
+    else:
+        x0 = axis_index(spec['west'] % 360, LON0, DLON, NLON)
+        x1 = axis_index(spec['east'] % 360, LON0, DLON, NLON)
+        if x0 <= x1:
+            slabs = [(x0, x1)]
+        else:
+            # A region straddling the prime meridian wraps in the model's
+            # 0-360 longitudes, so it comes back as two slabs. The second
+            # must resume the stride where the first left off, or the columns
+            # either side of the meridian would be unevenly spaced and the
+            # grid would no longer be regular.
+            taken = (NLON - 1 - x0) // stride_lon + 1
+            slabs = [(x0, NLON - 1), (x0 + taken * stride_lon - NLON, x1)]
+
+    def fetch_component(name: str) -> list[list[float | None]]:
+        parts = [component(name, t, y0, y1, a, b, stride_lat, stride_lon) for a, b in slabs]
+        if len(parts) == 1:
+            return parts[0]
+        return [west + east for west, east in zip(*parts)]
+
+    u = fetch_component('water_u')
+    v = fetch_component('water_v')
     if len(u) != len(v) or len(u[0]) != len(v[0]):
         raise RuntimeError(f'{spec["name"]}: u and v grids disagree in shape')
 
@@ -254,7 +289,7 @@ def build(spec: dict, t: int, valid: str, run: str, extra: dict | None = None) -
     la1 = LAT0 + (y0 + (ny - 1) * stride_lat) * DLAT
     # The model counts longitude from 0 east; leaflet-velocity wraps with a
     # floored modulo, so it reads -74 as 286 without help.
-    lo1 = LON0 + x0 * DLON
+    lo1 = LON0 + slabs[0][0] * DLON
 
     def flatten(grid: list[list[float | None]]) -> list[float | None]:
         return [value for row in reversed(grid) for value in row]
@@ -283,7 +318,7 @@ def build(spec: dict, t: int, valid: str, run: str, extra: dict | None = None) -
 
     spans = nx * dx
     extent = 'wraps' if spans >= 360 else f'{spans:.0f} deg of longitude'
-    print(f'  {spec["name"]}: {nx}x{ny} at {dx:.2f} deg, {extent}, '
+    print(f'  {spec["name"]}: {nx}x{ny} at {dx:.2f}x{dy:.2f} deg, {extent}, '
           f'{after} wet points after coastal erosion (from {before}), '
           f'{out.stat().st_size / 1024:.0f} KB')
 
@@ -293,18 +328,25 @@ def main() -> int:
         t, valid, run = pick_time()
         print(f'model step {t} — valid {valid}, from the {run} run')
 
-        # The global file advertises the detail grid, so the map learns the
-        # region and its zoom threshold from the data rather than repeating
-        # them in the component where the two could drift apart.
+        # The global file advertises the finer grids, so the map learns the
+        # regions and their zoom thresholds from the data rather than
+        # repeating them in the component where the two could drift apart.
         build(GLOBAL, t, valid, run, extra={
-            'detail': {
-                'url': f'/map/{DETAIL["name"]}',
-                'west': DETAIL['west'], 'east': DETAIL['east'],
-                'south': DETAIL['south'], 'north': DETAIL['north'],
-                'minZoom': DETAIL['minZoom'],
-            },
+            'details': [
+                {
+                    'url': f'/map/{d["name"]}',
+                    'label': d['label'],
+                    'west': d['west'], 'east': d['east'],
+                    'south': d['south'], 'north': d['north'],
+                    'minZoom': d['minZoom'],
+                    # So the map can prefer the finest region when two overlap.
+                    'deg': round(min(DLON * d['stride'][0], DLAT * d['stride'][1]), 4),
+                }
+                for d in DETAILS
+            ],
         })
-        build(DETAIL, t, valid, run)
+        for detail in DETAILS:
+            build(detail, t, valid, run)
     except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:
         print(f'! currents unavailable: {exc}', file=sys.stderr)
         if (MAP_DIR / GLOBAL['name']).exists():

@@ -185,17 +185,32 @@ the same data:
   is open; **Copernicus publishes Mercator at the same resolution but its
   numeric access needs credentials**, and the WMTS only serves pictures.
 
-  **Two grids, chosen by zoom.** `currents.json` is global at ~0.96° and
-  loads with the page (107 KB gzipped). `currents-detail.json` is 0.24° over
-  the Atlantic and Gulf and is fetched only when the reader zooms inside that
-  region (136 KB gzipped) — being lazy is what pays for the resolution. The
-  map swaps with `setOptions({data})`, and only when the answer changes,
-  since that call restarts the animation.
+  **A coarse global grid plus finer regional ones, chosen by zoom.**
+  `currents.json` is global at ~0.96° and loads with the page. Each entry in
+  `DETAILS` (in `scripts/fetch-currents.py`) becomes another file, fetched
+  only when the reader zooms inside it — laziness is what pays for the
+  resolution, so **adding a region costs nothing to anyone outside it**.
 
-  The map learns the detail region and its zoom threshold from the **global
-  file's header** (`header.detail`) rather than repeating them in the
-  component, and it requires the whole viewport to be inside the region — a
-  partly-covered view would have flow on one side and nothing on the other.
+  Resolution is per region, because a degree is not a fixed distance. At 35°N
+  a 0.24° cell is ~22 km across; at 75°N it is 7 km wide but still 27 km
+  tall, so **latitude is the binding constraint at high latitude** and the
+  Nordic grid halves the latitude step again. That is what makes a fjord
+  coastline representable, and it cut land carrying flow over
+  Greenland–Svalbard from 3.1% to 0.6%.
+
+  A region straddling the prime meridian wraps in the model's 0–360
+  longitudes and so is **fetched as two slabs**, the second resuming the
+  stride where the first stopped — otherwise the columns either side of the
+  meridian are unevenly spaced and the grid is no longer regular. A region
+  straddling the *antimeridian* would additionally need a wrap-aware
+  containment test in the component; none does today.
+
+  The map learns the regions from the **global file's header**
+  (`header.details`) rather than repeating them in the component, takes the
+  finest whose bounds contain the whole viewport — a partly-covered view
+  would have flow on one side and nothing on the other — and swaps with
+  `setOptions({data})` only when the answer changes, since that restarts the
+  animation.
 
   The global grid **must span a full 360° of longitude**: that is the exact
   condition leaflet-velocity uses to wrap across the antimeridian, and
