@@ -24,7 +24,6 @@ surveys:
     photos:
       - src: ./hab-2026-07-31-01.jpg
         alt: Reddish-brown water offshore of a pier on the York River.
-        caption: Discolored water offshore of a shoreline pier.
       - src: ./hab-2026-07-31-03.jpg
         alt: >-
           A band of reddish-brown water along the wooded York River
@@ -45,7 +44,6 @@ surveys:
         alt: >-
           People on the sand and in the water at Gloucester Point Beach,
           with reddish-brown water in the enclosed swimming area.
-        caption: Discolored water in the swimming area at Gloucester Point Beach.
         featured: true
       - src: ./hab-2026-07-31-08.jpg
         alt: >-
@@ -55,16 +53,13 @@ surveys:
         alt: >-
           Reddish-brown water with a sharp edge next to the fishing pier at
           Gloucester Point Beach.
-        caption: A sharp edge between discolored and clear water at the pier.
         featured: true
       - src: ./hab-2026-07-31-10.jpg
         alt: Streaks of reddish-brown water in the York River.
-        caption: Streaks of discolored water at the surface.
       - src: ./hab-2026-07-31-11.jpg
         alt: >-
           The VIMS Gloucester Point campus and research pier, with
           reddish-brown water offshore.
-        caption: Discolored water offshore of the VIMS campus and research pier.
       - src: ./hab-2026-07-31-12.jpg
         alt: A close view of the edge between reddish-brown and clear water.
 order: 1
