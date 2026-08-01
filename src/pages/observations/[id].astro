@@ -226,6 +226,13 @@ const collapsible = byYear.length > 1;
     margin-block-end: var(--space-lg);
   }
 
+  /* Body text spans the container here rather than taking the site's
+     narrower reading measure — it sits between a full-width hero and a
+     full-width photo grid, and the narrow column looked orphaned. */
+  .prose {
+    max-width: none;
+  }
+
   .year {
     border-top: 1px solid var(--border);
     margin-block-start: var(--space-xl);
