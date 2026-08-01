@@ -60,7 +60,39 @@ else if (siteUrl !== configUrl) {
   }
 }
 
-/* 4. The README promises CI gates the deploy on `npm run verify`. Keep that
+/* 4. Numbers the docs quote from the pipeline. These drift silently — the
+      tile zoom threshold moved from 6 to 7 in the code while CLAUDE.md and a
+      stale generated index still said 6, and nothing noticed. Read the value
+      from the source, not from a build artefact, so this works in CI where
+      the tiles do not exist. */
+const pipeline = fs.readFileSync('scripts/fetch-currents.py', 'utf8');
+const claims = [
+  {
+    what: 'tile zoom threshold',
+    from: /'minZoom':\s*(\d+),\s*\n\s*#\s*0\.08/,
+    doc: (v) => new RegExp(`zoom \u2265 ${v}\\b`),
+  },
+  {
+    what: 'coastal erosion threshold',
+    from: /COASTAL_DRY_NEIGHBOURS = (\d+)/,
+    doc: (v) => new RegExp(`\\b${['zero', 'one', 'two', 'three', 'four'][+v] ?? v}\\b`),
+  },
+];
+const claimDoc = fs.readFileSync('CLAUDE.md', 'utf8');
+for (const claim of claims) {
+  const found = claim.from.exec(pipeline);
+  if (!found) {
+    problems.push(`scripts/fetch-currents.py: cannot read the ${claim.what}`);
+    continue;
+  }
+  if (!claim.doc(found[1]).test(claimDoc)) {
+    problems.push(
+      `CLAUDE.md: the ${claim.what} is ${found[1]} in the pipeline, but the docs do not say so`
+    );
+  }
+}
+
+/* 5. The README promises CI gates the deploy on `npm run verify`. Keep that
       promise honest: if the gate is removed, the claim is a lie. */
 const workflow = fs.readFileSync(WORKFLOW, 'utf8');
 if (!workflow.includes('npm run verify')) {

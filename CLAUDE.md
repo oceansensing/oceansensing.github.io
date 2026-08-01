@@ -11,7 +11,8 @@ npm run build        # production build into dist/
 npm run check        # astro check — type-checks .astro and .ts; must be 0 errors
 npm run check:docs   # docs reference real scripts, real paths, the right URL
 npm run data         # regenerate public/map/ocean-assets.json from NOAA/IOOS live
-npm run data:currents # regenerate public/map/currents.json from HYCOM/Navy ESPC
+npm run data:currents # regenerate the global + regional current grids
+npm run data:tiles   # regenerate the 1/12° tiles (~92 MB, several minutes)
 npm run data:basemaps # re-sample basemap ocean colours (needs Pillow; slow, GEBCO's WMS)
 npm run test:contrast # map colours stay visible on both bathymetries
 npm run test:map     # headless test of the built map bundle
@@ -88,17 +89,29 @@ crosses that threshold, its harness needs updating.
 
 ### The map (`src/components/AssetMap.astro`)
 
-Leaflet, self-hosted from npm. Reads `public/map/ocean-assets.json`, plus
-`coastline.json` and `boundaries.json` (Natural Earth, RDP-simplified, committed).
+Leaflet, self-hosted from npm. Reads, from `public/map/`: `ocean-assets.json`
+(storms, gliders, USVs), `argo.json`, the current grids (`currents.json`,
+`currents-atlantic.json`, `currents-arctic.json`, `tiles/`), and
+`coastline.json` + `boundaries.json` (Natural Earth, RDP-simplified). All are
+committed except the tiles.
 
 Vector layers carry a **`className`, never a colour** — CSS owns their stroke and
 fill so a theme switch restyles every path with no redraw. Adding a hardcoded
 `color:` to a Leaflet path breaks dark mode; `npm run test:map` asserts against
 this.
 
-Layer stacking is deliberate: currents render in a custom pane at z-index 250,
-between the basemap tiles (200) and the vectors (400), so platforms are never
-obscured whichever basemap is selected.
+Layer stacking is deliberate, and there are two current panes rather than one:
+
+| pane | z-index | holds |
+| --- | --- | --- |
+| `tilePane` | 200 | the basemap |
+| `currents-raster` | 250 | Mercator speed raster — **multiplied** over the basemap |
+| `currents` | 260 | particle canvas — **composites normally** |
+| `overlayPane` | 400 | tracks, markers, and the Argo canvas |
+
+Whichever basemap is selected, both current layers sit under every track and
+marker, so the platforms are never obscured. The raster and the particles are
+kept apart because the blend mode belongs to only one of them — see below.
 
 The Leaflet map instance is hung on the container element as `_map`. Nothing on
 the page reads it; the test harness does, and it makes the map pokeable from the
@@ -137,7 +150,8 @@ data rather than an empty map.
 `.github/workflows/deploy.yml` runs it hourly before the Astro build. **Nothing
 is committed by CI** — the data is fetched into the build, so the repo does not
 grow. A snapshot of `ocean-assets.json` is committed so local and offline builds
-work.
+work; the 1/12° current tiles are the one input that is neither committed nor
+fetched hourly (see below).
 
 ### Basemaps
 
@@ -187,94 +201,87 @@ gate needs no network. Re-run `npm run data:basemaps` if a basemap changes.
 
 ### Surface currents
 
-Two layers, two models, both labelled in the switcher because they are not
-the same data:
+Two depictions, from two different models, both named in the layer switcher
+because they are not the same data:
 
-- **Animated particles** (default) — `leaflet-velocity` over a u/v grid in
-  `public/map/currents.json`, built by `scripts/fetch-currents.py` from the
-  US Navy ESPC-D-V02 global forecast via HYCOM's OPeNDAP. Chosen because it
-  is open; **Copernicus publishes Mercator at the same resolution but its
-  numeric access needs credentials**, and the WMTS only serves pictures.
-
-  **Three tiers, finest that fits.** At zoom 7 and beyond the map uses
-  1/12° tiles covering the whole ocean; below that, the regional grids; below
-  those, the globe.
-
-  The tiles are 20° square at 0.08° × 0.08°, built by
-  `python3 scripts/fetch-currents.py --tiles`. **They are gitignored** — 92 MB
-  is far too much to carry in the repo — so CI builds them and deploys them
-  with the site, keyed on the model run so the hourly builds restore from
-  cache instead of pulling them from HYCOM twenty-four times a day.
-  `scripts/fetch-currents.py --run` prints that key.
-
-  Two numbers that are easy to confuse: **92 MB is what the site weighs**
-  (raw JSON; Pages gzips on delivery), while a **visitor pays only for the
-  tiles their view touches** — about 116 KB each, one to four at a time.
-  Someone working one region never fetches the other 150.
-
-  The map takes **every tile the view overlaps and joins them**, rather than
-  requiring the view to sit inside one. Containment was tried first and does
-  not work: a zoom-7 viewport is ~9° across against a 20° tile, so it
-  straddles a seam often enough that the map would keep dropping back to the
-  coarse grid as you pan. Tiles share a spacing and a lattice, so joining is
-  a copy into offsets, not a resample.
-
-  **A coarse global grid plus finer regional ones underneath, chosen by zoom.**
-  `currents.json` is global at ~0.96° and loads with the page. Each entry in
-  `DETAILS` (in `scripts/fetch-currents.py`) becomes another file, fetched
-  only when the reader zooms inside it — laziness is what pays for the
-  resolution, so **adding a region costs nothing to anyone outside it**.
-
-  Resolution is per region, because a degree is not a fixed distance. At 35°N
-  a 0.24° cell is ~22 km across; at 66°N a 0.48° cell is 22 km wide while
-  0.12° of latitude is 13 km — so **latitude is the binding constraint at
-  high latitude**, and the Arctic grid spends its samples there rather than
-  on longitude.
-
-  The Arctic entry is a **band over every longitude, not a box**. Adding one
-  box per complaint does not converge: Greenland got fixed and the Bering
-  Strait, a third of the way round the world, did not. The band cut land
-  carrying flow to 1.1% around Bering (from 5.9%), 0.7% around
-  Greenland–Svalbard (from 2.7%) and 1.4% in the Canadian Arctic (from
-  4.2%).
-
-  A region straddling the prime meridian wraps in the model's 0–360
-  longitudes and so is **fetched as two slabs**, the second resuming the
-  stride where the first stopped — otherwise the columns either side of the
-  meridian are unevenly spaced and the grid is no longer regular. A region
-  straddling the *antimeridian* would additionally need a wrap-aware
-  containment test in the component; none does today.
-
-  The map learns the regions from the **global file's header**
-  (`header.details`) rather than repeating them in the component, takes the
-  finest whose bounds contain the whole viewport — a partly-covered view
-  would have flow on one side and nothing on the other — and swaps with
-  `setOptions({data})` only when the answer changes, since that restarts the
-  animation.
-
-  Because a region is only used when the **whole** viewport fits inside it,
-  **regions must overlap rather than merely touch**: an Arctic band starting
-  at 60°N above an Atlantic region ending at 55°N left every view straddling
-  60°N — most of the Norwegian coast — back on the coarse grid. `test:map`
-  checks the overlap.
-
-  **On currents looking perpendicular to a coast:** verified as a resolution
-  artefact, not a data error. The published grids match the raw model
-  point-for-point in direction, and the field carries no net flow into land
-  (mean onshore component +0.03, where 0 is neutral). What changes with
-  resolution is how *parallel* the flow reads against a blocky mask: 0.65 at
-  0.96° — barely above the 0.64 you would get from random directions — 0.71
-  at 0.24°, 0.73 on the Arctic band. GEBCO also draws a far more detailed
-  coastline than the model masks, so flow parallel to the model's coast can
-  look oblique to the drawn one.
-
-  The global grid **must span a full 360° of longitude**: that is the exact
-  condition leaflet-velocity uses to wrap across the antimeridian, and
-  without it particles pile up against the edge. It also means longitude is
-  indexed with a floored modulo, since the grid starts at 0°E and half the
-  world is west of that.
+- **Animated particles** (default) — `leaflet-velocity` over u/v grids built
+  by `scripts/fetch-currents.py` from the **US Navy ESPC-D-V02** global
+  forecast via HYCOM's OPeNDAP. Chosen because it is open; Copernicus
+  publishes Mercator at the same resolution but its **numeric** access needs
+  credentials, and its WMTS serves only pictures.
 - **Mercator speed raster** (off by default) — the Copernicus WMTS tiles.
   Also what `prefers-reduced-motion` readers get instead of the animation.
+
+#### Three tiers, finest that fits
+
+| tier | spacing | used at | fetched |
+| --- | --- | --- | --- |
+| `tiles/<south>_<west>.json` | 0.08° (1/12°) | zoom ≥ 7 | on demand, per view |
+| `currents-atlantic.json`, `currents-arctic.json` | 0.24°, 0.48°×0.12° | zoom ≥ 5 inside the region | on demand, once |
+| `currents.json` | 0.96°, global | everywhere else | with the page |
+
+**The two upper tiers are chosen differently, and the difference matters.**
+A *region* is used only when it contains the **whole** viewport — a partly
+covered view would have flow on one side and nothing on the other. *Tiles*
+are chosen by **overlap and joined**: containment was tried first and fails,
+because a zoom-7 viewport is ~9° across against a 20° tile and straddles a
+seam often enough that the map kept dropping back to the coarse grid as you
+panned. Tiles share a spacing and a lattice, so joining is a copy into
+offsets, not a resample.
+
+Because regions use containment, **they must overlap rather than merely
+touch**: an Arctic band starting at 60°N above an Atlantic region ending at
+55°N left every view straddling 60°N — most of the Norwegian coast — back on
+the coarse grid. `test:map` checks the overlap.
+
+The map learns all of this from the **global file's header** (`details` and
+`tileIndex`) rather than repeating bounds in the component, and swaps with
+`setOptions({data})` only when the answer changes, since that restarts the
+animation.
+
+Region resolution is per region, because a degree is not a fixed distance. At
+35°N a 0.24° cell is ~22 km across; at 66°N a 0.48° cell is 22 km wide but
+0.12° of latitude is 13 km — **latitude binds at high latitude**, so the
+Arctic grid spends its samples there. That grid is a **band over every
+longitude, not a box**: adding one box per complaint does not converge, as
+fixing Greenland while the Bering Strait stayed broken showed.
+
+#### What the tiles cost
+
+Built by `npm run data:tiles`; 159 of 162 exist, the other three being pure
+land. **They are gitignored** — 92 MB has no business in the repo — so CI
+builds them and deploys them with the site, keyed on the model run so hourly
+builds restore from cache instead of pulling 92 MB from HYCOM twenty-four
+times a day. `scripts/fetch-currents.py --run` prints that key.
+
+Two numbers that are easy to confuse, and I did confuse them when first
+estimating this:
+
+- **92 MB is what the site weighs** — raw JSON in the deploy artifact, which
+  Pages gzips on delivery. A build-and-deploy cost.
+- **79–144 KB is what a visitor pays**, per tile, one to four at a time.
+  Someone working a single region never fetches the other 150.
+
+They are 0.08° × 0.08° rather than the model's 0.08° × 0.04°: true 1/12°,
+isotropic, and half the size for a refinement that would apply to one axis
+only. `TILES['stride']` is the one constant to change.
+
+#### Grid geometry
+
+- The global grid **must span a full 360° of longitude** — that is the exact
+  condition leaflet-velocity uses to wrap across the antimeridian, and
+  without it particles pile up against the edge.
+- Longitude is therefore indexed with a **floored modulo**: grids start at
+  0°E and half the world is west of that.
+- A region straddling the **prime meridian** wraps in the model's 0–360
+  longitudes and is fetched as **two slabs**, the second resuming the stride
+  where the first stopped, or the columns either side are unevenly spaced and
+  the grid is no longer regular. The first attempt silently produced 45° of
+  longitude instead of 75, because the end index clamped at the array bound.
+- A region straddling the **antimeridian** would additionally need a
+  wrap-aware containment test in the component. None does today.
+
+#### Land, and why particles used to stream across it
 
 **leaflet-velocity does not treat a null as missing.** Its grid hands back
 `[u, v]` — an array, so always truthy, so `isValue()` passes — and its
@@ -282,54 +289,66 @@ bilinear interpolation multiplies straight through, where `null` becomes
 zero. A cell that is partly land therefore yields a reduced but *non-zero*
 velocity defined over the land, and particles advect onto it and keep going.
 Subsampling compounds it: taking every twelfth model node discards the
-model's own 1/12° mask, so at high latitude one sample decides a cell tens of
-km across.
+model's own mask, so at high latitude one sample decides a cell tens of km
+across.
 
-The pipeline compensates by eroding cells wedged into the coastline
-(`COASTAL_DRY_NEIGHBOURS`). The threshold is measured, not chosen: requiring
-one dry neighbour wipes out the Gulf Stream and Kuroshio, two still loses the
-Kuroshio's inshore core, three keeps both and cuts land carrying flow from
-7.8% to 2.1%. `test:map` brackets it from both sides — continental interiors
-must be dry, and those two currents must survive.
+The pipeline erodes cells wedged into the coastline
+(`COASTAL_DRY_NEIGHBOURS`). The threshold is **measured, not chosen**:
+requiring one dry neighbour wipes out the Gulf Stream *and* the Kuroshio, two
+still loses the Kuroshio's inshore core, three keeps both and cuts land
+carrying flow from 7.8% to 2.1%. `test:map` brackets it from both sides —
+continental interiors must be dry, and those two currents must survive.
 
-It is a mitigation, not a cure: a 0.96° grid cannot represent a fjord
-coastline, and an island smaller than a cell sits in open model water
-whatever the threshold.
+A mitigation, not a cure: a coarse grid cannot represent a fjord coastline,
+and an island smaller than a cell (Bjørnøya) sits in open model water
+whatever the threshold. Zoom 7+ gets 1/12°, where this is far smaller.
 
-Two more things about the particles are easy to get wrong and were, both
-silently:
+**On currents looking perpendicular to a coast** — checked, and it is a
+resolution artefact rather than a data error. The published grids match the
+raw model point-for-point in direction (no u/v swap, no north–south flip),
+and the field carries no net flow into land: mean onshore component +0.03,
+where 0 is neutral, with near-symmetric tails. What changes with resolution
+is how *parallel* the flow reads against a blocky mask — 0.65 at 0.96°,
+barely above the 0.64 random directions would give, 0.71 at 0.24°, 0.73 on
+the Arctic band. GEBCO also draws a far finer coastline than the model masks,
+so flow parallel to the model's coast reads as oblique to the one on screen.
+
+#### Particle rendering, three ways to get it wrong
+
+All three were shipped and all three were silent:
 
 - **They must composite normally.** The Mercator raster is multiplied over
-  the basemap; when the particles shared that pane they were multiplied too,
+  the basemap; while the particles shared that pane they were multiplied too,
   which all but deleted them — they are near-white, and multiplying by
-  near-white changes almost nothing. Hence two panes. `test:contrast` reads
-  the particle pane's name out of the component and fails if a blend mode
-  reappears on it, because the whole gate assumes normal compositing.
-- **Their speed must cancel _two_ of the plugin's factors, not one.** It
-  turns a velocity into a screen displacement by multiplying by the
-  velocityScale you pass, then `mapArea^0.4`, then the projection's Jacobian
-  — pixels per degree, which doubles every zoom level. Cancelling only
-  `mapArea^0.4` is **worse than cancelling nothing**: that term is the
-  plugin's own rough zoom compensation, so removing it leaves the Jacobian
-  bare and particles accelerate as you zoom in. Shipped that way it went from
-  0.08 px/frame at zoom 3 to 10.7 at zoom 9 — most of the map every second,
-  which read as long dendritic streamlines rather than a flowing field.
-  `scaleForView()` now divides out both, measuring the Jacobian off the map
-  rather than assuming a projection.
+  near-white changes almost nothing. Hence the two panes above.
+  `test:contrast` reads the particle pane's name out of the component and
+  fails if a blend mode reappears on it, because the whole gate assumes
+  normal compositing.
+- **Speed must cancel _two_ of the plugin's factors, not one.** It turns a
+  velocity into a screen displacement by multiplying by the `velocityScale`
+  you pass, then `mapArea^0.4`, then the projection's Jacobian — pixels per
+  degree, which doubles every zoom level. Cancelling only `mapArea^0.4` is
+  **worse than cancelling nothing**: that term is the plugin's own rough zoom
+  compensation, so removing it leaves the Jacobian bare and particles
+  accelerate as you zoom in. Shipped that way it ran 0.08 px/frame at zoom 3
+  against 10.7 at zoom 9 — most of the map every second, reading as long
+  dendritic streamlines rather than a flowing field. `scaleForView()` now
+  divides out both, **measuring** the Jacobian off the map rather than
+  assuming a projection.
+- **It is UMD and reads Leaflet off the global object**, which the bundled
+  ESM build never sets. So it is loaded by dynamic import *after*
+  `globalThis.L` is assigned — a static import would hoist above the
+  assignment and the built bundle would die on `L is not defined`. The dev
+  server hides this by serving Leaflet's UMD build, so **it breaks only in
+  `dist/`**.
 
-`npm run test:map` records the canvas draw calls and prints the per-frame
-displacement distribution — that is how these were found, and it fails if the
-particles go sub-pixel again. **It also samples two zoom levels and compares**,
-because the single-zoom check that came before it could not distinguish a
-field that holds still from one that accelerates, and so missed the runaway
-entirely. Re-measure rather than guess when tuning.
-
-**leaflet-velocity is UMD and reads Leaflet off the global object**, which
-the bundled ESM build never sets. It is therefore loaded by dynamic import
-*after* `globalThis.L` is assigned — a static import would be hoisted above
-the assignment and the built bundle would die on `L is not defined`. The
-dev server hides this by serving Leaflet's UMD build, so **this breaks only
-in `dist/`**; `npm run test:map` covers it.
+`npm run test:map` catches all three by recording the canvas draw calls: it
+prints the per-frame displacement distribution, fails if particles go
+sub-pixel, and **samples two zoom levels and compares** — the single-zoom
+check that preceded it could not tell a field that holds still from one that
+runs away, which is exactly how the acceleration shipped. Trail length is age
+× speed, so a runaway speed and an over-long lifetime look identical on
+screen; measure the speed before touching `particleAge`.
 
 ### Hourly self-refresh
 

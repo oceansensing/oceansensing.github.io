@@ -8,7 +8,8 @@ Built with [Astro](https://astro.build). Static output, and close to zero
 client-side JavaScript — the exceptions are the theme toggle, the photo
 shuffle and lightbox on observation pages, the asset map, and the UTC clock.
 Every push to `main` deploys automatically via GitHub Actions, and a scheduled
-run rebuilds hourly to refresh the map data.
+run rebuilds hourly to refresh the map data; the hurricane page picks that up
+on its own without losing your place on the map.
 
 ## Editing content
 
@@ -50,18 +51,27 @@ whether a change will publish.
 The individual pieces, if you want one on its own:
 
 ```sh
-npm run check        # type-check
-npm run check:docs   # docs reference real scripts, real paths, the right URL
+npm run check         # type-check
+npm run check:docs    # docs reference real scripts, real paths, the right URL
 npm run test:contrast # map colours stay visible on both bathymetries
-npm run test:map     # asset map, against the built bundle
-npm run test:clock   # UTC clock, against the built bundle
+npm run test:map      # asset map, against the built bundle
+npm run test:clock    # UTC clock, against the built bundle
 ```
 
-Both test harnesses read from `dist/`, so build first or they test stale code.
+The test harnesses read from `dist/`, so build first or they test stale code.
 
-`npm run data` refreshes `public/map/ocean-assets.json` from the live NOAA and
-IOOS feeds. CI does this on every deploy; you only need it locally if you are
-working on the map and want current positions.
+Refreshing map data by hand — CI does all of this on every deploy, so you only
+need it locally when working on the map:
+
+```sh
+npm run data          # storms, gliders, USVs, Argo floats
+npm run data:currents # global + regional current grids
+npm run data:tiles    # the 1/12° current tiles (~92 MB, a few minutes)
+npm run data:basemaps # re-sample basemap ocean colours (slow; GEBCO's WMS)
+```
+
+The tiles are gitignored, so a fresh clone has none and the map simply uses
+the coarser grids until you build them.
 
 ## Deployment
 
@@ -69,6 +79,10 @@ Pushing to `main` deploys to GitHub Pages, gated on `npm run verify` — if the
 checks fail, nothing is published. The same workflow runs hourly on a schedule
 to refresh the map data; that run commits nothing, so the repository does not
 grow.
+
+The 1/12° current tiles are the exception to "refresh everything hourly": they
+are ~92 MB and only change when the ocean model runs, once a day at 12Z, so CI
+caches them keyed on the model run and rebuilds them only when it advances.
 
 DNS lives at the registrar: apex `A` records to `185.199.108.153`,
 `185.199.109.153`, `185.199.110.153`, `185.199.111.153`, and a `www` CNAME to

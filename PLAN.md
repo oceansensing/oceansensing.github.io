@@ -14,9 +14,12 @@ split), people, publications from BibTeX, presentations, news + RSS, data &
 tools, per-person CVs at `/cv/<person-id>/`, and Significant Observations
 (harmful algal blooms, hurricanes).
 
-The hurricane page carries a live map — NHC forecast tracks and cones, NOAA
-saildrones, IOOS gliders, 5-day asset tracks, Mercator surface currents — an
-active-storm status line, and a server-synchronised UTC clock.
+The hurricane page carries a live map: NHC forecast tracks and cones with
+5-day observed storm history, NOAA saildrones, IOOS gliders, ~2,000 Argo
+floats, and animated global surface currents that sharpen to 1/12° as you
+zoom in. Above it, an active-storm status line that updates without a reload;
+beside that, a server-synchronised UTC clock. The page refreshes itself when
+a new build lands, keeping your basemap, layers and position.
 
 ## Open items
 
@@ -55,12 +58,12 @@ active-storm status line, and a server-synchronised UTC clock.
   switcher. If Mercator specifically matters for the animation, it is doable:
   add Copernicus Marine credentials as GitHub secrets and the pipeline can
   pull u/v from the toolbox instead. That needs a Copernicus account.
-- **Payload.** The animated field is two grids: global at ~0.96° loading with
-  the page (107 KB gzipped), and 0.24° over the Atlantic fetched only on
-  zooming in (136 KB). The Mercator raster's 707 KB of tiles stays opt-in.
-  If the detail region should cover somewhere else — the Nordic Seas for
-  NORSE, say — it is a bounding box in `scripts/fetch-currents.py`; a second
-  detail region would need the map to pick between several rather than one.
+- **Payload.** Three tiers: a 0.96° global grid loading with the page
+  (~118 KB), 0.24°/0.12° regional grids fetched on zooming into them, and
+  1/12° tiles covering all ocean fetched per view at zoom 7+ (79–144 KB
+  each). The Mercator raster's 707 KB stays opt-in. The site itself carries
+  92 MB of tiles, built by CI and never committed — that is a deploy cost,
+  not a reader's.
 - **The Hurricane Florence cover has no visible credit.** The page now opens
   on the map, and the credit line lived under the hero that was removed, so
   the attribution survives only in the Markdown front matter. NASA imagery is
@@ -76,18 +79,19 @@ active-storm status line, and a server-synchronised UTC clock.
   now gets. Coastal erosion plus the finer regional grids cut it hard — over
   Greenland–Svalbard from 3.1% of land to 0.6%, peak 0.91 to 0.34 m/s — but
   an island smaller than a grid cell (Bjørnøya) sits in open model water
-  whatever the resolution. Adding another region is a list entry in
-  `scripts/fetch-currents.py`; candidates if they ever matter are the
-  Southern Ocean, the Gulf of Alaska, and the Mediterranean.
+  whatever the resolution. Since zoom 7+ now serves 1/12° everywhere, this
+  mostly bites at zoom 5–6, between the regional grids and the tiles.
 
 ### Needs a human eye
 
-- **Nobody has watched the particles move yet.** They are now verified
-  indirectly: the harness records the canvas draw calls and confirms segments
-  are stroked, in the checked palette, moving 1.5 px a frame. Colour is
-  settled by `npm run test:contrast`. But no one has actually looked at the
-  finished animation — the browser here never paints, and Claude in Chrome
-  was not connected. Worth a glance. The data, grid geometry,
+- **Nobody working on this has watched the particles move.** They are
+  verified only indirectly — the harness records canvas draw calls and
+  confirms segments are stroked, in the checked palette, at ~1.6 px a frame,
+  and holding steady across zoom levels. That indirection has a track record:
+  the runaway-speed bug reached the live site and was found by a reader
+  looking at it, not by any check here. The browser in this environment never
+  paints, so screenshots from a real device remain the fastest way to catch a
+  rendering fault. The data, grid geometry,
   land masking, pane order, plugin loading and per-frame drift were all
   verified numerically, but the headless browser here never paints — it
   reports zero animation frames per second — so the animation itself was
@@ -105,3 +109,13 @@ active-storm status line, and a server-synchronised UTC clock.
 - Where a component's correctness is not visible in the built HTML, write a
   harness that runs the built bundle (`scripts/test-map.mjs`,
   `scripts/test-clock.mjs`) rather than a test that reimplements the logic.
+- **Measure across a range, not at a point.** Several bugs here survived a
+  green suite because a check sampled one zoom, one basemap, or one colour:
+  particle drift that was fine at the tested zoom and 100× off elsewhere, a
+  contrast gate that passed a colour the blend mode then erased. A single
+  sample cannot tell "correct" from "correct here".
+- **A test written to match code just written proves little.** Seeding a
+  fixture from the same assumption as the implementation makes them agree by
+  construction — a saved-view test that used the new format never exercised
+  the old-format path that every real browser had. Break the code
+  deliberately and confirm the test goes red before trusting it.
