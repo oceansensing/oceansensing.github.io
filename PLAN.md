@@ -55,9 +55,11 @@ active-storm status line, and a server-synchronised UTC clock.
   switcher. If Mercator specifically matters for the animation, it is doable:
   add Copernicus Marine credentials as GitHub secrets and the pipeline can
   pull u/v from the toolbox instead. That needs a Copernicus account.
-- **Payload moved in the right direction.** The animated field is 232 KB and
-  loads by default; the Mercator raster's 707 KB of tiles is now opt-in, so
-  the default view is lighter than it was.
+- **Payload.** The animated field is global at ~0.96° — 678 KB raw but 107 KB
+  gzipped, which is what actually crosses the wire. The Mercator raster's
+  707 KB of tiles is opt-in, so the default view is still lighter than when
+  those tiles were on by default. Finer global resolution is the obvious
+  future ask and the obvious cost: 0.48° globally is about 3 MB raw.
 - **The Hurricane Florence cover has no visible credit.** The page now opens
   on the map, and the credit line lived under the hero that was removed, so
   the attribution survives only in the Markdown front matter. NASA imagery is

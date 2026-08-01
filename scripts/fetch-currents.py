@@ -36,14 +36,18 @@ BASE = ('https://tds.hycom.org/thredds/dodsC/'
 LON0, DLON, NLON = 0.0, 0.08, 4500
 LAT0, DLAT, NLAT = -80.0, 0.04, 4251
 
-# The hurricane basin the page is about — the Gulf, Caribbean and North
-# Atlantic. A global field at a resolution that resolves the Gulf Stream
-# would be several megabytes.
-WEST, EAST, SOUTH, NORTH = -100.0, -10.0, 5.0, 55.0
+# Global. Longitude wraps the whole way round, which leaflet-velocity
+# handles natively — given a grid that spans 360 degrees it duplicates the
+# first column onto the end so particles cross the antimeridian instead of
+# piling up against it. Latitude stops at 85, past which Web Mercator cannot
+# draw anyway; the model itself runs to 90.
+SOUTH, NORTH = -80.0, 85.0
 
-# Subsample to ~0.48 deg. Coarser than the model, but the animation
-# interpolates between grid points and the payload stays a fifth the size.
-STRIDE_LON, STRIDE_LAT = 6, 12
+# Subsample to ~0.96 deg. Global at the old 0.48 would be about three
+# megabytes of JSON — four times what the basin cost — and at global zoom
+# that detail is invisible. The animation interpolates between grid points,
+# so the flow still reads as continuous.
+STRIDE_LON, STRIDE_LAT = 12, 24
 
 UA = {'User-Agent': 'oceansensing.org current map (github.com/oceansensing)'}
 
@@ -76,7 +80,10 @@ def rows(body: str) -> list[list[float | None]]:
             except ValueError:
                 row.append(None)
                 continue
-            row.append(None if math.isnan(v) else round(v, 3))
+            # Two decimals: a centimetre per second is far finer than
+            # anything the particles express, and the shorter numbers
+            # compress better over the wire.
+            row.append(None if math.isnan(v) else round(v, 2))
         if row:
             out.append(row)
     return out
@@ -137,9 +144,8 @@ def main() -> int:
         t, valid, run = pick_time()
         print(f'model step {t} — valid {valid}, from the {run} run')
 
-        # 0-360 longitudes in the model; the region is west of the meridian.
-        x0 = axis_index(WEST + 360, LON0, DLON, NLON)
-        x1 = axis_index(EAST + 360, LON0, DLON, NLON)
+        # Every longitude, so the grid closes on itself.
+        x0, x1 = 0, NLON - 1
         y0 = axis_index(SOUTH, LAT0, DLAT, NLAT)
         y1 = axis_index(NORTH, LAT0, DLAT, NLAT)
 
@@ -161,7 +167,9 @@ def main() -> int:
     # The model counts latitude northward; leaflet-velocity reads its rows
     # from the top down, so the grid is flipped and la1 is the north edge.
     la1 = LAT0 + (y0 + (ny - 1) * STRIDE_LAT) * DLAT
-    lo1 = LON0 + x0 * DLON - 360
+    # The model counts longitude from 0 east; leaflet-velocity wraps with a
+    # floored modulo, so it reads -74 as 286 without help.
+    lo1 = LON0 + x0 * DLON
 
     def flatten(grid):
         return [value for row in reversed(grid) for value in row]
@@ -188,8 +196,10 @@ def main() -> int:
     OUT.write_text(json.dumps(payload, separators=(',', ':')) + '\n')
 
     wet = sum(1 for x in payload[0]['data'] if x is not None)
-    print(f'wrote {OUT} — {nx}x{ny} at {dx:.2f} deg, {wet} wet points, '
-          f'{OUT.stat().st_size / 1024:.0f} KB')
+    spans = nx * dx
+    print(f'wrote {OUT} — {nx}x{ny} at {dx:.2f} deg, spanning {spans:.0f} deg of '
+          f'longitude ({"wraps" if spans >= 360 else "DOES NOT WRAP"}), '
+          f'{wet} wet points, {OUT.stat().st_size / 1024:.0f} KB')
     return 0
 
 

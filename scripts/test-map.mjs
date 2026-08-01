@@ -171,12 +171,20 @@ const near = (a, b) => a !== null && Math.abs(a) < b;
    just with the Gulf Stream running the wrong way. */
 const [cu, cv] = files.currents;
 const ch = cu.header;
+/* Longitude wraps, so index it the way leaflet-velocity does — a floored
+   modulo. The grid now starts at 0 degrees east and a plain subtraction
+   sends anything in the western hemisphere to a negative index. */
 const currentAt = (lat, lon) => {
-  const k = Math.round((ch.la1 - lat) / ch.dy) * ch.nx + Math.round((lon - ch.lo1) / ch.dx);
+  const i = Math.round(((((lon - ch.lo1) % 360) + 360) % 360) / ch.dx) % ch.nx;
+  const j = Math.round((ch.la1 - lat) / ch.dy);
+  if (j < 0 || j >= ch.ny) return [null, null];
+  const k = j * ch.nx + i;
   return [cu.data[k], cv.data[k]];
 };
-const [gsU, gsV] = currentAt(35.5, -74.5);   // Gulf Stream off Hatteras
-const [landU] = currentAt(32.5, -83.5);      // inland Georgia
+const [gsU, gsV] = currentAt(35.5, -74.5);      // Gulf Stream off Hatteras
+const [kuU, kuV] = currentAt(35.0, 141.0);      // Kuroshio, the far side of the world
+const [accU] = currentAt(-55.0, -150.0);        // Antarctic Circumpolar, due east
+const [landU] = currentAt(-25.0, 133.0);        // central Australia
 
 /* Storm history is solid; the forecast is dashed. Distinguishing them by the
    dash attribute is what proves the observed track is actually drawn rather
@@ -238,6 +246,13 @@ const checks = [
   ['currents are not upside down (Gulf Stream runs NE, fast)',
     gsU > 0.1 && gsV > 0.4 && Math.hypot(gsU, gsV) > 0.6],
   ['currents mask land', landU === null],
+  /* Global coverage, and it has to close on itself: leaflet-velocity only
+     wraps the grid across the antimeridian when it spans a full 360, and
+     without that particles pile up at the edge instead of crossing. */
+  ['currents grid spans the globe', Math.floor(ch.nx * ch.dx) >= 360],
+  ['currents reach the far hemisphere (Kuroshio runs NE, fast)',
+    kuU > 0.2 && kuV > 0.2 && Math.hypot(kuU, kuV) > 0.5],
+  ['Antarctic Circumpolar runs eastward', accU !== null && accU > 0],
   // One shared window drives storm history, glider tracks and USV tracks.
   ['history window is published once', typeof assets.historyDays === 'number' && !('activeWindowDays' in assets)],
   ['storms carry observed history', withHistory.length === assets.storms.length],

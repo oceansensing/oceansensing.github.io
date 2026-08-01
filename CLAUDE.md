@@ -151,6 +151,13 @@ the same data:
   US Navy ESPC-D-V02 global forecast via HYCOM's OPeNDAP. Chosen because it
   is open; **Copernicus publishes Mercator at the same resolution but its
   numeric access needs credentials**, and the WMTS only serves pictures.
+
+  The grid is global at ~0.96°, and **must span a full 360° of longitude** —
+  leaflet-velocity only wraps across the antimeridian when it does, and
+  without that particles pile up against the edge. It also means longitude
+  has to be indexed with a floored modulo, since the grid starts at 0°E and
+  half the world is west of that. 678 KB raw, 107 KB gzipped over the wire.
+  Resolution is the payload knob: 0.48° globally would be ~3 MB.
 - **Mercator speed raster** (off by default) — the Copernicus WMTS tiles.
   Also what `prefers-reduced-motion` readers get instead of the animation.
 
