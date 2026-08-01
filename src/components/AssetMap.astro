@@ -1,0 +1,307 @@
+---
+import 'leaflet/dist/leaflet.css';
+
+/* Interactive map of active hurricanes and uncrewed ocean assets.
+   Data comes from /map/ocean-assets.json, refreshed on every deploy by
+   scripts/fetch-ocean-assets.py (see .github/workflows/deploy.yml).
+   Leaflet is bundled from npm — nothing is loaded from a CDN, and the
+   default basemap is the coastline file in /data/, so the page makes no
+   third-party requests unless a tile layer is switched on. */
+---
+
+<figure class="map-figure">
+  <div id="asset-map" role="application" aria-label="Map of active hurricanes and uncrewed ocean assets">
+    <noscript>
+      <p class="fallback">
+        This map needs JavaScript. The underlying data is available as
+        <a href="/map/ocean-assets.json">ocean-assets.json</a>.
+      </p>
+    </noscript>
+  </div>
+  <figcaption>
+    <span class="legend">
+      <span class="key storm">Hurricane track &amp; cone</span>
+      <span class="key usv">NOAA USV</span>
+      <span class="key glider">IOOS glider</span>
+    </span>
+    <span class="status" id="map-status">Loading…</span>
+  </figcaption>
+</figure>
+
+<script>
+  import L from 'leaflet';
+
+  const BASIN: [[number, number], [number, number]] = [
+    [7, -100],
+    [45, -20],
+  ];
+
+  const el = document.getElementById('asset-map');
+  const status = document.getElementById('map-status');
+  if (el) init(el as HTMLElement);
+
+  async function init(host: HTMLElement) {
+    const map = L.map(host, {
+      worldCopyJump: true,
+      minZoom: 2,
+      attributionControl: true,
+    }).fitBounds(BASIN);
+
+    map.attributionControl.setPrefix('');
+
+    /* Default basemap: coastlines shipped with the site, so no tile server
+       sees our visitors. Tile layers are offered but never load unless the
+       reader picks one. */
+    const coastline = L.layerGroup().addTo(map);
+    const bases: Record<string, L.Layer> = {
+      'Coastline (no tracking)': coastline,
+      OpenStreetMap: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+      }),
+      'Esri Ocean': L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+        { attribution: 'Esri, GEBCO, NOAA', maxZoom: 13 }
+      ),
+    };
+
+    // Lat/lon grid, every 10°.
+    const graticule = L.layerGroup();
+    for (let lon = -180; lon <= 180; lon += 10) {
+      L.polyline([[-85, lon], [85, lon]], { weight: 0.5, opacity: 0.35, color: '#7f8c9b' }).addTo(graticule);
+    }
+    for (let lat = -80; lat <= 80; lat += 10) {
+      L.polyline([[lat, -180], [lat, 180]], { weight: 0.5, opacity: 0.35, color: '#7f8c9b' }).addTo(graticule);
+    }
+
+    const storms = L.layerGroup().addTo(map);
+    const usvs = L.layerGroup().addTo(map);
+    const gliders = L.layerGroup().addTo(map);
+
+    L.control
+      .layers(bases, {
+        'Hurricanes': storms,
+        'NOAA USVs': usvs,
+        'IOOS gliders': gliders,
+        'Lat/lon grid': graticule,
+      })
+      .addTo(map);
+
+    L.control.scale({ imperial: false }).addTo(map);
+
+    // View toggle: hurricane basin vs everything currently reporting.
+    const Views = L.Control.extend({
+      options: { position: 'topleft' },
+      onAdd() {
+        const bar = L.DomUtil.create('div', 'leaflet-bar view-toggle');
+        for (const [label, title] of [
+          ['Basin', 'Zoom to the Atlantic and Gulf'],
+          ['Global', 'Zoom to every reporting asset'],
+        ]) {
+          const a = L.DomUtil.create('a', '', bar);
+          a.textContent = label;
+          a.href = '#';
+          a.title = title;
+          L.DomEvent.on(a, 'click', (e) => {
+            L.DomEvent.stop(e);
+            if (label === 'Basin') map.fitBounds(BASIN);
+            else fitEverything();
+          });
+        }
+        return bar;
+      },
+    });
+    map.addControl(new Views());
+
+    let allBounds: L.LatLngBounds | null = null;
+    const fitEverything = () => {
+      if (allBounds && allBounds.isValid()) map.fitBounds(allBounds.pad(0.1));
+    };
+
+    // ---- coastline ----
+    try {
+      const { rings } = await (await fetch('/map/coastline.json')).json();
+      const style = { color: '#8a949f', weight: 0.8, fillColor: '#8a949f', fillOpacity: 0.16 };
+      for (const ring of rings as number[][][]) {
+        L.polygon(ring.map(([x, y]) => [y, x] as [number, number]), style).addTo(coastline);
+      }
+    } catch {
+      if (status) status.textContent = 'Coastline unavailable.';
+    }
+
+    // ---- storms and assets ----
+    try {
+      const data = await (await fetch('/map/ocean-assets.json')).json();
+      const pts: [number, number][] = [];
+
+      for (const s of data.storms ?? []) {
+        if (s.cone?.length) {
+          L.polygon(s.cone.map(([x, y]: number[]) => [y, x] as [number, number]), {
+            color: '#d1495b',
+            weight: 1,
+            fillColor: '#d1495b',
+            fillOpacity: 0.12,
+          })
+            .addTo(storms)
+            .bindPopup(`<strong>${s.name}</strong><br>Forecast cone`);
+        }
+        if (s.track?.length) {
+          L.polyline(s.track.map(([x, y]: number[]) => [y, x] as [number, number]), {
+            color: '#d1495b',
+            weight: 2,
+            dashArray: '5,4',
+          }).addTo(storms);
+        }
+        if (typeof s.lat === 'number' && typeof s.lon === 'number') {
+          pts.push([s.lat, s.lon]);
+          L.circleMarker([s.lat, s.lon], {
+            radius: 8,
+            color: '#d1495b',
+            weight: 2,
+            fillColor: '#d1495b',
+            fillOpacity: 0.55,
+          })
+            .addTo(storms)
+            .bindPopup(
+              `<strong>${s.name}</strong> (${s.classification ?? ''})<br>` +
+                `${s.intensityKt ?? '?'} kt · ${s.pressureMb ?? '?'} mb<br>` +
+                `Moving ${s.movementDir ?? '?'}° at ${s.movementSpeedKt ?? '?'} kt<br>` +
+                (s.advisoryUrl ? `<a href="${s.advisoryUrl}">NHC advisory</a>` : '')
+            );
+        }
+      }
+
+      for (const a of data.assets ?? []) {
+        const isUsv = a.kind === 'usv';
+        pts.push([a.lat, a.lon]);
+        L.circleMarker([a.lat, a.lon], {
+          radius: isUsv ? 6 : 4,
+          color: isUsv ? '#e07a00' : '#0a7d8c',
+          weight: 1.5,
+          fillColor: isUsv ? '#e07a00' : '#0a7d8c',
+          fillOpacity: 0.8,
+        })
+          .addTo(isUsv ? usvs : gliders)
+          .bindPopup(
+            `<strong>${a.id}</strong><br>${a.title ?? ''}<br>` +
+              `<span class="muted">${a.institution ?? ''}</span><br>` +
+              `${a.lat.toFixed(3)}, ${a.lon.toFixed(3)} · ${(a.time ?? '').slice(0, 16).replace('T', ' ')}Z<br>` +
+              `<a href="${a.info}">ERDDAP dataset</a>`
+          );
+      }
+
+      if (pts.length) allBounds = L.latLngBounds(pts);
+
+      const n = (data.assets ?? []).length;
+      const s = (data.storms ?? []).length;
+      if (status) {
+        const when = (data.updated ?? '').slice(0, 16).replace('T', ' ');
+        status.innerHTML =
+          `${s} active storm${s === 1 ? '' : 's'} · ${n} assets reporting within ` +
+          `${data.activeWindowDays} days · updated ${when}Z`;
+      }
+    } catch {
+      if (status) status.textContent = 'Asset data unavailable.';
+    }
+  }
+</script>
+
+<style>
+  .map-figure {
+    margin: 0 0 var(--space-lg);
+  }
+
+  #asset-map {
+    height: clamp(24rem, 62vh, 40rem);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-subtle);
+    z-index: 0;
+  }
+
+  .fallback {
+    padding: var(--space-md);
+    color: var(--text-muted);
+  }
+
+  figcaption {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-xs) var(--space-md);
+    margin-block-start: var(--space-xs);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+  }
+
+  .key::before {
+    content: '';
+    display: inline-block;
+    width: 0.7em;
+    height: 0.7em;
+    border-radius: 50%;
+    margin-inline-end: 0.4em;
+  }
+
+  .key.storm::before {
+    background: #d1495b;
+  }
+
+  .key.usv::before {
+    background: #e07a00;
+  }
+
+  .key.glider::before {
+    background: #0a7d8c;
+  }
+
+  /* Leaflet's chrome, matched to the site's tokens in both themes. */
+  #asset-map :global(.leaflet-container) {
+    background: var(--bg-subtle);
+    font-family: var(--font-sans);
+  }
+
+  #asset-map :global(.leaflet-bar a),
+  #asset-map :global(.leaflet-control-layers),
+  #asset-map :global(.leaflet-popup-content-wrapper),
+  #asset-map :global(.leaflet-popup-tip) {
+    background: var(--bg);
+    color: var(--text);
+    border-color: var(--border);
+  }
+
+  #asset-map :global(.leaflet-bar a:hover) {
+    background: var(--bg-subtle);
+  }
+
+  #asset-map :global(.view-toggle a) {
+    width: auto;
+    padding-inline: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+
+  #asset-map :global(.leaflet-popup-content) {
+    line-height: 1.45;
+  }
+
+  #asset-map :global(.leaflet-popup-content .muted) {
+    color: var(--text-muted);
+  }
+
+  #asset-map :global(.leaflet-control-attribution) {
+    background: var(--bg);
+    color: var(--text-muted);
+  }
+
+  #asset-map :global(.leaflet-control-attribution a) {
+    color: var(--accent);
+  }
+</style>

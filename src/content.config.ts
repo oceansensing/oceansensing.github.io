@@ -36,6 +36,8 @@ const observations = defineCollection({
       summary: z.string(),
       // optional hero image for the observation's own page
       cover: z.object({ src: image(), alt: z.string() }).optional(),
+      // set to show the live hurricane / uncrewed-asset map on this page
+      map: z.enum(['assets']).optional(),
       /* Photos are grouped into dated surveys — the observation page shows
          them as panels by year, then by day. Every photo also joins the
          homepage card's rotation, which shuffles them per page load. */

@@ -3,6 +3,7 @@ import { getCollection, render } from 'astro:content';
 import { Image, getImage } from 'astro:assets';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SurveyPanel from '../../components/SurveyPanel.astro';
+import AssetMap from '../../components/AssetMap.astro';
 
 export async function getStaticPaths() {
   const observations = await getCollection('observations');
@@ -13,7 +14,7 @@ export async function getStaticPaths() {
 }
 
 const { observation } = Astro.props;
-const { title, summary, cover, surveys, links } = observation.data;
+const { title, summary, cover, surveys, links, map } = observation.data;
 const { Content } = await render(observation);
 
 /* Survey photos are shown as panels: grouped by year (newest first), then
@@ -99,6 +100,7 @@ const collapsible = byYear.length > 1;
         />
       )
     }
+    {map === 'assets' && <AssetMap />}
     <div class="prose">
       <Content />
     </div>

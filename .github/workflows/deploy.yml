@@ -3,6 +3,12 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  # Refresh the hurricane / uncrewed-asset map. NHC issues advisories every
+  # six hours; every three keeps the map current without churn. Public repos
+  # get unlimited Actions minutes, and nothing is committed — the data is
+  # fetched into the build, so the repo does not grow.
+  schedule:
+    - cron: '17 */3 * * *'
   workflow_dispatch:
 
 permissions:
@@ -19,6 +25,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Never fail the deploy over an upstream outage: the script keeps the
+      # committed snapshot when a source is unreachable.
+      - name: Refresh ocean asset data
+        continue-on-error: true
+        run: python3 scripts/fetch-ocean-assets.py
+
       - uses: withastro/action@v3
         with:
           node-version: 22

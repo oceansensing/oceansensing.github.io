@@ -17,3 +17,6 @@ node_modules/
 # jetbrains / vscode local settings
 .idea/
 .vscode/
+
+# regenerated on every deploy by scripts/fetch-ocean-assets.py
+# (a snapshot is committed so local dev and offline builds work)

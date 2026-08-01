@@ -1,0 +1,61 @@
+#!/usr/bin/env node
+/**
+ * Runs the built asset-map bundle against the real data in a headless DOM.
+ *
+ *   npm run build && node scripts/test-map.mjs
+ *
+ * Exists because the map is the one piece of the site with meaningful
+ * client-side logic; this exercises it end to end (Leaflet, coastline,
+ * storms, markers, controls) without needing a browser.
+ */
+import { JSDOM } from 'jsdom';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const dom = new JSDOM(
+  '<!doctype html><body><div id="asset-map"></div><span id="map-status"></span></body>',
+  { pretendToBeVisual: true, url: 'http://localhost/' }
+);
+const { window } = dom;
+globalThis.window = window;
+globalThis.document = window.document;
+Object.defineProperty(globalThis, 'navigator', { value: window.navigator, configurable: true });
+for (const k of ['HTMLElement', 'Element', 'Node', 'SVGElement', 'Event', 'MouseEvent', 'KeyboardEvent', 'DOMParser'])
+  globalThis[k] = window[k];
+globalThis.getComputedStyle = window.getComputedStyle.bind(window);
+globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
+globalThis.cancelAnimationFrame = clearTimeout;
+
+const box = { width: 800, height: 500, top: 0, left: 0, right: 800, bottom: 500, x: 0, y: 0 };
+window.Element.prototype.getBoundingClientRect = () => box;
+Object.defineProperty(window.HTMLElement.prototype, 'clientWidth', { get: () => 800, configurable: true });
+Object.defineProperty(window.HTMLElement.prototype, 'clientHeight', { get: () => 500, configurable: true });
+
+const coast = JSON.parse(fs.readFileSync('public/map/coastline.json', 'utf8'));
+const assets = JSON.parse(fs.readFileSync('public/map/ocean-assets.json', 'utf8'));
+globalThis.fetch = async (u) => ({ json: async () => (String(u).includes('coastline') ? coast : assets) });
+
+const bundle = fs.readdirSync('dist/_astro').find((f) => f.startsWith('AssetMap') && f.endsWith('.js'));
+if (!bundle) {
+  console.error('no AssetMap bundle in dist/_astro — run `npm run build` first');
+  process.exit(1);
+}
+await import('./' + path.join('..', 'dist', '_astro', bundle));
+await new Promise((r) => setTimeout(r, 1500));
+
+const host = document.getElementById('asset-map');
+const status = document.getElementById('map-status').textContent;
+const checks = [
+  ['leaflet initialised', host.classList.contains('leaflet-container')],
+  ['vector paths drawn', host.querySelectorAll('path').length > 500],
+  ['layer switcher', host.querySelectorAll('.leaflet-control-layers-selector').length >= 6],
+  ['view toggle', host.querySelectorAll('.view-toggle a').length === 2],
+  ['data pipeline completed', /assets reporting within/.test(status)],
+];
+let ok = true;
+for (const [name, pass] of checks) {
+  console.log(`${pass ? 'ok  ' : 'FAIL'}  ${name}`);
+  ok &&= pass;
+}
+console.log(`status: ${status}`);
+process.exit(ok ? 0 : 1);
