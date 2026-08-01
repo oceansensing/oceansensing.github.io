@@ -35,4 +35,4 @@ The map above draws on public feeds: active storm positions, forecast tracks
 and cones from the National Hurricane Center, NOAA uncrewed surface vehicle
 positions from the PMEL ERDDAP server, and underwater glider positions from
 the US IOOS Glider Data Assembly Center. It shows only platforms that have
-reported recently, and refreshes several times a day.
+reported recently, and refreshes hourly.

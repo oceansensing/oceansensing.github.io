@@ -1,0 +1,164 @@
+---
+import fs from 'node:fs';
+import path from 'node:path';
+
+/* One line per active tropical cyclone, read at build time from the same
+   file the map fetches. The deploy refreshes it hourly (see
+   .github/workflows/deploy.yml), so this is exactly as current as the map
+   below it and costs no client-side request. */
+
+interface Storm {
+  id?: string;
+  name?: string;
+  classification?: string;
+  intensityKt?: string | number;
+  movementDir?: number | null;
+  movementSpeedKt?: number | null;
+  advisoryUrl?: string;
+}
+
+let storms: Storm[] = [];
+try {
+  const raw = fs.readFileSync(path.resolve('public/map/ocean-assets.json'), 'utf8');
+  storms = JSON.parse(raw).storms ?? [];
+} catch {
+  // No data file yet (a fresh checkout before the first fetch) — say nothing.
+}
+
+const POINTS = [
+  'N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+  'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW',
+];
+const compass = (deg: number) => POINTS[Math.round((((deg % 360) + 360) % 360) / 22.5) % 16];
+
+// NHC status codes.
+const KIND: Record<string, string> = {
+  TD: 'Tropical depression',
+  TS: 'Tropical storm',
+  HU: 'Hurricane',
+  MH: 'Major hurricane',
+  STD: 'Subtropical depression',
+  STS: 'Subtropical storm',
+  PTC: 'Post-tropical cyclone',
+  PC: 'Potential tropical cyclone',
+  DB: 'Disturbance',
+  LO: 'Low',
+};
+
+// Saffir-Simpson thresholds in knots, so "Hurricane" reads "Category 3 hurricane".
+const CATEGORY: [number, number][] = [[137, 5], [113, 4], [96, 3], [83, 2], [64, 1]];
+
+/* Null and '' both coerce to 0, which would report a missing intensity as
+   "0 kt" — so screen them out before converting. */
+const num = (v: unknown) => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+const describe = (s: Storm) => {
+  const kt = num(s.intensityKt);
+  const kind = KIND[s.classification ?? ''] ?? s.classification ?? 'Tropical cyclone';
+  if (/hurricane/i.test(kind) && kt !== null) {
+    const cat = CATEGORY.find(([floor]) => kt >= floor);
+    if (cat) return `Category ${cat[1]} hurricane`;
+  }
+  return kind;
+};
+
+/* NHC storm ids carry the basin as a two-letter prefix — al052026 is the
+   fifth Atlantic storm of 2026, ep072026 the seventh in the eastern
+   Pacific. Nothing else in the feed names the basin. */
+const BASIN: Record<string, string> = {
+  al: 'Atlantic',
+  ep: 'Eastern Pacific',
+  cp: 'Central Pacific',
+};
+const basin = (id?: string) => BASIN[(id ?? '').slice(0, 2).toLowerCase()] ?? null;
+
+const active = storms.map((s) => {
+  const kt = num(s.intensityKt);
+  const dir = num(s.movementDir);
+  const speed = num(s.movementSpeedKt);
+  return {
+    name: s.name ?? 'Unnamed',
+    url: s.advisoryUrl,
+    facts: [
+      basin(s.id),
+      describe(s),
+      kt === null ? null : `${kt} kt`,
+      dir === null || speed === null ? null : `${compass(dir)} ${speed} kt`,
+    ].filter(Boolean) as string[],
+  };
+});
+---
+
+<div class="storm-status">
+  <span class="label">{active.length === 1 ? 'Active storm' : 'Active storms'}</span>
+  {
+    active.length === 0 ? (
+      <p class="none">None — no tropical cyclones are being tracked right now.</p>
+    ) : (
+      <ul>
+        {active.map((s) => (
+          <li>
+            {s.url ? <a href={s.url}>{s.name}</a> : <strong>{s.name}</strong>}
+            <span class="facts">{s.facts.join(' · ')}</span>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+</div>
+
+<style>
+  .storm-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2xs) var(--space-md);
+    border-block: 1px solid var(--border);
+    padding-block: var(--space-sm);
+    margin-block-end: var(--space-lg);
+  }
+
+  .label {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+  }
+
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2xs) var(--space-sm);
+  }
+
+  li a,
+  li strong {
+    font-weight: 600;
+  }
+
+  .facts,
+  .none {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  .none {
+    margin: 0;
+  }
+</style>

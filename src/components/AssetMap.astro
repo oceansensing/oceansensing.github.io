@@ -473,4 +473,13 @@ import 'leaflet/dist/leaflet.css';
   #asset-map :global(.leaflet-control-attribution a) {
     color: var(--accent);
   }
+
+  /* Leaflet's scale bar is a translucent white box by default — the last
+     piece of light chrome left on a dark page. */
+  #asset-map :global(.leaflet-control-scale-line) {
+    background: var(--bg);
+    color: var(--text-muted);
+    border-color: var(--border);
+    font-family: var(--font-mono);
+  }
 </style>
