@@ -224,6 +224,54 @@ if (marker) {
   popupHtml = host.querySelector('.leaflet-popup-content')?.innerHTML ?? '';
 }
 
+/* Tap targets. The visible dots are a few pixels across — far smaller than
+   a fingertip — so each asset carries an invisible circle to catch near
+   misses. Two things have to hold, and checking only one of them passes
+   trivially: the target must cover ground the dot does not (a dead-centre
+   click would open the popup either way), and clicking it must open the
+   same detail as the dot itself. Leaflet's own _containsPoint is the hit
+   test both renderers use, so asking it directly is what the pointer asks. */
+const layers = Object.values(host._map._layers);
+const px = (x, y) => window.L.point(x, y);
+const assetDot = layers.find((l) => l.options?.className === 'map-asset');
+const OFFSET = 10; // px — a miss by a fingertip's width, not a pixel
+
+let dotCoversOffset = null;
+let targetCoversOffset = null;
+let tapPopupMatches = null;
+if (assetDot?._point) {
+  const near = assetDot._point.add(px(OFFSET, 0));
+  dotCoversOffset = assetDot._containsPoint(near);
+
+  const target = layers.find(
+    (l) =>
+      l.options?.className === 'map-tap-target' &&
+      l.getLatLng?.().equals(assetDot.getLatLng()) &&
+      l._containsPoint?.(near)
+  );
+  targetCoversOffset = !!target;
+
+  if (target) {
+    host._map.closePopup();
+    assetDot._path.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    await new Promise((r) => setTimeout(r, 150));
+    const viaDot = host.querySelector('.leaflet-popup-content')?.innerHTML ?? '';
+    host._map.closePopup();
+    target._path.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    await new Promise((r) => setTimeout(r, 150));
+    const viaTarget = host.querySelector('.leaflet-popup-content')?.innerHTML ?? '';
+    tapPopupMatches = !!viaDot && viaDot === viaTarget;
+    host._map.closePopup();
+  }
+}
+
+/* Argo is drawn on canvas, where there is no element to enlarge — the
+   renderer hit-tests arithmetically, so the tolerance is what widens it. */
+const argoDot = layers.find((l) => l.options?.radius === 2.8 && l.options?.renderer);
+const argoCoversOffset = argoDot?._point
+  ? argoDot._containsPoint(argoDot._point.add(px(OFFSET, 0)))
+  : null;
+
 /* Zoom buttons: the ones naming a real storm are revealed and wired, the
    unknown one stays hidden. Clicking must centre the map on that storm. */
 const zoomButtons = [...document.querySelectorAll('[data-storm-zoom]')];
@@ -410,6 +458,18 @@ const bearing = (a, b) => {
 };
 const expectedBearing = bearing([36.9, -76.3], [44.6, -63.6]);
 
+/* A click that lands on an asset while measuring is a survey point, not a
+   request for its popup. Leaflet does not forward a click on an interactive
+   layer to the map, so without explicit handling the tap is swallowed and
+   the reader has to steer around their own fleet to measure between it. */
+document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+host._map.closePopup();
+measureButton?.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+assetDot?._path.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+await new Promise((r) => setTimeout(r, 150));
+const measuringTookTheClick = (measureReadout?.textContent ?? '') === 'Click a second point';
+const measuringSuppressedPopup = !host.querySelector('.leaflet-popup');
+
 // Escape must put the map back the way it was.
 document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 await new Promise((r) => setTimeout(r, 100));
@@ -443,6 +503,12 @@ const checks = [
   ['asset tracks drawn', host.querySelectorAll('path[stroke="#e8368f"], path[stroke="#f08c00"]').length >= assets.assets.length],
   ['glider colour is not the old teal', !host.querySelector('path[stroke="#0a7d8c"]')],
   ['popup shows deployment date', popupHtml.includes('Deployed')],
+  ['a near miss falls outside the drawn dot', dotCoversOffset === false],
+  [`tap target catches a miss by ${OFFSET} px`, targetCoversOffset === true],
+  ['tap target opens the same detail as the dot', tapPopupMatches === true],
+  [`argo hit tolerance catches a miss by ${OFFSET} px`, argoCoversOffset === true],
+  ['measuring takes a click on an asset', measuringTookTheClick],
+  ['measuring suppresses the asset popup', measuringSuppressedPopup],
   ['popup links the dataset', /href="https?:[^"]*erddap[^"]*"/i.test(popupHtml)],
   // Theme-driven layers carry a class instead of a baked-in colour, so the
   // stylesheet can restyle them when the reader switches to dark mode.
