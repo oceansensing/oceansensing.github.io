@@ -147,28 +147,39 @@ import 'leaflet/dist/leaflet.css';
        in place first and the plugin pulled in dynamically after. Without
        this the built bundle dies on "L is not defined" — the dev server
        hides it by serving Leaflet's UMD build, which does set the global. */
-    /* How briskly the particles drift. Not a physical quantity — the plugin
-       applies its own projection factor on top — so this was calibrated by
-       measuring the drawn segments: it puts a typical current near 0.7 px a
-       frame, an unhurried drift that still reads clearly over a particle's
-       lifetime. npm run test:map prints the distribution.
+    /* Pixels a 1 m/s current should carry a particle each frame. Currents run
+       an order of magnitude slower than wind, so the plugin's wind-tuned
+       default leaves them at a fifth of a pixel — invisible. */
+    const DRIFT = 3.0;
 
-       Currents run an order of magnitude slower than wind, so the plugin's
-       wind-tuned default left them at a fifth of a pixel — invisible. Worse,
-       it multiplies by mapArea^0.4, which makes particles slower the further
-       you zoom IN: the same current drifted 1.4 px/frame at zoom 3 and 0.23
-       at zoom 6, so zooming to a storm — exactly when the flow matters —
-       all but stopped it. Dividing that factor out ties the speed to the
-       current rather than the viewport. */
-    const DRIFT = 0.14;
+    /* The plugin turns a velocity into a screen displacement by multiplying
+       it by the reader's velocityScale, then by mapArea^0.4, then by the
+       projection's own Jacobian — pixels per degree, which doubles with
+       every zoom level. Both of the last two have to be divided back out to
+       get a drift that depends on the current rather than the viewport.
 
+       Cancelling only mapArea^0.4 is worse than cancelling nothing: that
+       term is the plugin's own rough compensation for zoom, so removing it
+       leaves the Jacobian bare and particles accelerate as you zoom in —
+       measured at 0.08 px/frame at zoom 3 against 10.7 at zoom 9, which is
+       most of the way across the map every second. The Jacobian is measured
+       off the map rather than assumed, so this holds for any projection. */
     const scaleForView = () => {
       const rad = Math.PI / 180;
       const bounds = map.getBounds();
       const area = Math.abs(
         (bounds.getSouth() - bounds.getNorth()) * rad * (bounds.getWest() - bounds.getEast()) * rad
       );
-      return DRIFT / Math.pow(Math.max(area, 1e-6), 0.4);
+
+      const centre = map.getCenter();
+      const step = 0.1;
+      const here = map.latLngToContainerPoint(centre);
+      const east = map.latLngToContainerPoint(L.latLng(centre.lat, centre.lng + step));
+      const pxPerDegree = Math.hypot(east.x - here.x, east.y - here.y) / step;
+      // The plugin divides the eastward derivative by cos(lat); match it.
+      const jacobian = Math.max(pxPerDegree / Math.cos(centre.lat * rad), 1e-6);
+
+      return DRIFT / (Math.pow(Math.max(area, 1e-6), 0.4) * jacobian);
     };
 
     const loadPlugin = async () => {

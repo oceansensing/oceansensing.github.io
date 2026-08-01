@@ -305,14 +305,24 @@ silently:
   near-white changes almost nothing. Hence two panes. `test:contrast` reads
   the particle pane's name out of the component and fails if a blend mode
   reappears on it, because the whole gate assumes normal compositing.
-- **Their speed must be divided by the plugin's `mapArea^0.4`.** That factor
-  makes particles slower the further you zoom *in* — the same current drifted
-  1.4 px/frame at zoom 3 and 0.23 at zoom 6, so zooming to a storm stopped
-  the flow. `scaleForView()` cancels it and rescales on `zoomend`.
+- **Their speed must cancel _two_ of the plugin's factors, not one.** It
+  turns a velocity into a screen displacement by multiplying by the
+  velocityScale you pass, then `mapArea^0.4`, then the projection's Jacobian
+  — pixels per degree, which doubles every zoom level. Cancelling only
+  `mapArea^0.4` is **worse than cancelling nothing**: that term is the
+  plugin's own rough zoom compensation, so removing it leaves the Jacobian
+  bare and particles accelerate as you zoom in. Shipped that way it went from
+  0.08 px/frame at zoom 3 to 10.7 at zoom 9 — most of the map every second,
+  which read as long dendritic streamlines rather than a flowing field.
+  `scaleForView()` now divides out both, measuring the Jacobian off the map
+  rather than assuming a projection.
 
 `npm run test:map` records the canvas draw calls and prints the per-frame
-displacement distribution — that is how both bugs were found, and it fails if
-the particles go sub-pixel again. Re-measure rather than guess when tuning.
+displacement distribution — that is how these were found, and it fails if the
+particles go sub-pixel again. **It also samples two zoom levels and compares**,
+because the single-zoom check that came before it could not distinguish a
+field that holds still from one that accelerates, and so missed the runaway
+entirely. Re-measure rather than guess when tuning.
 
 **leaflet-velocity is UMD and reads Leaflet off the global object**, which
 the bundled ESM build never sets. It is therefore loaded by dynamic import

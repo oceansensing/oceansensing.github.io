@@ -56,7 +56,9 @@ const recordingContext = new Proxy(
           [penX, penY] = args;
         } else if (key === 'lineTo') {
           drawn.lineTo += 1;
-          if (drawn.segments.length < 500) {
+          // Generous: the zoom comparison below samples windows out of this,
+          // and a 500-entry cap made every window after the first empty.
+          if (drawn.segments.length < 400000) {
             drawn.segments.push(Math.hypot(args[0] - penX, args[1] - penY));
           }
         } else if (key === 'stroke') {
@@ -347,6 +349,27 @@ const spansHemispheres =
 const spansLongitudes =
   Math.max(...fleet.map((f) => f.lon)) - Math.min(...fleet.map((f) => f.lon)) > 300;
 
+/* Drift has to be about the current, not the viewport. The check that came
+   before this one sampled a single zoom, so it could not tell a field that
+   holds still from one that accelerates as you zoom in — which is exactly
+   what shipped: 0.08 px/frame at zoom 3 against 10.7 at zoom 9, particles
+   crossing the map every second. Sample two zooms and compare. */
+const p90 = (xs) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length * 0.9)] : 0);
+const driftAt = async (zoom) => {
+  const from = drawn.segments.length;
+  host._map.setZoom(zoom);
+  // The layer rebuilds its interpolated field after a zoom, in slices, so
+  // give it room before sampling.
+  await new Promise((r) => setTimeout(r, 3000));
+  const got = drawn.segments.slice(from);
+  console.log(`   [z${zoom}] ${got.length} segments captured`);
+  return p90(got);
+};
+const driftNear = await driftAt(8);
+const driftFar = await driftAt(5);
+const driftRatio =
+  driftNear > 0 && driftFar > 0 ? Math.max(driftNear / driftFar, driftFar / driftNear) : Infinity;
+
 const status = document.getElementById('map-status').textContent;
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
@@ -471,6 +494,7 @@ const checks = [
      scaling left the median at 0.13 px and nothing appeared to move. Stated
      as a median so deliberately unhurried drift still passes. */
   ['particles move more than a sub-pixel each frame', medianSegment > 0.4],
+  ['drift barely changes with zoom', driftRatio < 4],
   ['particles are drawn in the checked palette', drawn.styles.size > 0 && paletteUsed],
   ['view is written back for the next reload',
     (() => {
@@ -488,6 +512,10 @@ const at = (q) => (lens.length ? lens[Math.floor(lens.length * q)].toFixed(2) : 
 console.log(
   `particles: ${drawn.stroke} strokes, ${drawn.lineTo} segments — ` +
     `px/frame p10 ${at(0.1)} median ${at(0.5)} p90 ${at(0.9)} max ${at(0.999)}`
+);
+console.log(
+  `drift vs zoom: p90 ${driftNear.toFixed(2)} px/frame at z8 vs ${driftFar.toFixed(2)} at z5 ` +
+    `(ratio ${driftRatio.toFixed(1)}, want < 4)`
 );
 console.log(
   `grids: inside region dx ${gridInsideRegion?.dx} · outside dx ${gridOutsideRegion?.dx} ` +
