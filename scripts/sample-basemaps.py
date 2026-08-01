@@ -95,9 +95,7 @@ def main() -> int:
     gebco = [fetch(gebco_url(*box)) for box in GEBCO_BOXES]
 
     payload = {
-        '_comment': ('Representative ocean colours per basemap, sampled by '
-                     'scripts/sample-basemaps.py. Feature colours are checked '
-                     'against these by scripts/test-contrast.mjs.'),
+        '_comment': ('Representative ocean colours per basemap with the share of water each covers, checked against by scripts/test-contrast.mjs. Regenerate with: npm run data:basemaps (GEBCO renders its WMS on demand and can take several minutes). Only blue-dominant water pixels are counted — features are drawn over water, so land contrast is moot.'),
         'basemaps': {
             'Bathymetry (Esri Ocean)': {'tone': 'light', 'ocean': ocean_colours(esri)},
             'Bathymetry (GEBCO)': {'tone': 'dark', 'ocean': ocean_colours(gebco)},
