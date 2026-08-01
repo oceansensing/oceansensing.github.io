@@ -22,8 +22,8 @@ import 'leaflet/dist/leaflet.css';
   <figcaption>
     <span class="legend">
       <span class="key storm">Hurricane track &amp; cone</span>
-      <span class="key usv">NOAA USV</span>
-      <span class="key glider">IOOS glider</span>
+      <span class="key usv">NOAA USV + track</span>
+      <span class="key glider">IOOS glider + track</span>
     </span>
     <span class="status" id="map-status">Loading…</span>
   </figcaption>
@@ -36,6 +36,13 @@ import 'leaflet/dist/leaflet.css';
     [7, -100],
     [45, -20],
   ];
+
+  // Magenta rather than teal for gliders: teal vanishes into GEBCO's
+  // blue-green, and magenta stays separable from the orange USVs and the
+  // red storms under the common forms of colour blindness.
+  const GLIDER = '#e8368f';
+  const USV = '#f08c00';
+  const STORM = '#d1495b';
 
   const el = document.getElementById('asset-map');
   const status = document.getElementById('map-status');
@@ -160,9 +167,9 @@ import 'leaflet/dist/leaflet.css';
       for (const s of data.storms ?? []) {
         if (s.cone?.length) {
           L.polygon(flip(s.cone), {
-            color: '#d1495b',
+            color: STORM,
             weight: 1,
-            fillColor: '#d1495b',
+            fillColor: STORM,
             fillOpacity: 0.12,
           })
             .addTo(storms)
@@ -170,7 +177,7 @@ import 'leaflet/dist/leaflet.css';
         }
         if (s.track?.length) {
           L.polyline(flip(s.track), {
-            color: '#d1495b',
+            color: STORM,
             weight: 2,
             dashArray: '5,4',
           }).addTo(storms);
@@ -179,9 +186,9 @@ import 'leaflet/dist/leaflet.css';
           pts.push([s.lat, s.lon]);
           L.circleMarker([s.lat, s.lon], {
             radius: 8,
-            color: '#d1495b',
+            color: STORM,
             weight: 2,
-            fillColor: '#d1495b',
+            fillColor: STORM,
             fillOpacity: 0.55,
           })
             .addTo(storms)
@@ -196,15 +203,24 @@ import 'leaflet/dist/leaflet.css';
 
       for (const a of data.assets ?? []) {
         const isUsv = a.kind === 'usv';
+        const layer = isUsv ? usvs : gliders;
+        const tint = isUsv ? USV : GLIDER;
         pts.push([a.lat, a.lon]);
+
+        // Where it has been over the active window, then where it is now.
+        if (a.track?.length > 1) {
+          L.polyline(flip(a.track), { color: tint, weight: 1.5, opacity: 0.6 })
+            .addTo(layer)
+            .bindPopup(`<strong>${a.id}</strong><br>Track, last ${data.activeWindowDays} days`);
+        }
         L.circleMarker([a.lat, a.lon], {
-          radius: isUsv ? 6 : 4,
-          color: isUsv ? '#e07a00' : '#0a7d8c',
-          weight: 1.5,
-          fillColor: isUsv ? '#e07a00' : '#0a7d8c',
-          fillOpacity: 0.8,
+          radius: isUsv ? 6 : 4.5,
+          color: '#10161d',
+          weight: 1.2,
+          fillColor: tint,
+          fillOpacity: 0.95,
         })
-          .addTo(isUsv ? usvs : gliders)
+          .addTo(layer)
           .bindPopup(
             `<strong>${a.id}</strong><br>${a.title ?? ''}<br>` +
               `<span class="muted">${a.institution ?? ''}</span><br>` +
@@ -278,11 +294,11 @@ import 'leaflet/dist/leaflet.css';
   }
 
   .key.usv::before {
-    background: #e07a00;
+    background: #f08c00;
   }
 
   .key.glider::before {
-    background: #0a7d8c;
+    background: #e8368f;
   }
 
   /* Leaflet's chrome, matched to the site's tokens in both themes. */

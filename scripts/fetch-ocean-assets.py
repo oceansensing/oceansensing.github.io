@@ -170,18 +170,48 @@ def collect_storms() -> list[dict]:
 
 
 def latest_position(base: str, dataset_id: str) -> dict | None:
-    q = f'{base}/tabledap/{urllib.parse.quote(dataset_id)}.json'
-    q += '?time,latitude,longitude&orderByMax(%22time%22)'
+    """Recent track plus the newest fix.
+
+    Asked server-side for one point per hour: a saildrone reports about
+    every minute, so five raw days is ~7000 rows per platform, while the
+    hourly form is ~120 and draws identically. Gliders report per
+    surfacing and are already sparse. Falls back to the last fix alone if
+    a dataset rejects the decimation.
+    """
+    ds = urllib.parse.quote(dataset_id)
+    since = (NOW - timedelta(days=ACTIVE_DAYS)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    q = (f'{base}/tabledap/{ds}.json?time,latitude,longitude'
+         f'&time%3E={since}&orderByClosest(%22time/1hours%22)')
+    rows = []
     try:
-        rows = get_json(q, timeout=45)['table']['rows']
-    except Exception:  # noqa: BLE001 - skip datasets that error or have no rows
+        rows = get_json(q, timeout=60)['table']['rows']
+    except Exception:  # noqa: BLE001
+        try:
+            rows = get_json(
+                f'{base}/tabledap/{ds}.json?time,latitude,longitude&orderByMax(%22time%22)',
+                timeout=45,
+            )['table']['rows']
+        except Exception:  # noqa: BLE001 - skip datasets that error entirely
+            return None
+
+    clean = [r for r in rows if r[1] is not None and r[2] is not None]
+    if not clean:
         return None
-    if not rows:
-        return None
-    t, lat, lon = rows[0][0], rows[0][1], rows[0][2]
-    if lat is None or lon is None:
-        return None
-    return {'time': t, 'lat': round(float(lat), 4), 'lon': round(float(lon), 4)}
+    clean.sort(key=lambda r: r[0] or '')
+    last = clean[-1]
+    # ~110 m precision, plenty for a track line and much smaller on the wire
+    track = [[round(float(r[2]), 3), round(float(r[1]), 3)] for r in clean]
+    # drop consecutive duplicates left by rounding
+    thinned = [track[0]]
+    for p in track[1:]:
+        if p != thinned[-1]:
+            thinned.append(p)
+    return {
+        'time': last[0],
+        'lat': round(float(last[1]), 4),
+        'lon': round(float(last[2]), 4),
+        'track': thinned if len(thinned) > 1 else [],
+    }
 
 
 def collect_erddap(base: str, kind: str, match: re.Pattern | None = None) -> list[dict]:

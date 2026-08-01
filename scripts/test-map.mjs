@@ -42,6 +42,7 @@ globalThis.fetch = async (u) => {
   return { json: async () => files[key] };
 };
 
+const assets = files['ocean-assets'];
 const bundle = fs.readdirSync('dist/_astro').find((f) => f.startsWith('AssetMap') && f.endsWith('.js'));
 if (!bundle) {
   console.error('no AssetMap bundle in dist/_astro — run `npm run build` first');
@@ -59,6 +60,8 @@ const checks = [
   ['bathymetry is the default base', !!host.querySelector('.leaflet-tile-pane .leaflet-layer')],
   ['view toggle', host.querySelectorAll('.view-toggle a').length === 2],
   ['data pipeline completed', /assets reporting within/.test(status)],
+  ['asset tracks drawn', host.querySelectorAll('path[stroke="#e8368f"], path[stroke="#f08c00"]').length >= assets.assets.length],
+  ['glider colour is not the old teal', !host.querySelector('path[stroke="#0a7d8c"]')],
 ];
 let ok = true;
 for (const [name, pass] of checks) {
