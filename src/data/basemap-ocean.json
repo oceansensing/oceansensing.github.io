@@ -1,5 +1,5 @@
 {
-  "_comment": "Representative ocean colours per basemap with the share of water each covers, checked against by scripts/test-contrast.mjs. Regenerate with: npm run data:basemaps (GEBCO renders its WMS on demand and can take several minutes). Only blue-dominant water pixels are counted \u2014 features are drawn over water, so land contrast is moot.",
+  "_comment": "Representative ocean colours per basemap, sampled by scripts/sample-basemaps.py. Feature colours are checked against these by scripts/test-contrast.mjs.",
   "basemaps": {
     "Bathymetry (Esri Ocean)": {
       "tone": "light",
@@ -43,51 +43,51 @@
       "ocean": [
         {
           "colour": "#305090",
-          "share": 0.358
+          "share": 0.3241
         },
         {
           "colour": "#3070b0",
-          "share": 0.1798
-        },
-        {
-          "colour": "#3090b0",
-          "share": 0.089
+          "share": 0.1747
         },
         {
           "colour": "#307090",
-          "share": 0.084
+          "share": 0.0874
+        },
+        {
+          "colour": "#3090b0",
+          "share": 0.0833
         },
         {
           "colour": "#b0f0d0",
-          "share": 0.0495
+          "share": 0.0494
         },
         {
           "colour": "#305070",
-          "share": 0.047
-        },
-        {
-          "colour": "#50b0d0",
-          "share": 0.019
+          "share": 0.0419
         },
         {
           "colour": "#105070",
-          "share": 0.0184
+          "share": 0.0285
+        },
+        {
+          "colour": "#50b0d0",
+          "share": 0.0194
+        },
+        {
+          "colour": "#105090",
+          "share": 0.0175
         },
         {
           "colour": "#70d090",
-          "share": 0.0157
+          "share": 0.015
+        },
+        {
+          "colour": "#103070",
+          "share": 0.0137
         },
         {
           "colour": "#90d0d0",
-          "share": 0.0132
-        },
-        {
-          "colour": "#90d0b0",
-          "share": 0.012
-        },
-        {
-          "colour": "#30b0d0",
-          "share": 0.0114
+          "share": 0.0136
         }
       ]
     }

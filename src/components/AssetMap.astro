@@ -89,8 +89,19 @@ import 'leaflet/dist/leaflet.css';
       'GLOBAL_ANALYSISFORECAST_PHY_001_024/' +
       'cmems_mod_glo_phy_anfc_0.083deg_PT1H-m_202406/sea_water_velocity';
 
+    /* Two panes, not one. The Mercator raster is multiplied over the
+       basemap (see the CSS), and for a while the particle canvas shared that
+       pane and was multiplied too — which all but erased it, because the
+       particles are near-white and multiplying by near-white barely changes
+       anything. They were drawing the whole time and the blend was undoing
+       them. Keep them apart: the raster blends, the particles composite
+       normally, which is also what the contrast gate assumes. */
+    const rasterPane = map.createPane('currents-raster');
+    rasterPane.style.zIndex = '250';
+    rasterPane.style.pointerEvents = 'none';
+
     const pane = map.createPane('currents');
-    pane.style.zIndex = '250';
+    pane.style.zIndex = '260';
     pane.style.pointerEvents = 'none';
 
     const currents = L.tileLayer(
@@ -99,7 +110,7 @@ import 'leaflet/dist/leaflet.css';
         `&style=${encodeURIComponent('cmap:speed,vectorStyle:solid')}` +
         '&tilematrixset=EPSG:3857&TileMatrix={z}&TileRow={y}&TileCol={x}&format=image/png',
       {
-        pane: 'currents',
+        pane: 'currents-raster',
         className: 'map-currents',
         /* The speed colourmap paints slow water pale cream, which as a
            straight overlay lays a white film over the whole ocean and
@@ -723,7 +734,12 @@ import 'leaflet/dist/leaflet.css';
     filter: var(--map-currents);
   }
 
-  #asset-map :global(.leaflet-currents-pane) {
+  /* Only the Mercator raster blends. The particle pane must composite
+     normally — multiplying near-white particles over the sea is very nearly
+     a no-op, and it is also the compositing the contrast gate assumes when
+     it checks the ramp against the water. scripts/test-contrast.mjs fails if
+     a blend mode reappears on the particle pane. */
+  #asset-map :global(.leaflet-currents-raster-pane) {
     mix-blend-mode: var(--map-currents-blend);
   }
 

@@ -22,6 +22,32 @@
  */
 import fs from 'node:fs';
 
+/* Everything below compares a feature colour with the water behind it, which
+   only means anything if the feature is composited normally. It is not a
+   hypothetical: the particle canvas once shared a pane with the Mercator
+   raster, which is multiplied over the basemap, so what reached the screen
+   was multiply(amber, water) — near-invisible — while this gate happily
+   measured the amber. The gate was right about a colour nobody could see.
+   So check the assumption before trusting the numbers. */
+const component = fs.readFileSync('src/components/AssetMap.astro', 'utf8');
+const particlePane = /paneName:\s*'([^']+)'/.exec(component)?.[1];
+if (!particlePane) {
+  console.error('FAIL  cannot find the particle pane name in AssetMap.astro');
+  process.exit(1);
+}
+const blended = new RegExp(
+  `leaflet-${particlePane}-pane\\)?\\s*\\{[^}]*mix-blend-mode`,
+  's'
+).test(component);
+if (blended) {
+  console.error(
+    `FAIL  the particle pane (${particlePane}) has a mix-blend-mode.\n` +
+      '      Particles must composite normally, or the colours checked here are\n' +
+      '      not the colours that reach the screen.'
+  );
+  process.exit(1);
+}
+
 const palette = JSON.parse(fs.readFileSync('src/data/map-palette.json', 'utf8'));
 const basemaps = JSON.parse(fs.readFileSync('src/data/basemap-ocean.json', 'utf8')).basemaps;
 
