@@ -196,7 +196,6 @@ const mapPages = fs
 const WORDED_AS = {
   'GEBCO Compilation Group': 'GEBCO',
   'NOAA PMEL ERDDAP': 'NOAA PMEL',
-  'US IOOS Glider DAC': 'US IOOS Glider Data Assembly Center',
   'Argo GDAC via Ifremer ERDDAP': 'Ifremer Argo GDAC',
   'NOAA/NCEI OISST v2.1 preliminary': 'NOAA NCEI OISST v2.1',
 };

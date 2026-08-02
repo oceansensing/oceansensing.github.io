@@ -32,51 +32,44 @@ uncrewed surface vehicles and their launch and recovery systems.
 
 ## Data sources
 
-Almost everything on the map is a public feed, refetched hourly and shown only
-where a platform has reported recently; the seafloor is the exception, being
-the one thing here that does not change. The gridded fields carry the model run
-they came from, so the map says how fresh it is rather than leaving you to
-assume. What you see is yours to set: pick a colormap, pin the range or let it
-follow whatever water is on screen, and set how strongly the depth contours
-show through.
+Public feeds, refetched hourly and shown only where a platform has reported
+recently. The depth contours are the exception: computed once, since the
+seafloor does not change. Gridded fields carry the model run they came from.
+Colour scale, range and contour opacity are yours to set.
 
 **Platforms**
 
-- [NOAA National Hurricane Center](https://www.nhc.noaa.gov/) — active storm positions, forecast tracks and cones, and the observed best track over the past five days
-- [US IOOS Glider Data Assembly Center](https://gliders.ioos.us/erddap) — glider positions, United States
+- [NOAA National Hurricane Center](https://www.nhc.noaa.gov/) — storm positions, forecast tracks and cones, and the observed track over the past five days
+- [US IOOS Glider DAC](https://gliders.ioos.us/erddap) — glider positions, United States
 - [NOC / BODC](https://linkedsystems.uk/erddap) — glider positions, United Kingdom
 - [Ocean Tracking Network](https://erddap.oceantrack.org/erddap) — glider positions, Canada
 - [Voice of the Ocean](https://erddap.observations.voiceoftheocean.org/erddap) — glider positions, Sweden
 - [NOAA PMEL](https://data.pmel.noaa.gov/pmel/erddap) — uncrewed surface vehicle positions
-- [Ifremer Argo GDAC](https://erddap.ifremer.fr/erddap) — Argo float positions and last profile time. The window here is twelve days rather than five: a float surfaces once per ten-day cycle, so a shorter one hides most of the array mid-dive
+- [Ifremer Argo GDAC](https://erddap.ifremer.fr/erddap) — Argo float positions and last profile time, over a twelve-day window
 
 **Ocean fields**
 
-- [US Navy ESPC-D-V02](https://tds.hycom.org/thredds/) — a 1/12° global forecast, via HYCOM's OPeNDAP: currents at the surface and at 60 m, sea-surface temperature, and sea-surface salinity. One model, so the flow, the heat and the salt on screen are the same ocean at the same hour
-- [NOAA NCEI OISST v2.1](https://www.ncei.noaa.gov/products/optimum-interpolation-sst) — sea-surface temperature as *observed* rather than forecast: satellite and in-situ measurements blended onto a 1/4° grid. The preliminary product, a few days behind, rather than the final one a fortnight back
+- [US Navy ESPC-D-V02](https://tds.hycom.org/thredds/) — 1/12° global forecast, via HYCOM's OPeNDAP: currents at the surface and at 60 m, sea-surface temperature, and salinity
+- [NOAA NCEI OISST v2.1](https://www.ncei.noaa.gov/products/optimum-interpolation-sst) — observed sea-surface temperature, 1/4° daily, preliminary product
+
 **Seafloor and shoreline**
 
-- [GEBCO](https://www.gebco.net/) 2026 — the depth contours, at 20 m intervals down to 100 m and then 200, 400, 600, 800, 1000, 2000, 4000, 6000, 8000 and 10,000 m. Contoured once from GEBCO's 15 arc-second grid rather than fetched, since the seafloor does not change; the finest detail arrives as you zoom in
-- [EMODnet Bathymetry](https://emodnet.ec.europa.eu/en/bathymetry) — the shoreline, drawn at whatever scale you are looking at rather than from a fixed simplification
-- [NOAA NCEI DEM global mosaic](https://www.ncei.noaa.gov/maps/bathymetry/) — seafloor depth at a single point, queried when you click
+- [GEBCO](https://www.gebco.net/) 2026 — depth contours from 20 m to 10,000 m, from the 15 arc-second grid
+- [EMODnet Bathymetry](https://emodnet.ec.europa.eu/en/bathymetry) — shoreline
+- [NOAA NCEI DEM global mosaic](https://www.ncei.noaa.gov/maps/bathymetry/) — seafloor depth at a point, on click
 
 **Boundaries**
 
-- [Marine Regions](https://www.marineregions.org/) (VLIZ) — Exclusive Economic Zone boundaries, drawn as lines rather than filled zones so the ocean field underneath stays readable. Their gazetteer also answers which country's EEZ a given point falls in — reported in the popups while the EEZ layer is switched on
+- [Marine Regions](https://www.marineregions.org/) (VLIZ) — Exclusive Economic Zone boundaries, and which country's zone a point falls in
 
 **Basemaps**
 
 - [GEBCO](https://www.gebco.net/) — global bathymetry, the default
 - [Esri Ocean](https://www.esri.com/) — alternative bathymetry
 - [OpenStreetMap](https://www.openstreetmap.org/copyright) — alternative reference map
-- [Natural Earth](https://www.naturalearthdata.com/) — country and state borders, and the land outline behind the coastline-only basemap. Bundled with the site, so that option makes no third-party requests at all
+- [Natural Earth](https://www.naturalearthdata.com/) — country and state borders, and the offline coastline basemap
 
-The glider endpoints follow the [OceanGliders regional data
-endpoints](https://www.europeanglidercommunity.org/data-management-and-tools/)
-list. Two regions are missing for different reasons. Coriolis does publish
-machine-readable glider data — the OceanGliders GDAC, on the same Ifremer
-ERDDAP the Argo positions come from — but it is a delayed-mode archive: as of
-2 August 2026 its newest fix anywhere was 23 June, six weeks back, with three
-gliders in the previous 45 days. It is the right source for finished
-missions and the wrong one for a live map. Australia's IMOS data routes
-through the AODN portal, which has no equivalent open endpoint.
+Glider endpoints follow the [OceanGliders regional
+list](https://www.europeanglidercommunity.org/data-management-and-tools/).
+Coriolis is not included — its glider archive is delayed mode, weeks behind —
+nor is Australia's IMOS, which has no open endpoint.
