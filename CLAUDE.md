@@ -109,6 +109,35 @@ crosses that threshold, its harness needs updating.
 
 ### The map (`src/components/AssetMap.astro`)
 
+**It is being made reusable, and the first two seams are cut.** The intent is
+a framework-agnostic module this and other sites can embed, so anything that
+tied it to *this page* is going or gone.
+
+- **Configuration** comes off one `CONFIG` object — data base URL, home
+  bounds, storage key — read from `data-map-*` attributes on the container
+  when present, so markup can configure it with no build step. Eleven
+  hardcoded `/map/...` paths now hang off `DATA`.
+- **Styling** no longer assumes the site. All 87 `var()` uses in the style
+  block carry fallbacks lifted from `src/styles/tokens.css`; before, exactly
+  one did, and the map dropped into a foreign host came up with an unstyled
+  control row and invisible text.
+- **It is no longer a singleton.** It used to find itself by id, read its
+  status line by id and reach across the document for its controls — fine for
+  one instance, impossible for two, since both would share an id and
+  `getElementById` would hand each of them the first. Every container matching
+  `[data-ocean-map-canvas]` is now initialised separately and scopes its
+  lookups to the nearest `[data-ocean-map]` ancestor.
+
+Two things that bit while doing it, both worth not repeating. The storage key
+was briefly derived from the container id, which silently changed the key
+this site's readers already hold saved views under — the component pins its
+own key in markup and only the *generic* default is derived. And the
+zoom-to-storm buttons must be scoped to `[data-storm-status]`, not to the
+map's figure: the status line is a sibling component that may sit either side
+of the figure boundary, and scoping to the figure found a stand-in in the
+caption and then never reached the real buttons the box had just been rebuilt
+with.
+
 Leaflet, self-hosted from npm. Reads, from `public/map/`: `ocean-assets.json`
 (storms, gliders, USVs), `argo.json`, the current grids (`currents.json`,
 `currents-atlantic.json`, `currents-arctic.json`, `tiles/`), and

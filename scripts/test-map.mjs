@@ -13,19 +13,30 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const dom = new JSDOM(
-  '<!doctype html><body><div id="asset-map"></div><span id="map-status"></span>' +
-  // The legend key the component fills in and reveals; part of the real page
-  // markup, so the harness has to stand it up too.
+  /* Mirrors the component's own markup, figure and all. The wrapper is not
+     decoration: the map scopes its legend, controls and status line to the
+     nearest [data-ocean-map] rather than to the document, which is what lets
+     two maps share a page. A flat list of siblings would still pass by
+     falling back to the parent element, and would not test the scoping. */
+  '<!doctype html><body>' +
+  // Rendered before the figure on the real page, so deliberately outside it.
+  '<div class="storm-status" data-storm-status><span class="label">STALE</span>' +
+  '<ul><li><strong>STALE</strong><span class="facts">STALE</span></li></ul></div>' +
+  '<figure class="map-figure" data-ocean-map>' +
+  '<div id="asset-map" data-ocean-map-canvas data-map-storage-key="asset-map-view"></div>' +
+  '<figcaption>' +
   '<span class="key sst" data-sst-key hidden></span>' +
   '<span class="field-controls" data-field-controls hidden>' +
   '<select data-field-map></select><input type="number" data-field-min />' +
   '<input type="number" data-field-max /><button type="button" data-field-auto></button></span>' +
   '<span class="bathy-controls" data-bathy-controls hidden>' +
   '<input type="range" data-bathy-opacity min="10" max="100" step="5" /></span>' +
-    // Deliberately wrong server-rendered content: if the client does not
-    // rebuild it, the assertions below will still see "STALE".
-    '<div class="storm-status" data-storm-status><span class="label">STALE</span>' +
-    '<ul><li><strong>STALE</strong><span class="facts">STALE</span></li></ul></div></body>',
+  '<span class="status" id="map-status" data-map-status></span>' +
+  '</figcaption></figure>' +
+    // The storm-status block above carries deliberately wrong server-rendered
+    // content: if the client does not rebuild it, the assertions below will
+    // still see "STALE".
+    '</body>',
   { pretendToBeVisual: true, url: 'http://localhost/' }
 );
 const { window } = dom;
@@ -298,13 +309,18 @@ const palette = JSON.parse(fs.readFileSync('src/data/map-palette.json', 'utf8'))
 
 /* Stand in for the StormStatus component: one hidden zoom button per storm,
    plus one naming a storm that is not in the data — that one must stay
-   hidden. AssetMap reveals and wires the rest. */
-const statusEl = document.getElementById('map-status');
+   hidden. AssetMap reveals and wires the rest.
+
+   Inside [data-storm-status], because that is where StormStatus.astro puts
+   them and where the map looks. They used to be dropped next to the map's
+   status line, which passed only while the map scanned the whole document
+   for them. */
+const seedBox = document.querySelector('[data-storm-status]');
 for (const id of [...assets.storms.map((s) => s.id), 'zz992026']) {
   const b = document.createElement('button');
   b.dataset.stormZoom = id;
   b.hidden = true;
-  statusEl.after(b);
+  seedBox.append(b);
 }
 /* Seed a saved view, as the hourly auto-reload leaves behind, and check the
    map comes back to it instead of resetting to the basin. Every overlay is
@@ -498,11 +514,17 @@ let hoverCleared = false;
   }
 }
 
-/* Zoom buttons: the ones naming a real storm are revealed and wired, the
-   unknown one stays hidden. Clicking must centre the map on that storm. */
+/* Zoom buttons: the ones naming a real storm are revealed and wired, and no
+   button survives for a storm the data does not have. The stand-in seeded
+   for 'zz992026' is gone by now rather than merely hidden — the client
+   rebuilds the status box from the fetched data, which is a stronger
+   guarantee than the hidden flag it used to rely on, and the check below is
+   written against the invariant rather than the mechanism. */
 const zoomButtons = [...document.querySelectorAll('[data-storm-zoom]')];
 const known = zoomButtons.filter((b) => assets.storms.some((s) => s.id === b.dataset.stormZoom));
-const unknown = zoomButtons.find((b) => b.dataset.stormZoom === 'zz992026');
+const staleShown = zoomButtons.filter(
+  (b) => !b.hidden && !assets.storms.some((s) => s.id === b.dataset.stormZoom)
+);
 let movedTo = null;
 const target = assets.storms[0];
 if (known[0] && target) {
@@ -1377,7 +1399,7 @@ const checks = [
   ['no hardcoded border/casing colours left', !host.querySelector('path[stroke="#4a525c"], path[stroke="#6b7480"], path[stroke="#0d1218"], path[stroke="#8a949f"]')],
   // Zoom-to-storm buttons in the status line above the map.
   ['zoom buttons revealed for real storms', known.length > 0 && known.every((b) => !b.hidden)],
-  ['zoom button hidden for an unknown storm', !!unknown && unknown.hidden],
+  ['no zoom button shown for a storm absent from the data', staleShown.length === 0],
   ['clicking a zoom button centres that storm',
     !!movedTo && near(movedTo.lat - target.lat, 1) && near(movedTo.lng - target.lon, 1)],
   /* leaflet-velocity is UMD and wants Leaflet on the global, which the

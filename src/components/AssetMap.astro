@@ -10,8 +10,12 @@ import 'leaflet/dist/leaflet.css';
    from a file shipped with the site. */
 ---
 
-<figure class="map-figure">
-  <div id="asset-map" role="application" aria-label="Map of active hurricanes and uncrewed ocean assets">
+<figure class="map-figure" data-ocean-map>
+  <div
+    id="asset-map"
+    data-ocean-map-canvas
+    data-map-storage-key="asset-map-view"
+    role="application" aria-label="Map of active hurricanes and uncrewed ocean assets">
     <noscript>
       <p class="fallback">
         This map needs JavaScript. The underlying data is available as
@@ -57,7 +61,7 @@ import 'leaflet/dist/leaflet.css';
         </label>
       </span>
     </span>
-    <span class="status" id="map-status">Loading…</span>
+    <span class="status" id="map-status" data-map-status>Loading…</span>
   </figcaption>
 </figure>
 
@@ -75,8 +79,6 @@ import 'leaflet/dist/leaflet.css';
      Read off the container's data attributes when they are present, so the
      markup can configure the map without a build step — which is what the
      eventual standalone module needs, and costs nothing meanwhile. */
-  const el = document.getElementById('asset-map');
-
   const readJson = <T,>(raw: string | undefined, fallback: T): T => {
     if (!raw) return fallback;
     try {
@@ -88,22 +90,6 @@ import 'leaflet/dist/leaflet.css';
 
   type Bounds = [[number, number], [number, number]];
 
-  const CONFIG = {
-    /* Where the generated grids live. Every fetch below is relative to this,
-       so another site points it at a URL and is done — the files are far too
-       large to ship with a package. */
-    dataBase: el?.dataset.mapData ?? '/map/',
-    /* The view the map opens on, and what Reset returns to. */
-    home: readJson<Bounds>(el?.dataset.mapHome, [
-      [7, -100],
-      [45, -20],
-    ]),
-    /* Per tab, so two maps on one page do not overwrite each other's view. */
-    storageKey: el?.dataset.mapStorageKey ?? 'asset-map-view',
-  };
-
-  const BASIN = CONFIG.home;
-  const DATA = CONFIG.dataBase.endsWith('/') ? CONFIG.dataBase : `${CONFIG.dataBase}/`;
 
   /* Every colour the map draws in lives in one file, which
      scripts/test-contrast.mjs checks against the sampled water colours of
@@ -118,10 +104,63 @@ import 'leaflet/dist/leaflet.css';
     argo: ARGO, argoEdge: ARGO_EDGE, measure: MEASURE,
   } = palette.features;
 
-  const status = document.getElementById('map-status');
-  if (el) init(el as HTMLElement);
+  /* One map per container, rather than one map per page.
+     
+     This was a singleton: it looked itself up by id, read its status line by
+     id, and reached across the whole document for its controls. That is fine
+     for the single instance this site renders and impossible for anything
+     else — two maps on one page would share an id, and getElementById would
+     hand both of them the first one. Everything below is scoped to the
+     container's own root instead, so a second instance is just a second
+     element. */
+  for (const host of document.querySelectorAll<HTMLElement>('[data-ocean-map-canvas]')) {
+    init(host);
+  }
 
   async function init(host: HTMLElement) {
+    /* The figure wrapping this map: its legend, controls and status line all
+       live here. Falls back to the container itself so a host that renders
+       only the map div still works. */
+    const root: ParentNode =
+      host.closest('[data-ocean-map]') ?? host.parentElement ?? host;
+    const find = <T extends Element>(selector: string): T | null =>
+      root.querySelector<T>(selector);
+
+    const CONFIG = {
+      /* Where the generated grids live. Every fetch below is relative to
+         this, so another site points it at a URL and is done — the files are
+         far too large to ship with a package. */
+      dataBase: host.dataset.mapData ?? '/map/',
+      /* The view the map opens on, and what Reset returns to. */
+      home: readJson<Bounds>(host.dataset.mapHome, [
+        [7, -100],
+        [45, -20],
+      ]),
+      /* Keyed per container, so two maps on one page cannot overwrite each
+         other's saved view. This component pins its own key in the markup
+         above, because that key predates the option and readers hold saved
+         views under it; deriving one here would have quietly invalidated
+         every one of them. */
+      storageKey: host.dataset.mapStorageKey ?? `ocean-map:${host.id || 'default'}`,
+    };
+
+    const BASIN = CONFIG.home;
+    const DATA = CONFIG.dataBase.endsWith('/') ? CONFIG.dataBase : `${CONFIG.dataBase}/`;
+    const status = find<HTMLElement>('[data-map-status]');
+
+    /* The storm status line comes from a sibling component, so it may sit
+       inside this map's figure or outside it — this site renders it just
+       above. Prefer one inside the figure, since that is the arrangement a
+       second instance on the same page would need to disambiguate. */
+    const stormStatusBoxes = (): HTMLElement[] => {
+      const inside = root.querySelectorAll<HTMLElement>('[data-storm-status]');
+      return [
+        ...(inside.length
+          ? inside
+          : document.querySelectorAll<HTMLElement>('[data-storm-status]')),
+      ];
+    };
+
     const map = L.map(host, {
       /* worldCopyJump is deliberately off. It existed to drag the *view*
          back to the copy of the world the markers live in — but it does that
@@ -1043,7 +1082,7 @@ import 'leaflet/dist/leaflet.css';
        the two cannot drift, and it stays hidden until a temperature layer is
        actually on — a colour bar for a layer nobody has switched on is just
        noise. */
-    const sstKey = document.querySelector<HTMLElement>('[data-sst-key]');
+    const sstKey = find<HTMLElement>('[data-sst-key]');
     if (sstKey && Object.keys(COLORMAPS).length) {
       /* The bar carries its own numbers because the scale is per view: the
          ramp is stretched over whatever water is on screen, so the colours
@@ -1076,7 +1115,7 @@ import 'leaflet/dist/leaflet.css';
        whichever is chosen becomes the water under every marker, so the set is
        the one the contrast gate has checked. A free colour picker would let a
        reader hide the fleet. */
-    const controls = document.querySelector<HTMLElement>('[data-field-controls]');
+    const controls = find<HTMLElement>('[data-field-controls]');
     const mapPicker = controls?.querySelector<HTMLSelectElement>('[data-field-map]');
     const minInput = controls?.querySelector<HTMLInputElement>('[data-field-min]');
     const maxInput = controls?.querySelector<HTMLInputElement>('[data-field-max]');
@@ -1213,7 +1252,7 @@ import 'leaflet/dist/leaflet.css';
     // rides in the saved view with the basemap and the colour scales.
     const BATHY_OPACITY = 0.7;
     let bathyOpacity = BATHY_OPACITY;
-    const bathyControls = document.querySelector<HTMLElement>('[data-bathy-controls]');
+    const bathyControls = find<HTMLElement>('[data-bathy-controls]');
     const bathySlider = bathyControls?.querySelector<HTMLInputElement>('[data-bathy-opacity]');
 
     /* Contours at the round hundreds and thousands are drawn heavier, which
@@ -2376,7 +2415,7 @@ import 'leaflet/dist/leaflet.css';
     let rewire: (() => void) | null = null;
 
     const renderStormStatus = (raw: unknown[]) => {
-      const box = document.querySelector('[data-storm-status]');
+      const box = stormStatusBoxes()[0];
       if (!box) return;
       const lines = stormLines(raw as Parameters<typeof stormLines>[0]);
 
@@ -2632,7 +2671,18 @@ import 'leaflet/dist/leaflet.css';
          rebuilding the list throws the old buttons and their handlers away. */
       const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const wireZoomButtons = () => {
-        for (const button of document.querySelectorAll<HTMLButtonElement>('[data-storm-zoom]')) {
+        /* Scoped to the status box, not to the map's figure and not to the
+           document. The buttons belong to the status line, and the status
+           line is rendered by a sibling component that may sit either inside
+           or outside the figure — so anchoring to the box is the only place
+           that is right in both arrangements. Scoping to the figure looked
+           equivalent and was not: it found a stand-in button inside the
+           caption and then never reached the real ones the box had just been
+           rebuilt with. */
+        const zoomButtons = stormStatusBoxes().flatMap((b) => [
+          ...b.querySelectorAll<HTMLButtonElement>('[data-storm-zoom]'),
+        ]);
+        for (const button of zoomButtons) {
           const at = stormAt.get(button.dataset.stormZoom ?? '');
           if (!at) continue;
           button.hidden = false;
