@@ -587,6 +587,22 @@ renormalised. Refusing to interpolate beside land was the first attempt and
 it left the open ocean smooth while the whole continental shelf stayed a grid
 of squares.
 
+#### Never hardcode an index into the aggregation
+
+Both pipelines asked for `time[0:1:128]`, which worked until the FMRC "best"
+aggregation got shorter. On 2026-08-02 it was **121 steps**, so index 128 was
+out of range and every fetch returned 400. The fallback then kept the
+previous file and the build reported success, so the map served the
+2026-07-31 run for two days while looking healthy. The only visible symptom
+was the run date in the map's own attribution, which is how it was noticed —
+by a reader, not by CI.
+
+`time_axis()` reads the length from the `.dds` now, and the fallback prints
+how old the data it kept is rather than a neutral "keeping the previous
+fields". Neither change makes a stale map fail the build, deliberately: an
+outage should degrade to stale rather than block a deploy. What changed is
+that the log says so.
+
 #### HYCOM fails per request, not outright
 
 Worth knowing before debugging anything against it. Its aggregation serves

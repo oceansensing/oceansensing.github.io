@@ -36,6 +36,7 @@ from __future__ import annotations
 import json
 import math
 import pathlib
+import re
 import socket
 import sys
 import time
@@ -234,6 +235,23 @@ def frange(start: float, stop: float, step: float) -> list[float]:
     return out
 
 
+def time_axis(base: str) -> int:
+    """How many steps the aggregation currently has.
+
+    Asked rather than assumed. Both pipelines used to request time[0:1:128],
+    which worked until the FMRC aggregation got shorter — on 2026-08-02 it
+    was 121 steps, so index 128 was out of range and every fetch failed with
+    a 400. The fallback then kept the previous file, so the map went two days
+    stale while reporting success: the only visible symptom was the run date
+    in the attribution, which is how it was caught.
+    """
+    dds = get(f'{base}.dds', timeout=60)
+    found = re.search(r'time\[time = (\d+)\]', dds)
+    if not found:
+        raise RuntimeError('cannot read the time axis length')
+    return int(found.group(1))
+
+
 def newest(product: dict) -> list[tuple[str, str]]:
     """Candidate time steps to fetch, nearest to now first.
 
@@ -274,7 +292,8 @@ def newest(product: dict) -> list[tuple[str, str]]:
         das[at + len(marker):at + len(marker) + 19], '%Y-%m-%d %H:%M:%S'
     ).replace(tzinfo=timezone.utc)
 
-    body = get(encode(f"{product['base']}.ascii?time[0:1:128]"), timeout=90)
+    last = time_axis(product['base']) - 1
+    body = get(encode(f"{product['base']}.ascii?time[0:1:{last}]"), timeout=90)
     tail = [line for line in body.splitlines() if line.strip()][-1]
     hours = [float(t) for t in tail.split(',') if t.strip()]
     if not hours:

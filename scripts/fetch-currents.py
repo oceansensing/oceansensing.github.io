@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import math
 import pathlib
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -264,6 +265,23 @@ def axis_index(value: float, origin: float, step: float, count: int) -> int:
     return max(0, min(count - 1, round((value - origin) / step)))
 
 
+def time_axis(base: str) -> int:
+    """How many steps the aggregation currently has.
+
+    Asked rather than assumed. Both pipelines used to request time[0:1:128],
+    which worked until the FMRC aggregation got shorter — on 2026-08-02 it
+    was 121 steps, so index 128 was out of range and every fetch failed with
+    a 400. The fallback then kept the previous file, so the map went two days
+    stale while reporting success: the only visible symptom was the run date
+    in the attribution, which is how it was caught.
+    """
+    dds = get(f'{base}.dds', timeout=60)
+    found = re.search(r'time\[time = (\d+)\]', dds)
+    if not found:
+        raise RuntimeError('cannot read the time axis length')
+    return int(found.group(1))
+
+
 def pick_time() -> tuple[int, str, str]:
     """Index of the model step nearest now, its valid time, and its model run.
 
@@ -284,7 +302,7 @@ def pick_time() -> tuple[int, str, str]:
     # The values sit on the last non-blank line, after a "time[129]" label
     # and a rule of dashes.
     def axis(name: str) -> list[float]:
-        body = get(f'{BASE}.ascii?{name}[0:1:128]', timeout=90)
+        body = get(f'{BASE}.ascii?{name}[0:1:{time_axis(BASE) - 1}]', timeout=90)
         tail = [line for line in body.splitlines() if line.strip()][-1]
         return [float(t) for t in tail.split(',') if t.strip()]
 
@@ -553,8 +571,20 @@ def main() -> int:
                 build(detail, t, level, valid, run)
     except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:
         print(f'! currents unavailable: {exc}', file=sys.stderr)
-        if (MAP_DIR / GLOBAL['name']).exists():
-            print('  keeping the previous fields', file=sys.stderr)
+        kept = MAP_DIR / GLOBAL['name']
+        if kept.exists():
+            # Say how stale, not just that it is stale. A neutral "keeping the
+            # previous fields" is what let a hard failure — a 400 from a
+            # hardcoded time index — sit in the logs for two days looking like
+            # a passing build.
+            try:
+                run = json.loads(kept.read_text())[0]['header'].get('modelRun', '')
+                age = (datetime.now(timezone.utc)
+                       - datetime.strptime(run, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc))
+                print(f'  keeping the previous fields — {run} run, '
+                      f'{age.days}d {age.seconds // 3600}h old', file=sys.stderr)
+            except (ValueError, KeyError, IndexError, TypeError):
+                print('  keeping the previous fields', file=sys.stderr)
             return 0
         return 1
     return 0
