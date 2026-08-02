@@ -90,7 +90,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: public/map/tiles-sst-navy
-          key: sst-tiles-${{ steps.model.outputs.run }}
+          # v2: the tile geometry is unchanged but the index's minZoom is not,
+          # and a cache hit would keep publishing the old threshold.
+          key: sst-tiles-v2-${{ steps.model.outputs.run }}
 
       - name: Build Navy SST tiles
         if: steps.model.outputs.run != '' && steps.ssttiles.outputs.cache-hit != 'true'

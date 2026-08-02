@@ -126,7 +126,7 @@ const files = {
 const TILE_KEY = '0_-60';
 const NEIGHBOURS = ['0_-40', '20_-60', '20_-40'];
 files['tiles/index'] = {
-  size: 20, west: -180, south: -80, north: 85, minZoom: 7, deg: 0.08,
+  size: 20, west: -180, south: -80, north: 85, minZoom: 4, deg: 0.08,
   modelRun: '2026-07-31T12:00:00Z',
   available: [TILE_KEY, ...NEIGHBOURS],
 };
@@ -159,6 +159,35 @@ files['tiles/index'] = {
   }
 }
 files['tiles-60m/index'] = { ...files['tiles/index'], depth: 60 };
+
+/* Native-resolution SST tiles. Without a fixture for this index the fetch
+   threw, the catch swallowed it and the layer quietly used the regional grid
+   — so the whole tile tier went untested while looking fine. The tile is a
+   constant, distinct from every other field, so "which tier is showing" is
+   answerable from the value alone. */
+{
+  const nx = 251;
+  const ny = 251;
+  files['tiles-sst-navy/index'] = {
+    size: 20, west: -180, south: -80, north: 85, minZoom: 4, deg: 0.08,
+    refTime: '2026-08-02T12:00:00Z',
+    available: [TILE_KEY, ...NEIGHBOURS],
+  };
+  const corner = (key) => {
+    const [sy, wx] = key.split('_').map(Number);
+    return { lo1: ((wx % 360) + 360) % 360, la1: sy + 20 };
+  };
+  for (const key of [TILE_KEY, ...NEIGHBOURS]) {
+    const { lo1, la1 } = corner(key);
+    files[`tiles-sst-navy/${key}`] = {
+      header: {
+        nx, ny, lo1, la1, dx: 0.08, dy: 0.08,
+        refTime: '2026-08-02T12:00:00Z', source: 'US Navy ESPC-D-V02', units: 'degC',
+      },
+      data: Array.from({ length: nx * ny }, () => 21.5),
+    };
+  }
+}
 
 /* A stand-in Navy SST field, kept synthetic on purpose even though the real
    one now builds: a constant differs from OISST everywhere, so the readout
@@ -694,7 +723,11 @@ const offRamp = ([r, g, b]) => {
   return best;
 };
 
-host._map.setView([32, -62], 4, { animate: false });
+/* Inside the synthetic tile area. The Navy layer reaches native resolution
+   from zoom 4 now, so a probe outside the tiles falls into a hole in the
+   assembled grid and the readout has no temperature to report — which is a
+   property of the fixture, not of the map. */
+host._map.setView([10, -50], 4, { animate: false });
 await new Promise((r) => setTimeout(r, 400));
 
 const sstOisstToggle = overlayLabelled(/OISST/);
@@ -715,7 +748,7 @@ if (painted) {
 }
 
 host._map.closePopup();
-host._map.fire('contextmenu', { latlng: window.L.latLng(32, -62) });
+host._map.fire('contextmenu', { latlng: window.L.latLng(10, -50) });
 await new Promise((r) => setTimeout(r, 200));
 const oisstRead = host.querySelector('.point-readout .leaflet-popup-content')?.textContent ?? '';
 
@@ -726,7 +759,7 @@ await new Promise((r) => setTimeout(r, 900));
 const oisstOffWithNavyOn =
   overlayLabelled(/OISST/)?.querySelector('input')?.checked === false;
 host._map.closePopup();
-host._map.fire('contextmenu', { latlng: window.L.latLng(32, -62) });
+host._map.fire('contextmenu', { latlng: window.L.latLng(11, -51) });
 await new Promise((r) => setTimeout(r, 200));
 const navyRead = host.querySelector('.point-readout .leaflet-popup-content')?.textContent ?? '';
 
@@ -787,6 +820,31 @@ const rangeAt = async (lat, lng, zoom) => {
    in every view — it would pass a fixed-range bug straight through. */
 overlayLabelled(/OISST/)?.querySelector('input')?.click();
 await new Promise((r) => setTimeout(r, 900));
+
+/* The Navy field is a 1/12° model, and the point of the tile tier is that it
+   is served at that resolution rather than a regional subsample. Checked by
+   the spacing of the grid the layer is actually holding, at a zoom inside
+   the tile threshold. */
+const nativeSst = await (async () => {
+  overlayLabelled(/Navy forecast/)?.querySelector('input')?.click();
+  await new Promise((r) => setTimeout(r, 300));
+  host._map.setView([10, -50], 5, { animate: false });   // inside the synthetic tiles
+  await new Promise((r) => setTimeout(r, 1200));
+  const layer = Object.values(host._map._layers).find(
+    (l) => typeof l.getGrid === 'function' && host._map.hasLayer(l)
+  );
+  const grid = layer?.getGrid?.();
+  const out = { dx: grid?.header?.dx ?? null, value: null };
+  const h = grid?.header;
+  if (h) out.value = grid.data[Math.round(h.ny / 2) * h.nx + Math.round(h.nx / 2)];
+  /* Hand the map back to OISST rather than switching Navy off: the checks
+     after this one need *an* SST layer showing, and turning Navy off leaves
+     none. Exclusivity takes Navy down on its own. */
+  const back = overlayLabelled(/OISST/)?.querySelector('input');
+  if (back && !back.checked) back.click();
+  await new Promise((r) => setTimeout(r, 900));
+  return out;
+})();
 
 const seamGaps = await seamGap();
 
@@ -1019,6 +1077,8 @@ const checks = [
     /Current at 60 m/.test(deepRead) && /0\.10 m\/s/.test(deepRead) &&
     /11° 00\.00′ N/.test(deepRead)],
   ['the 60 m grid is published at 60 m', files['currents-60m'][0].header.depth === 60],
+  ['SST reaches native 1/12° resolution, not a regional subsample',
+    nativeSst.dx === 0.08 && nativeSst.value === 21.5],
   ['an SST layer is offered for each source', !!sstOisstToggle && !!sstNavyToggle],
   /* Staleness has to be visible. The currents served a two-day-old model run
      while every check stayed green, and the only thing that gave it away was
@@ -1033,7 +1093,8 @@ const checks = [
   ['the readout reports a sea surface temperature', /Sea surface/.test(oisstRead)],
   ['turning the Navy field on turns OISST off', oisstOffWithNavyOn],
   ['and the readout follows the field that is on',
-    /7\.5 °C/.test(navyRead) && !/7\.5 °C/.test(oisstRead)],
+    // 21.5 is the synthetic Navy tile; OISST there is real data, ~28.
+    /21\.5 °C/.test(navyRead) && !/21\.5 °C/.test(oisstRead)],
   ['the temperature key appears with the layer', legendShown],
   ['no unpainted column at the 0/360 seam', seamGaps === 0],
   ['the range is whole degrees bounding the view',

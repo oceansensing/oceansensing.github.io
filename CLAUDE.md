@@ -514,10 +514,26 @@ hand off to, and at zoom 4 a 1° cell is ~11 px and reads as squares. The
 Navy model is 1/12°, far finer than any region stride, so that is the
 product where a tile tier actually buys resolution.
 
-| product | native | global | region (zoom ≥ 4) | tiles (zoom ≥ 7) |
+| product | native | global | region (zoom ≥ 4) | tiles (zoom ≥ 4) |
 | --- | --- | --- | --- | --- |
 | OISST | 0.25° | 1° | **0.25°, native** | none, by design |
-| Navy | 0.08° | 0.96° | **0.16°** | 0.08°, native |
+| Navy | 0.08° | 0.96° | 0.16°, fallback only | **0.08°, native** |
+
+**Navy SST is served at native resolution over the whole globe from zoom 4**,
+not just over two regions. The tile threshold is 4 rather than the 7 the
+current tiles use, and the arithmetic is different because the payload is:
+a current tile carries u *and* v, while an SST tile is one variable at one
+decimal and gzips to **26 KB**. A zoom-4 viewport touches ~18 tiles, so ~470
+KB on the wire — less than the single Arctic regional grid it displaces, for
+0.08° everywhere instead of 0.16° in two boxes. Below zoom 4 the count runs
+away (~44 tiles at zoom 3, all 162 at zoom 2) and a degree cell is under
+three pixels anyway, so the coarse global grid serves there.
+
+The regional grids stay as a **fallback**: tiles win whenever the index
+loads, so the regions are only consulted if it does not. Changing
+`TILES['minZoom']` does not change a tile, but it does change the index, so
+the CI cache key carries a version — a cache hit would otherwise keep
+publishing the old threshold.
 
 **The finer model must look finer.** The Navy region stride is 0.16°, not the
 0.24° the current grids use off the same model — the currents carry u *and*

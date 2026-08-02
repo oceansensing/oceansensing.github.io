@@ -111,7 +111,17 @@ TILES = {
     'west': -180.0,
     'south': -80.0,
     'north': 85.0,
-    'minZoom': 7,
+    # Native resolution everywhere, from the zoom where it can first be seen.
+    #
+    # 7 was inherited from the current tiles, where a tile carries u *and* v.
+    # An SST tile is one variable at one decimal and gzips to ~26 KB, so the
+    # arithmetic is different: a zoom-4 viewport touches ~18 tiles, which is
+    # ~470 KB on the wire — less than the single Arctic regional grid it
+    # displaces, and it buys 0.08° over the whole globe rather than 0.16°
+    # over two regions. Below 4 the tile count runs away (~44 at zoom 3, all
+    # 162 at zoom 2) and a degree cell is under three pixels anyway, so the
+    # coarse global grid serves there.
+    'minZoom': 4,
     # Politeness: a handful at a time against public research servers.
     'workers': 4,
 }
