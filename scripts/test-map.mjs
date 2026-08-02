@@ -907,7 +907,8 @@ const scaleControls = await (async () => {
   host._map.setView([25, -55], 4, { animate: false });
   await new Promise((r) => setTimeout(r, 900));
 
-  const options = [...picker.options].map((o) => o.value);
+  // Flattened across the optgroups.
+  const options = [...picker.querySelectorAll('option')].map((o) => o.value);
   const before = paint();
   // Pick a map that is not the current one.
   picker.value = options.find((o) => o !== picker.value) ?? options[0];
@@ -963,7 +964,7 @@ const globalReset = await (async () => {
   baseNamed(/OpenStreetMap/)?.querySelector('input')?.click();
   named(/Lat\/lon grid/)?.querySelector('input')?.click();
   await new Promise((r) => setTimeout(r, 400));
-  picker.value = 'terrain';
+  picker.value = 'jet';
   picker.dispatchEvent(new window.Event('change', { bubbles: true }));
   minIn.value = '1';
   maxIn.value = '2';
@@ -1222,7 +1223,11 @@ const checks = [
     /Current at 60 m/.test(deepRead) && /0\.10 m\/s/.test(deepRead) &&
     /11° 00\.00′ N/.test(deepRead)],
   ['the 60 m grid is published at 60 m', files['currents-60m'][0].header.depth === 60],
-  ['more than one colour scale is offered', scaleControls.options.length >= 3],
+  ['the full set of colour scales is offered', scaleControls.options.length >= 20],
+  ['the standard maps are offered alongside the marker-safe ones',
+    scaleControls.options.includes('jet') && scaleControls.options.includes('viridis') &&
+      scaleControls.options.includes('cmo.thermal') &&
+      palette.markerSafe.includes(palette.defaultColormap.sst)],
   ['choosing a colour scale changes what is painted',
     !!scaleControls.before && !!scaleControls.afterMap &&
       scaleControls.before.join() !== scaleControls.afterMap.join()],

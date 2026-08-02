@@ -62,6 +62,10 @@ follow whatever water is on screen.
 
 The glider endpoints follow the [OceanGliders regional data
 endpoints](https://www.europeanglidercommunity.org/data-management-and-tools/)
-list. Coriolis publishes through a selection portal rather than a machine
-endpoint, and Australia's IMOS glider data routes through the AODN portal, so
-neither is included yet.
+list. Two regions are missing for different reasons. Coriolis does publish
+machine-readable glider data — the OceanGliders GDAC, on the same Ifremer
+ERDDAP the Argo positions come from — but it is a delayed-mode archive: as of
+2 August 2026 its newest fix anywhere was 23 June, six weeks back, with three
+gliders in the previous 45 days. It is the right source for finished
+missions and the wrong one for a live map. Australia's IMOS data routes
+through the AODN portal, which has no equivalent open endpoint.

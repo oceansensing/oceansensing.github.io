@@ -988,11 +988,29 @@ import 'leaflet/dist/leaflet.css';
     const autoButton = controls?.querySelector<HTMLButtonElement>('[data-field-auto]');
 
     if (controls && mapPicker && minInput && maxInput && autoButton) {
-      for (const name of Object.keys(COLORMAPS)) {
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        mapPicker.append(option);
+      /* Two groups, and the split is measured rather than editorial: the
+         first are the scales whose every stop clears the markers by ΔE 22,
+         the second are the standard oceanographic and matplotlib maps, which
+         do not — a full-gamut colormap passes near a marker colour somewhere
+         along it, necessarily. They are offered regardless. They are not the
+         default, the markers keep their dark outlines, and which scale to
+         read the ocean with is the reader's call, not the gate's. */
+      const safe = new Set<string>(((palette as any).markerSafe ?? []) as string[]);
+      const groups: [string, string[]][] = [
+        ['High contrast', Object.keys(COLORMAPS).filter((n) => safe.has(n))],
+        ['Standard', Object.keys(COLORMAPS).filter((n) => !safe.has(n))],
+      ];
+      for (const [caption, names] of groups) {
+        if (!names.length) continue;
+        const group = document.createElement('optgroup');
+        group.label = caption;
+        for (const name of names) {
+          const option = document.createElement('option');
+          option.value = name;
+          option.textContent = name;
+          group.append(option);
+        }
+        mapPicker.append(group);
       }
 
       const shownField = () => ssts.find((f) => map.hasLayer(f.group))?.layer?.options?.field ?? null;

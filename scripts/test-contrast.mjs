@@ -127,9 +127,39 @@ palette.currents.forEach((colour, i) => {
    whichever is switched on becomes the background for every marker and
    particle. All of them are checked, not just the defaults — an option that
    hides a platform is not an option. */
-const sstWater = Object.entries(palette.colormaps ?? {}).flatMap(([name, stops]) =>
-  stops.map((colour, i) => ({ colour, label: `${name}[${i}]` }))
-);
+const safeMaps = new Set(palette.markerSafe ?? []);
+const sstWater = Object.entries(palette.colormaps ?? {})
+  .filter(([name]) => safeMaps.has(name))
+  .flatMap(([name, stops]) => stops.map((colour, i) => ({ colour, label: `${name}[${i}]` })));
+
+/* The other colour scales are offered but not guaranteed, and the guarantee
+   that remains is that the *classification* is honest: every map called
+   marker-safe really clears the bar everywhere, and every map not called
+   marker-safe really does not. Without the second half the list would rot
+   into a warning nobody needs — a map that quietly became safe would still
+   be labelled a risk, and the label would stop meaning anything. */
+for (const [name, stops] of Object.entries(palette.colormaps ?? {})) {
+  const worst = Math.min(
+    ...stops.flatMap((c) => Object.values(palette.features).map((f) => deltaE(hex(c), hex(f))))
+  );
+  const declaredSafe = safeMaps.has(name);
+  results.push({
+    what: `${name} is ${declaredSafe ? 'marker-safe' : 'flagged as risky'}`,
+    on: 'colormap classification',
+    coverage: declaredSafe === worst >= MIN_DELTA_E ? 1 : 0,
+    worst,
+  });
+}
+
+for (const field of Object.keys(palette.defaultColormap ?? {})) {
+  const name = palette.defaultColormap[field];
+  results.push({
+    what: `${field} defaults to ${name}, which is marker-safe`,
+    on: 'defaults',
+    coverage: safeMaps.has(name) ? 1 : 0,
+    worst: Infinity,
+  });
+}
 if (sstWater.length) {
   for (const [name, colour] of Object.entries(palette.features)) {
     for (const stop of sstWater) {

@@ -515,15 +515,27 @@ under the map rather than as a Leaflet control — number inputs and a select
 inside the map are awkward on a touchscreen, and this is where the colour bar
 they act on already is.
 
-**Only the colormaps in `palette.colormaps` are offered, and that is the
-point.** Whichever is chosen becomes the water under every marker, so the set
-is exactly what `test:contrast` has checked — every stop of every map against
-every feature. A free colour picker would let a reader hide the fleet. All
-five were found by the search in `scripts/lib/colour.mjs`, scored on travel,
-distance from the other maps, and clearance from the markers. Margins are not
-equal: `mono` clears by 24.4 and `thermal` by 22.8, while `plasma` and
-`terrain` sit at 22.1–22.2 — over the bar with nothing spare, and the first
-things that will fail if a feature colour changes.
+**Twenty-five colormaps in two groups, and the split is measured, not
+editorial.** The five under *High contrast* clear ΔE 22 from every marker at
+every stop; they were built by the search in `scripts/lib/colour.mjs` to dodge
+the feature gamut, which is why they look unlike the standard maps. The
+twenty under *Standard* — matplotlib's viridis, plasma, inferno, magma,
+cividis, turbo; the classics jet, hsv, grey; and ten cmocean scales — do not,
+and **none of them can**: a full-gamut colormap sweeps the whole wheel, so
+somewhere along it it passes close to a marker. Measured worst clearance:
+`cmo.haline` 11.2, `hsv` 7.5, `jet` 6.4, `viridis` 6.2, `grey` 5.5,
+`inferno` 3.0.
+
+They are offered anyway. They are not defaults, the markers keep their dark
+outlines, and which scale to read the ocean with is the reader's call. What
+the gate still guarantees is that the **classification is honest**: every map
+called marker-safe really clears the bar, every map not called marker-safe
+really does not, and both defaults come from the safe set. Without the second
+half the warning would rot — a map that quietly became safe would still be
+flagged, and the flag would stop meaning anything.
+
+The `cmo.*` and matplotlib entries are ten-stop samples of the published
+maps: recognisable, not the exact tables.
 
 A pinned range **wins over the view and holds for the session**, including
 across the hourly self-reload — the choices ride in the saved view alongside

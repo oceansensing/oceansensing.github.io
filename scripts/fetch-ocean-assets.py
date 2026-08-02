@@ -52,9 +52,19 @@ IFREMER = 'https://erddap.ifremer.fr/erddap'
 # glider's *name* — "CarsonSHW003-20260731T0901" — so the naming convention
 # for a near-real-time mission is what identifies one there.
 #
-# Not included, and why: Coriolis (Europe) publishes through a selection
-# portal rather than an ERDDAP, and erddap.aodn.org.au (Australia) does not
-# resolve — IMOS routes its glider data through the AODN portal instead.
+# Not included, and why. Coriolis *does* have a machine endpoint — the
+# OceanGliders GDAC, dataset OceanGlidersGDACTrajectories on the same Ifremer
+# ERDDAP the Argo positions come from — but it is delayed mode: measured on
+# 2026-08-02 its newest fix anywhere was 2026-06-23, six weeks back, with 3
+# gliders in the previous 45 days against 37 in 180. Right source for
+# finished missions, wrong one for a live map. Australia's IMOS routes through
+# the AODN portal and erddap.aodn.org.au does not resolve.
+#
+# If those two matter, the lead worth following is the OceanOPS platform API
+# (ocean-ops.org/api/1/data/platform), which knows all 3,949 OceanGliders
+# platforms and is the network's own metadata hub — this map needs only an
+# id, a position and a time, which is exactly what it holds. Its field names
+# for last-known position were not obvious from a first pass.
 GLIDERISH = re.compile(r'glider|slocum|seaglider|seaexplorer|spray', re.I)
 GLIDER_SOURCES = [
     {'base': IOOS, 'where': 'US IOOS Glider DAC', 'match': None},
