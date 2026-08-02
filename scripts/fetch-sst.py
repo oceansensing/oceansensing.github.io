@@ -152,7 +152,16 @@ PRODUCTS = [
         'lon0': 0.0, 'dlon': 0.08, 'nlon': 4500,
         # The Navy grid is 1/12 degree, far finer than any region stride, so
         # this is the product where a tile tier actually buys resolution.
-        'strides': {'global': (12, 24), 'region': (3, 6), 'tile': (1, 2)},
+        #
+        # The region stride is (2, 4) — 0.16° — and not the (3, 6) the current
+        # grids use, even though both come off the same model. The currents
+        # carry u *and* v, so the same payload buys half the cells; SST is one
+        # variable. Copying their stride made a 1/12° model render at 0.24°,
+        # indistinguishable from OISST's native 0.25° at every zoom below the
+        # tile tier — a finer model that looked no finer. Native 0.08° here
+        # would be 3.4 MB for the Atlantic and 9.2 MB for the Arctic band,
+        # which is what the tiles are for.
+        'strides': {'global': (12, 24), 'region': (2, 4), 'tile': (1, 2)},
         'tiles': True,
     },
 ]

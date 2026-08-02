@@ -514,10 +514,17 @@ hand off to, and at zoom 4 a 1° cell is ~11 px and reads as squares. The
 Navy model is 1/12°, far finer than any region stride, so that is the
 product where a tile tier actually buys resolution.
 
-| product | global | region | tiles |
-| --- | --- | --- | --- |
-| OISST | 1° | **0.25° (native), zoom ≥ 4** | none, by design |
-| Navy | 0.96° | 0.24°, zoom ≥ 5 | 0.08°, zoom ≥ 7 |
+| product | native | global | region (zoom ≥ 4) | tiles (zoom ≥ 7) |
+| --- | --- | --- | --- | --- |
+| OISST | 0.25° | 1° | **0.25°, native** | none, by design |
+| Navy | 0.08° | 0.96° | **0.16°** | 0.08°, native |
+
+**The finer model must look finer.** The Navy region stride is 0.16°, not the
+0.24° the current grids use off the same model — the currents carry u *and*
+v, so the same payload buys half the cells, and copying their stride rendered
+a 1/12° model at 0.24°, indistinguishable from OISST's native 0.25° at every
+zoom below the tile tier. Native 0.08° at region scale would be 3.4 MB for
+the Atlantic and 9.2 MB for the Arctic band; the tiles exist for that.
 
 The global grids stay coarse deliberately: 0.25° globally would be four
 times the payload with the page, and at globe zoom a 1° cell is already
