@@ -426,10 +426,27 @@ Two fields, `npm run data:sst`, built by `scripts/fetch-sst.py`:
 - **Navy ESPC-D-V02** (1/12°, hourly) — a *forecast*, and the same model the
   currents come from, so temperature and flow are one ocean rather than two.
 
-Both are numeric grids in the same three tiers as the currents, drawn by a
-canvas layer in the `sst` pane (z-index 240, under the currents and under
-every track). Only one at a time — stacking two rasters shows one field
-while naming two.
+Both are numeric grids drawn by a canvas layer in the `sst` pane (z-index
+240, under the currents and under every track). Only one at a time —
+stacking two rasters shows one field while naming two.
+
+**The tiers differ per product, and OISST has no tile tier on purpose.**
+Tiles exist to reach a product's native resolution; OISST *is* 1/4° natively,
+so its region grids are that already and tiling below it would only
+interpolate, for a second set of files and a daily build over them. Its
+regions therefore start at zoom 4 rather than 5 — there is nothing finer to
+hand off to, and at zoom 4 a 1° cell is ~11 px and reads as squares. The
+Navy model is 1/12°, far finer than any region stride, so that is the
+product where a tile tier actually buys resolution.
+
+| product | global | region | tiles |
+| --- | --- | --- | --- |
+| OISST | 1° | **0.25° (native), zoom ≥ 4** | none, by design |
+| Navy | 0.96° | 0.24°, zoom ≥ 5 | 0.08°, zoom ≥ 7 |
+
+The global grids stay coarse deliberately: 0.25° globally would be four
+times the payload with the page, and at globe zoom a 1° cell is already
+about three pixels.
 
 **There is no WMS to point at, and that was measured rather than assumed:**
 `wms.hycom.org` does not answer from two separate networks, nor does
@@ -469,11 +486,11 @@ renormalised. Refusing to interpolate beside land was the first attempt and
 it left the open ocean smooth while the whole continental shelf stayed a grid
 of squares.
 
-**Not yet built: the SST tiles.** `--tiles` exists and the client follows the
-tile index when it appears, but no tile run has happened, so the finest tier
-simply does not engage and the regional grids stand. The Navy field is also
-untested end to end — HYCOM was returning "Stale file handle" for every data
-read while this was written.
+**Not yet built: the Navy SST tiles.** `--tiles` exists and the client
+follows a tile index when one appears, but no tile run has happened, so that
+tier does not engage and the Navy regional grid stands. OISST needs no such
+run. The Navy field is also untested end to end — HYCOM was returning
+"Stale file handle" for every data read while this was written.
 
 ### Measuring, and the point readout
 

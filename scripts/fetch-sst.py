@@ -84,7 +84,11 @@ REGIONS = [
         'label': 'Atlantic & Gulf',
         'wrap': False,
         'west': -100.0, 'east': -10.0, 'south': 5.0, 'north': 55.0,
-        'minZoom': 5,
+        # One level lower than the current regions use. Those hand off to a
+        # tile tier soon after; this is the finest SST there is, so it should
+        # start as early as a viewport can fit inside the region — at zoom 4
+        # a degree cell is about 11 px, which reads as squares.
+        'minZoom': 4,
     },
     {
         # A band over every longitude, not a box — the same reasoning as the
@@ -96,7 +100,7 @@ REGIONS = [
         # the whole viewport inside a region to use one, so a band starting
         # where the other stopped drops every straddling view to the globe.
         'south': 50.0, 'north': 85.0,
-        'minZoom': 5,
+        'minZoom': 4,
     },
 ]
 
@@ -125,11 +129,13 @@ PRODUCTS = [
         # Its own grid: 1/4 degree, longitude 0-360 like the Navy model's.
         'lat0': -89.875, 'dlat': 0.25, 'nlat': 720,
         'lon0': 0.125, 'dlon': 0.25, 'nlon': 1440,
-        # Strides into that grid: 1 deg globally, 1/2 in a region, native in a
-        # tile. Four times coarser than the Navy tiers throughout, because the
-        # product itself is four times coarser — pretending otherwise would
-        # just interpolate.
-        'strides': {'global': (4, 4), 'region': (2, 2), 'tile': (1, 1)},
+        # 1 degree globally, and **native 1/4 degree in a region**. There is
+        # no tile tier here and that is the point: tiles exist to reach a
+        # product's native resolution, and for OISST the region already is
+        # it. Tiling below native would only interpolate, at the cost of a
+        # second set of files and a daily build over them.
+        'strides': {'global': (4, 4), 'region': (1, 1)},
+        'tiles': False,
     },
     {
         'key': 'navy',
@@ -142,7 +148,10 @@ PRODUCTS = [
         # The same grid the current layers are built on.
         'lat0': -80.0, 'dlat': 0.04, 'nlat': 4251,
         'lon0': 0.0, 'dlon': 0.08, 'nlon': 4500,
+        # The Navy grid is 1/12 degree, far finer than any region stride, so
+        # this is the product where a tile tier actually buys resolution.
         'strides': {'global': (12, 24), 'region': (3, 6), 'tile': (1, 2)},
+        'tiles': True,
     },
 ]
 
@@ -400,6 +409,9 @@ def build_product(product: dict, tiles_only: bool) -> None:
     print(f"{product['label']} — valid {valid}")
 
     if tiles_only:
+        if not product.get('tiles'):
+            print('  no tile tier — the region grid is already native resolution')
+            return
         build_tiles(product, when, valid)
         return
 
@@ -421,7 +433,13 @@ def build_product(product: dict, tiles_only: bool) -> None:
     build(product, when, valid, MAP_DIR / f'{name}.json',
           south=-80.0, north=85.0, west=-180.0, east=180.0,
           stride=product['strides']['global'], wrap=True,
-          extra={'details': details, 'tileIndex': f'/map/tiles-sst-{product["key"]}/index.json'})
+          extra={
+              'details': details,
+              # Only advertised where a tile tier exists; the map follows this
+              # link, so a product without one must not offer it.
+              **({'tileIndex': f'/map/tiles-sst-{product["key"]}/index.json'}
+                 if product.get('tiles') else {}),
+          })
 
     for region in REGIONS:
         build(product, when, valid, MAP_DIR / f'{name}-{region["name"]}.json',
