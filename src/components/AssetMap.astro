@@ -1201,11 +1201,7 @@ import 'leaflet/dist/leaflet.css';
         if (typeof depth !== 'number' || !Array.isArray(coords)) continue;
         let lines = byDepth.get(depth);
         if (!lines) byDepth.set(depth, (lines = []));
-        // Born into the copy the map is currently in, so a tile that lands
-        // after a crossing is not one world out on arrival.
-        lines.push(
-          coords.map(([x, y]: number[]) => [y!, x! + bathyCopy * 360] as [number, number])
-        );
+        lines.push(coords.map(([x, y]: number[]) => [y!, x!] as [number, number]));
       }
       const drawn: L.Polyline[] = [];
       for (const [depth, lines] of byDepth) {
@@ -1221,42 +1217,80 @@ import 'leaflet/dist/leaflet.css';
           }).addTo(target)
         );
       }
+      // Newly arrived geometry is at its literal longitudes; home it before
+      // the reader sees a gap where a tile just landed.
+      rehomeBathy();
       return drawn;
     };
 
     /* Vector layers live in **one copy of the world**, so a contour written
-       at -179 is drawn a full 360 deg west of a view that has panned east
-       past the date line, and the seafloor silently disappears down one
-       side of the map. Markers already have rehome() for this; it
-       deliberately skips lines, because moving a track's vertices
-       independently would tear any line that legitimately crosses the seam.
+       at -179 is drawn a full 360 deg west of a view panned east past the
+       date line, and the seafloor silently disappears down one side of the
+       map. Markers already have rehome() for this; it deliberately skips
+       lines, because moving a track's vertices independently would tear any
+       line that legitimately crosses the seam.
 
-       A contour is safe to move whole, though. Each depth is one polyline
-       holding many independent sub-lines, and shifting an entire sub-line by
-       360 deg cannot tear it — the shape is untouched, only which copy it
-       sits in. Done only when the copy under the centre actually changes,
-       which is once per crossing rather than once per pan: setLatLngs over
-       half a million points is not something to run on every moveend. */
-    let bathyCopy = 0;
+       A contour is safe to move whole, though, and that is the difference:
+       each depth is one polyline holding many independent sub-lines, so
+       shifting an entire sub-line by 360 deg cannot tear anything — the
+       shape is untouched, only which copy it sits in.
 
-    const shiftBathy = (shift: number) => {
-      if (!shift) return;
+       Each sub-line is homed **separately**, and that part is not optional.
+       One shared shift for the whole layer was the first attempt and it is
+       wrong wherever it matters most: a view sitting on the antimeridian
+       needs the contours west of it in one copy and those east of it in the
+       next, so whichever way a single shift moves, half the map comes up
+       bare. That is exactly what it did.
+
+       Like rehome(), it moves only what needs to come *into* view: anything
+       already on screen is left alone, and so is anything off screen in both
+       copies. Without that, sub-lines on the far side of the world would
+       flip copy on almost every pan, and because a whole depth is one
+       polyline, one flip rewrites half a million points. */
+    const bathySpans = new WeakMap<any, [number, number][]>();
+
+    const spansOf = (lines: L.LatLng[][]): [number, number][] =>
+      lines.map((line) => {
+        let lo = Infinity;
+        let hi = -Infinity;
+        for (const p of line) {
+          if (p.lng < lo) lo = p.lng;
+          if (p.lng > hi) hi = p.lng;
+        }
+        return [lo, hi] as [number, number];
+      });
+
+    const rehomeBathy = () => {
+      const view = map.getBounds();
+      const west = view.getWest();
+      const east = view.getEast();
+      const middle = (west + east) / 2;
       for (const group of [bathyDeep, bathyShallow]) {
         group.eachLayer((layer: any) => {
           if (typeof layer.getLatLngs !== 'function') return;
           const lines = layer.getLatLngs() as L.LatLng[][];
-          layer.setLatLngs(
-            lines.map((line) => line.map((p: L.LatLng) => L.latLng(p.lat, p.lng + shift)))
-          );
+          let spans = bathySpans.get(layer);
+          if (!spans || spans.length !== lines.length) {
+            spans = spansOf(lines);
+            bathySpans.set(layer, spans);
+          }
+          let moved = false;
+          for (let i = 0; i < lines.length; i++) {
+            const span = spans[i];
+            const line = lines[i];
+            if (!span || !line) continue;
+            const [lo, hi] = span;
+            if (hi >= west && lo <= east) continue; // already on screen
+            const shift = Math.round((middle - (lo + hi) / 2) / 360) * 360;
+            if (!shift) continue;
+            if (hi + shift < west || lo + shift > east) continue; // off screen either way
+            lines[i] = line.map((p: L.LatLng) => L.latLng(p.lat, p.lng + shift));
+            spans[i] = [lo + shift, hi + shift];
+            moved = true;
+          }
+          if (moved) layer.setLatLngs(lines);
         });
       }
-    };
-
-    const rehomeBathy = () => {
-      const copy = Math.round(map.getCenter().lng / 360);
-      if (copy === bathyCopy) return;
-      shiftBathy((copy - bathyCopy) * 360);
-      bathyCopy = copy;
     };
 
     let bathyDeepAsked = false;

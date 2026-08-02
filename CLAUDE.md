@@ -183,11 +183,22 @@ meridian was bare.
 A contour is safe to move **whole**, though, and that is the difference: each
 depth is one polyline holding many independent sub-lines, so shifting an
 entire sub-line by 360° cannot tear anything — the shape is untouched, only
-which copy it sits in. `rehomeBathy()` does it only when the copy under the
-centre actually changes, once per crossing rather than once per pan, because
-`setLatLngs` over half a million points is not a per-moveend operation. New
-geometry is born into the current copy, so a tile arriving after a crossing
-is not one world out on arrival.
+which copy it sits in.
+
+**Each sub-line is homed separately, and that part is not optional.** One
+shared shift for the whole layer was the first fix and it is wrong exactly
+where it matters: a view sitting *on* the antimeridian needs the contours
+west of it in one copy and those east of it in the next, so whichever way a
+single shift moves, half the map comes up bare — which is what it did, and
+what was reported the second time.
+
+`rehomeBathy()` therefore mirrors `rehome()` rather than approximating it,
+including the part that makes it cheap: it moves only what needs to come
+*into* view, leaving alone anything already on screen and anything off screen
+in both copies. Without that, sub-lines on the far side of the world flip
+copy on nearly every pan — and because a whole depth is one polyline, a
+single flip rewrites half a million points. Longitude spans are cached per
+sub-line so the common case is a comparison, not a rebuild.
 
 The centre may now wander past ±180 after enough panning. Nothing minds —
 positions are folded before they are shown — but `saveView()` wraps it,

@@ -233,10 +233,12 @@ const bathyDeepGeo = {
   type: 'FeatureCollection',
   features: [
     contour(200, -78, 22), contour(4000, -70, 22),
-    // Just west of the antimeridian in the file's own coordinates. Seen from
-    // a view that has panned east past the date line it belongs at +181, one
-    // world copy over — which is the whole point of the check below.
+    /* Either side of the antimeridian in the file's own coordinates. A view
+       centred on the date line has to show both at once, which a single
+       shared shift cannot do: whichever way it moves, one of these two ends
+       up a world away. They have to be homed independently. */
     contour(1000, -179, 10),
+    contour(1000, 175, 10),
   ],
 };
 // A tile carries every level, deep ones included — that is the whole point
@@ -1241,6 +1243,26 @@ const acrossDateLine = (() => {
   }).length;
 })();
 
+/* Sitting on the seam, with contours either side of it. */
+host._map.setView([11, 180], 4, { animate: false });
+await new Promise((r) => setTimeout(r, 800));
+const straddling = (() => {
+  const b = host._map.getBounds();
+  const seen = { west: 0, east: 0 };
+  for (const l of Object.values(host._map._layers)) {
+    if (!/map-bathy/.test(l.options?.className ?? '')) continue;
+    for (const line of l.getLatLngs?.() ?? []) {
+      if (!line.length) continue;
+      const lng = line[0].lng;
+      const lat = line[0].lat;
+      if (lat < 9 || lat > 13) continue;               // the two date-line stubs only
+      if (!b.contains(window.L.latLng(lat, lng))) continue;
+      if (lng < 180) seen.west++; else seen.east++;
+    }
+  }
+  return seen;
+})();
+
 // Put the map back where the checks below expect it.
 host._map.setView([25, -75], 6, { animate: false });
 await new Promise((r) => setTimeout(r, 300));
@@ -1281,6 +1303,8 @@ const checks = [
     bathyPaneZ('bathy') > bathyPaneZ('sst') && bathyPaneZ('bathy') < bathyPaneZ('currents')],
   ['no tiles are requested below the threshold', noNewTilesBelowThreshold],
   ['contours survive panning past the date line', acrossDateLine > 0],
+  ['and a view sitting on the seam shows both sides at once',
+    straddling.west > 0 && straddling.east > 0],
   ['the opacity slider shows with the layer and moves the pane',
     bathySliderShown && bathyOpacityApplied],
   ['and the opacity it sets rides in the saved view', bathyOpacitySaved],
