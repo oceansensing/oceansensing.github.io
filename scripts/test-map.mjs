@@ -14,6 +14,9 @@ import path from 'node:path';
 
 const dom = new JSDOM(
   '<!doctype html><body><div id="asset-map"></div><span id="map-status"></span>' +
+  // The legend key the component fills in and reveals; part of the real page
+  // markup, so the harness has to stand it up too.
+  '<span class="key sst" data-sst-key hidden></span>' +
     // Deliberately wrong server-rendered content: if the client does not
     // rebuild it, the assertions below will still see "STALE".
     '<div class="storm-status" data-storm-status><span class="label">STALE</span>' +
@@ -40,7 +43,7 @@ window.Element.prototype.scrollIntoView = function () {};
 
    requestAnimationFrame is stubbed below, so leaflet-velocity's loop really
    runs here — unlike a headless browser pane, which never paints. */
-const drawn = { moveTo: 0, lineTo: 0, stroke: 0, arc: 0, styles: new Set(), fills: new Set(), segments: [] };
+const drawn = { moveTo: 0, lineTo: 0, stroke: 0, arc: 0, styles: new Set(), fills: new Set(), segments: [], images: [] };
 const properties = {};
 let penX = 0;
 let penY = 0;
@@ -51,6 +54,18 @@ const recordingContext = new Proxy(
       if (key === 'canvas') return null;
       if (key in properties) return properties[key];
       return (...args) => {
+        /* The raster layers go through ImageData rather than path calls, so
+           the recorder has to return a real buffer — and keeping the buffer
+           afterwards is what lets the checks below read the pixels that were
+           actually painted, rather than trusting that a draw happened. */
+        if (key === 'createImageData') {
+          const [w, h] = args;
+          return { width: w, height: h, data: new Uint8ClampedArray(w * h * 4) };
+        }
+        if (key === 'putImageData') {
+          drawn.images.push(args[0]);
+          return undefined;
+        }
         if (key === 'moveTo') {
           drawn.moveTo += 1;
           [penX, penY] = args;
@@ -98,6 +113,9 @@ const files = {
   'currents-atlantic-60m': JSON.parse(fs.readFileSync('public/map/currents-atlantic-60m.json', 'utf8')),
   'currents-arctic-60m': JSON.parse(fs.readFileSync('public/map/currents-arctic-60m.json', 'utf8')),
   argo: JSON.parse(fs.readFileSync('public/map/argo.json', 'utf8')),
+  'sst-oisst': JSON.parse(fs.readFileSync('public/map/sst-oisst.json', 'utf8')),
+  'sst-oisst-atlantic': JSON.parse(fs.readFileSync('public/map/sst-oisst-atlantic.json', 'utf8')),
+  'sst-oisst-arctic': JSON.parse(fs.readFileSync('public/map/sst-oisst-arctic.json', 'utf8')),
 };
 
 /* The 1/12 degree tiles are ~92 MB and gitignored — CI builds them, nothing
@@ -141,6 +159,23 @@ files['tiles/index'] = {
   }
 }
 files['tiles-60m/index'] = { ...files['tiles/index'], depth: 60 };
+
+/* A stand-in Navy SST field. HYCOM is refusing data reads, so the real one
+   could not be generated — and a constant is better here anyway: it differs
+   from OISST everywhere, so the readout naming one field while sampling the
+   other cannot pass. */
+{
+  const nx = 360;
+  const ny = 166;
+  files['sst-navy'] = {
+    header: {
+      nx, ny, lo1: 0.125, la1: 85.125, dx: 1, dy: 1,
+      refTime: '2026-08-01T12:00:00Z', source: 'US Navy ESPC-D-V02', units: 'degC',
+      details: [], tileIndex: '/map/tiles-sst-navy/index.json',
+    },
+    data: Array.from({ length: nx * ny }, () => 7.5),
+  };
+}
 globalThis.fetch = async (u) => {
   // Longest key first: "currents" is a substring of "currents-detail", so
   // insertion order would hand the detail request the coarse grid.
@@ -564,6 +599,75 @@ host._map.fire('contextmenu', { latlng: window.L.latLng(11, -51) });
 await new Promise((r) => setTimeout(r, 200));
 const deepRead = host.querySelector('.point-readout .leaflet-popup-content')?.textContent ?? '';
 
+/* ---- sea surface temperature ---------------------------------------------
+
+   The layers are off by default, so each is switched on the way a reader
+   would and the pixels it painted are read back. Checking that a draw
+   happened would not be enough: the point is that the colours come from the
+   gated ramp and that the readout samples the field that is actually on. */
+const overlayLabelled = (re) =>
+  [...host.querySelectorAll('.leaflet-control-layers-overlays label')].find((l) => re.test(l.textContent));
+
+const rampRgb = palette.sst.map((h) => [
+  parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16),
+]);
+// Distance from a pixel to the nearest point on the ramp, allowing for the
+// interpolation between stops.
+const offRamp = ([r, g, b]) => {
+  let best = Infinity;
+  for (let i = 0; i < rampRgb.length - 1; i++) {
+    for (let t = 0; t <= 1; t += 0.05) {
+      const a = rampRgb[i], c = rampRgb[i + 1];
+      const d = Math.hypot(
+        r - (a[0] + (c[0] - a[0]) * t),
+        g - (a[1] + (c[1] - a[1]) * t),
+        b - (a[2] + (c[2] - a[2]) * t)
+      );
+      if (d < best) best = d;
+    }
+  }
+  return best;
+};
+
+host._map.setView([32, -62], 4, { animate: false });
+await new Promise((r) => setTimeout(r, 400));
+
+const sstOisstToggle = overlayLabelled(/OISST/);
+const sstNavyToggle = overlayLabelled(/Navy forecast/);
+drawn.images.length = 0;
+sstOisstToggle?.querySelector('input')?.click();
+await new Promise((r) => setTimeout(r, 900));
+
+const painted = drawn.images[drawn.images.length - 1] ?? null;
+let opaque = 0;
+let strayColour = 0;
+if (painted) {
+  for (let k = 0; k < painted.data.length; k += 4) {
+    if (painted.data[k + 3] === 0) continue;
+    opaque += 1;
+    if (offRamp([painted.data[k], painted.data[k + 1], painted.data[k + 2]]) > 12) strayColour += 1;
+  }
+}
+
+host._map.closePopup();
+host._map.fire('contextmenu', { latlng: window.L.latLng(32, -62) });
+await new Promise((r) => setTimeout(r, 200));
+const oisstRead = host.querySelector('.point-readout .leaflet-popup-content')?.textContent ?? '';
+
+// The synthetic Navy field is a constant 7.5 C everywhere, so if the readout
+// still reports the OISST value the two layers are not really exclusive.
+sstNavyToggle?.querySelector('input')?.click();
+await new Promise((r) => setTimeout(r, 900));
+const oisstOffWithNavyOn =
+  overlayLabelled(/OISST/)?.querySelector('input')?.checked === false;
+host._map.closePopup();
+host._map.fire('contextmenu', { latlng: window.L.latLng(32, -62) });
+await new Promise((r) => setTimeout(r, 200));
+const navyRead = host.querySelector('.point-readout .leaflet-popup-content')?.textContent ?? '';
+
+const sstLegend = document.querySelector('[data-sst-key]');
+const legendShown = sstLegend && !sstLegend.hidden;
+
 const status = document.getElementById('map-status').textContent;
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
@@ -754,6 +858,14 @@ const checks = [
     /Current at 60 m/.test(deepRead) && /0\.10 m\/s/.test(deepRead) &&
     /11\.0000°N/.test(deepRead)],
   ['the 60 m grid is published at 60 m', files['currents-60m'][0].header.depth === 60],
+  ['an SST layer is offered for each source', !!sstOisstToggle && !!sstNavyToggle],
+  ['switching SST on paints the raster', opaque > 5000],
+  ['every painted pixel comes from the gated ramp', painted && strayColour === 0],
+  ['the readout reports a sea surface temperature', /Sea surface/.test(oisstRead)],
+  ['turning the Navy field on turns OISST off', oisstOffWithNavyOn],
+  ['and the readout follows the field that is on',
+    /7\.5 °C/.test(navyRead) && !/7\.5 °C/.test(oisstRead)],
+  ['the temperature key appears with the layer', legendShown],
   ['the 60 m grid points only at 60 m products',
     files['currents-60m'][0].header.tileIndex.includes('-60m') &&
     files['currents-60m'][0].header.details.every((d) => d.url.includes('-60m'))],

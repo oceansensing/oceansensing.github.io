@@ -8,7 +8,7 @@
     "argoEdge": "#3d3000",
     "measure": "#1b2028"
   },
-  "_currents": "Warm pale amber, slow to fast. Amber rather than blue because the two bathymetries are opposite in tone \u2014 Esri Ocean is light, GEBCO dark \u2014 and no blue clears both: any blue pale enough to show on GEBCO's navy lands inside Esri's ocean, and GEBCO's own water runs blue through cyan to the pale mint it paints shallow banks. Amber sits outside that whole range, so one ramp serves both maps and there is no basemap switching to get wrong. Kept pale rather than saturated so the particles are not mistaken for the orange USV markers.",
+  "_currents": "Warm pale amber, slow to fast. Amber rather than blue because the two bathymetries are opposite in tone — Esri Ocean is light, GEBCO dark — and no blue clears both: any blue pale enough to show on GEBCO's navy lands inside Esri's ocean, and GEBCO's own water runs blue through cyan to the pale mint it paints shallow banks. Amber sits outside that whole range, so one ramp serves both maps and there is no basemap switching to get wrong. Kept pale rather than saturated so the particles are not mistaken for the orange USV markers.",
   "currents": [
     "#ecd7ab",
     "#f1dfbb",
@@ -16,7 +16,24 @@
     "#f9edd9",
     "#fcf2e3"
   ],
-  "_separation": "Argo dots are gold, which sits about \u0394E 18 from the current particles \u2014 under the bar the gate applies elsewhere. No yellow clears them: the particles are pale amber because that is the one hue reading on both bathymetries, and paling the ramp far enough to make room drops its own water contrast to 79%. The dots are therefore given a dark outline, which separates a discrete dot from a drifting trail whatever the fill does. Recorded as a named exemption rather than by lowering the threshold, so the compromise stays visible.",
+  "_sst": "The temperature ramp, cold to warm, spanning sstRange. Cool-only — deep blue through to light teal — rather than the conventional blue-to-red, and that is forced rather than stylistic. This layer replaces the water under everything else, so scripts/test-contrast.mjs treats every stop as another background the markers and particles must clear. A conventional warm end fails it outright: measured, orange USVs sat ΔE 9.3 from a warm-amber stop and the storm red 16.3 from a brick one, against a bar of 22 — and the warm end of an SST ramp is the tropics, which is exactly where the storms are. The cold end is floored well above black because the charcoal measuring line lives there (ΔE 17.4 against a darker navy), and the warm end stops short of pale because the current particles are near-white cream (ΔE 21.0 against a paler green). What is left is this band, which clears everything with ΔE 23 to spare at its worst. Temperature is read from the legend and the readout, not from a red-means-hot instinct.",
+  "sstRange": [
+    -2,
+    34
+  ],
+  "sst": [
+    "#29588e",
+    "#2e6697",
+    "#3275a0",
+    "#3784a9",
+    "#3c93b2",
+    "#42a3ba",
+    "#4cafbd",
+    "#58babf",
+    "#63c1c0",
+    "#6ec4bd"
+  ],
+  "_separation": "Argo dots are gold, which sits about ΔE 18 from the current particles — under the bar the gate applies elsewhere. No yellow clears them: the particles are pale amber because that is the one hue reading on both bathymetries, and paling the ramp far enough to make room drops its own water contrast to 79%. The dots are therefore given a dark outline, which separates a discrete dot from a drifting trail whatever the fill does. Recorded as a named exemption rather than by lowering the threshold, so the compromise stays visible.",
   "separationExempt": [
     "argo"
   ],

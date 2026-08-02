@@ -193,6 +193,43 @@ palette.currents.forEach((colour, i) => {
   }
 });
 
+/* An SST layer replaces the water under everything else, so every stop of
+   its ramp is another background the markers and the particles have to
+   survive — treated exactly like a basemap ocean, each stop weighted as its
+   own full-coverage tone. This is why the ramp is dark and low-chroma
+   rather than the conventional rainbow: the usual pale-yellow-to-red warm
+   end sits on top of the storm, USV and particle colours, and the warm end
+   is the tropics, which is where the storms are. */
+const sstWater = (palette.sst ?? []).map((colour, i) => ({
+  colour,
+  share: 1 / (palette.sst.length || 1),
+  label: `sst[${i}]`,
+}));
+if (sstWater.length) {
+  for (const [name, colour] of Object.entries(palette.features)) {
+    for (const stop of sstWater) {
+      const d = deltaE(hex(colour), hex(stop.colour));
+      results.push({
+        what: `${name} (${colour})`,
+        on: `SST ramp ${stop.label} (${stop.colour})`,
+        coverage: d >= MIN_DELTA_E ? 1 : 0,
+        worst: d,
+      });
+    }
+  }
+  palette.currents.forEach((colour, i) => {
+    for (const stop of sstWater) {
+      const d = deltaE(hex(colour), hex(stop.colour));
+      results.push({
+        what: `currents[${i}] (${colour})`,
+        on: `SST ramp ${stop.label} (${stop.colour})`,
+        coverage: d >= MIN_DELTA_E ? 1 : 0,
+        worst: d,
+      });
+    }
+  });
+}
+
 /* Particles must not read as assets. They are thin moving lines and the
    markers are filled dots, but keeping them apart in colour too means a
    glance is never ambiguous. */

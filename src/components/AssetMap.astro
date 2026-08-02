@@ -26,6 +26,7 @@ import 'leaflet/dist/leaflet.css';
       <span class="key glider">IOOS glider</span>
       <span class="key argo">Argo float</span>
       <span class="key current">Surface current</span>
+      <span class="key sst" data-sst-key hidden>Sea surface temp</span>
     </span>
     <span class="status" id="map-status">Loading…</span>
   </figcaption>
@@ -107,6 +108,14 @@ import 'leaflet/dist/leaflet.css';
        anything. They were drawing the whole time and the blend was undoing
        them. Keep them apart: the raster blends, the particles composite
        normally, which is also what the contrast gate assumes. */
+    /* Temperature sits under the currents, which sit under every track and
+       marker. It replaces the water rather than tinting it, so it goes
+       lowest of the three overlays — a reader with SST and currents both on
+       should see flow drawn over temperature, not the other way round. */
+    const sstPane = map.createPane('sst');
+    sstPane.style.zIndex = '240';
+    sstPane.style.pointerEvents = 'none';
+
     const rasterPane = map.createPane('currents-raster');
     rasterPane.style.zIndex = '250';
     rasterPane.style.pointerEvents = 'none';
@@ -152,6 +161,14 @@ import 'leaflet/dist/leaflet.css';
        mutually exclusive. */
     const flow = L.layerGroup();
     const flowDeep = L.layerGroup();
+
+    /* One group per temperature field, and the same rule as the two animated
+       current fields: only one at a time. Two rasters cannot be stacked —
+       the upper one simply hides the lower — so offering both at once would
+       show one field while naming two. */
+    const sstOisst = L.layerGroup();
+    const sstNavy = L.layerGroup();
+    const ssts: { group: L.LayerGroup; layer: any }[] = [];
     /* Both animated fields, so the point readout can sample whichever one
        the reader has on rather than a fixed depth. */
     const flows: { group: L.LayerGroup; layer: L.Layer | null }[] = [];
@@ -462,6 +479,337 @@ import 'leaflet/dist/leaflet.css';
     buildFlow('/map/currents.json', flow);
     buildFlow('/map/currents-60m.json', flowDeep);
 
+    /* ---- sea-surface temperature ---------------------------------------
+
+       Drawn here rather than fetched as a picture from a WMS, because there
+       is no WMS to fetch it from: the Navy's own does not answer, nor does
+       the usual ERDDAP, and NCEI's replies "not accessible via WMS". Both
+       fields therefore come through scripts/fetch-sst.py as numeric grids,
+       in the same three tiers as the currents, and are painted below. That
+       also means the readout can report a temperature from the grid already
+       loaded, with no request. */
+
+    const SST_RANGE: [number, number] = (palette.sstRange as [number, number]) ?? [-2, 34];
+    const SST_STOPS = (palette.sst ?? []).map((hex: string) => [
+      parseInt(hex.slice(1, 3), 16),
+      parseInt(hex.slice(3, 5), 16),
+      parseInt(hex.slice(5, 7), 16),
+    ]);
+
+    /* Interpolated between stops rather than stepped: a field of flat bands
+       reads as contours the data does not have. */
+    const sstColour = (t: number) => {
+      const span = SST_RANGE[1] - SST_RANGE[0] || 1;
+      const x = Math.min(1, Math.max(0, (t - SST_RANGE[0]) / span)) * (SST_STOPS.length - 1);
+      const i = Math.min(SST_STOPS.length - 2, Math.floor(x));
+      const f = x - i;
+      const a = SST_STOPS[i]!;
+      const b = SST_STOPS[i + 1]!;
+      return [
+        a[0]! + (b[0]! - a[0]!) * f,
+        a[1]! + (b[1]! - a[1]!) * f,
+        a[2]! + (b[2]! - a[2]!) * f,
+      ];
+    };
+
+    type Scalar = { header: any; data: (number | null)[] };
+
+    const SstLayer = L.Layer.extend({
+      onAdd(this: any, map: L.Map) {
+        this._canvas = L.DomUtil.create('canvas', 'leaflet-layer map-sst');
+        map.getPane('sst')!.appendChild(this._canvas);
+        map.on('moveend zoomend resize viewreset', this._render, this);
+        this._render();
+      },
+      onRemove(this: any, map: L.Map) {
+        map.off('moveend zoomend resize viewreset', this._render, this);
+        this._canvas?.remove();
+        this._canvas = null;
+      },
+      setGrid(this: any, grid: Scalar) {
+        this._grid = grid;
+        this._render();
+        return this;
+      },
+      getGrid(this: any) {
+        return this._grid ?? null;
+      },
+      _render(this: any) {
+        const map: L.Map = this._map;
+        const cv: HTMLCanvasElement | null = this._canvas;
+        if (!map || !cv) return;
+
+        const size = map.getSize();
+        if (cv.width !== size.x || cv.height !== size.y) {
+          cv.width = size.x;
+          cv.height = size.y;
+        }
+        // Pin the canvas to the map pane's origin so it travels with a drag.
+        L.DomUtil.setPosition(cv, map.containerPointToLayerPoint([0, 0]));
+
+        const ctx = cv.getContext('2d');
+        if (!ctx) return;
+        ctx.clearRect(0, 0, cv.width, cv.height);
+        const grid: Scalar | null = this._grid;
+        if (!grid?.header) return;
+
+        const h = grid.header;
+        const w = cv.width;
+        const ht = cv.height;
+
+        /* Web Mercator is separable — longitude depends only on the column,
+           latitude only on the row — so the projection is inverted once per
+           column and once per row rather than once per pixel: about 1,700
+           calls instead of 650,000. containerPointToLatLng is used rather
+           than any assumed formula, and unlike latLngToContainerPoint it
+           does not round, which is what made the particle scaling wrong. */
+        /* Cell coordinates, kept fractional: the coarsest tier is a degree
+           across, which at low zoom is tens of pixels, and nearest-neighbour
+           there paints the ocean as a chessboard of squares that look like
+           structure in the data rather than the sampling. */
+        const cols = new Float64Array(w);
+        for (let x = 0; x < w; x++) {
+          const lng = map.containerPointToLatLng([x + 0.5, 0]).lng;
+          const u = ((((lng - h.lo1) % 360) + 360) % 360) / h.dx;
+          cols[x] = u >= 0 && u <= h.nx - 1 ? u : -1;
+        }
+
+        /* Bilinear, in two steps, because the coast needs both things at
+           once: land must not be painted, and the water beside it must not
+           go blocky.
+
+           First the nearest cell decides whether this pixel is water at all,
+           which keeps the shoreline exactly where the data puts it and stops
+           a sea temperature bleeding inland. Then the value is averaged over
+           whichever of the four neighbours are water, with their bilinear
+           weights renormalised. Simply refusing to interpolate next to land
+           was the first attempt and it showed: the open ocean came out
+           smooth while the entire continental shelf — where a storm is
+           actually read — stayed a grid of squares. */
+        const sample = (u: number, v: number) => {
+          const i0 = Math.floor(u);
+          const j0 = Math.floor(v);
+          const fi = u - i0;
+          const fj = v - j0;
+          const i1 = Math.min(i0 + 1, h.nx - 1);
+          const j1 = Math.min(j0 + 1, h.ny - 1);
+
+          const near = (fj < 0.5 ? j0 : j1) * h.nx + (fi < 0.5 ? i0 : i1);
+          if (typeof grid.data[near] !== 'number') return null;
+
+          let sum = 0;
+          let weight = 0;
+          const corners: [number, number, number][] = [
+            [i0, j0, (1 - fi) * (1 - fj)],
+            [i1, j0, fi * (1 - fj)],
+            [i0, j1, (1 - fi) * fj],
+            [i1, j1, fi * fj],
+          ];
+          for (const [i, j, wgt] of corners) {
+            const value = grid.data[j * h.nx + i];
+            if (typeof value === 'number') {
+              sum += value * wgt;
+              weight += wgt;
+            }
+          }
+          return weight > 0 ? sum / weight : null;
+        };
+
+        const img = ctx.createImageData(w, ht);
+        const out = img.data;
+        for (let y = 0; y < ht; y++) {
+          const lat = map.containerPointToLatLng([0, y + 0.5]).lat;
+          const vRow = (h.la1 - lat) / h.dy;
+          if (vRow < 0 || vRow > h.ny - 1) continue;
+          for (let x = 0; x < w; x++) {
+            const u = cols[x]!;
+            if (u < 0) continue;
+            const v = sample(u, vRow);
+            if (v === null) continue;              // land, ice, or no data
+            const rgb = sstColour(v);
+            const k = (y * w + x) * 4;
+            out[k] = rgb[0]!;
+            out[k + 1] = rgb[1]!;
+            out[k + 2] = rgb[2]!;
+            /* Fully opaque, and that is load-bearing: the contrast gate
+               checks the markers against these exact ramp colours. Blending
+               the ramp with the bathymetry underneath would put a different
+               colour on screen than the one that was gated. */
+            out[k + 3] = 255;
+          }
+        }
+        ctx.putImageData(img, 0, 0);
+      },
+    });
+
+    /* The tier chain, per field. Same shape as the currents': the global
+       file names its own regions and tiles, the finest that covers the view
+       wins, and tiles are chosen by overlap and joined.
+
+       This repeats logic that buildFlow above also has. The two formats
+       differ — velocity grids are a pair of components, this is one — and
+       unifying them is the obvious next step; noted here rather than left
+       for someone to discover. */
+    const buildSst = (url: string, group: L.LayerGroup) => {
+      const layer = new (SstLayer as any)();
+      const entry: { group: L.LayerGroup; layer: any } = { group, layer };
+      ssts.push(entry);
+
+      fetch(url)
+        .then((r) => r.json())
+        .then((coarse: Scalar) => {
+          group.addLayer(layer);
+          layer.setGrid(coarse);
+
+          const details = [...(coarse.header?.details ?? [])].sort(
+            (a: any, b: any) => a.deg - b.deg
+          );
+          const grids = new Map<string, Scalar>();
+          let fetching: string | null = null;
+          let showing: string | null = null;
+          let tiles: any = null;
+
+          const indexUrl = coarse.header?.tileIndex;
+          const tileBase = (indexUrl ?? '').replace(/index\.json$/, '');
+          if (indexUrl) {
+            fetch(indexUrl)
+              .then((r) => r.json())
+              .then((index) => {
+                tiles = index;
+                applyView();
+              })
+              .catch(() => {
+                // No tile run yet. The regional grids stand.
+              });
+          }
+
+          const tileKeys = () => {
+            if (!tiles || map.getZoom() < tiles.minZoom) return null;
+            const { size, south: s0, west: w0 } = tiles;
+            const view = map.getBounds();
+            const floorTo = (v: number, origin: number) =>
+              Math.floor((v - origin) / size) * size + origin;
+            const keys: string[] = [];
+            for (let sy = floorTo(view.getSouth(), s0); sy <= view.getNorth(); sy += size) {
+              for (let wx = floorTo(view.getWest(), w0); wx <= view.getEast(); wx += size) {
+                const wrapped = ((((wx - w0) % 360) + 360) % 360) + w0;
+                const key = `${sy}_${wrapped}`;
+                if (tiles.available.includes(key)) keys.push(key);
+              }
+            }
+            return keys.length ? keys : null;
+          };
+
+          /* Join tiles onto one lattice. They share a spacing, so this is a
+             copy into offsets rather than a resample; cells no tile covers
+             stay null and are simply not painted. */
+          const assemble = (loaded: Scalar[]): Scalar => {
+            const h0 = loaded[0]!.header;
+            const dx = h0.dx;
+            const dy = h0.dy;
+            const lons = loaded.map((g) => g.header.lo1);
+            const base = Math.min(
+              ...lons.map((l) => ((((l - lons[0]!) % 360) + 360) % 360) + lons[0]!)
+            );
+            const north = Math.max(...loaded.map((g) => g.header.la1));
+            const south = Math.min(
+              ...loaded.map((g) => g.header.la1 - (g.header.ny - 1) * dy)
+            );
+            const east = Math.max(
+              ...loaded.map((g) => {
+                const off = ((((g.header.lo1 - base) % 360) + 360) % 360);
+                return off + (g.header.nx - 1) * dx;
+              })
+            );
+            const nx = Math.round(east / dx) + 1;
+            const ny = Math.round((north - south) / dy) + 1;
+            const data: (number | null)[] = new Array(nx * ny).fill(null);
+            for (const g of loaded) {
+              const gh = g.header;
+              const ox = Math.round(((((gh.lo1 - base) % 360) + 360) % 360) / dx);
+              const oy = Math.round((north - gh.la1) / dy);
+              for (let j = 0; j < gh.ny; j++) {
+                for (let i = 0; i < gh.nx; i++) {
+                  const value = g.data[j * gh.nx + i];
+                  if (typeof value !== 'number') continue;
+                  const x = ox + i;
+                  const y = oy + j;
+                  if (x < nx && y < ny) data[y * nx + x] = value;
+                }
+              }
+            }
+            return { header: { ...h0, nx, ny, lo1: base, la1: north }, data };
+          };
+
+          const covers = (d: any) => {
+            if (map.getZoom() < d.minZoom) return false;
+            const view = map.getBounds();
+            return (
+              view.getWest() >= d.west &&
+              view.getEast() <= d.east &&
+              view.getSouth() >= d.south &&
+              view.getNorth() <= d.north
+            );
+          };
+
+          const applyView = () => {
+            const wanted = details.find(covers) ?? null;
+            const keys = tileKeys();
+            const want = keys ? `tiles:${keys.join(',')}` : (wanted?.url ?? null);
+            if (want === showing) return;
+
+            if (want && !grids.has(want)) {
+              if (fetching === want) return;
+              fetching = want;
+              const sources = keys ? keys.map((k) => `${tileBase}${k}.json`) : [want];
+              Promise.all(sources.map((u) => fetch(u).then((r) => r.json())))
+                .then((loaded: Scalar[]) => {
+                  grids.set(want, keys ? assemble(loaded) : loaded[0]!);
+                  fetching = null;
+                  applyView();
+                })
+                .catch(() => {
+                  fetching = null;
+                  if (keys && tiles) {
+                    tiles.available = tiles.available.filter((k: string) => !keys.includes(k));
+                  } else if (wanted) {
+                    wanted.minZoom = Infinity;
+                  }
+                });
+              return;
+            }
+            showing = want;
+            layer.setGrid(want ? grids.get(want)! : coarse);
+          };
+
+          map.on('zoomend moveend', applyView);
+          applyView();
+        })
+        .catch(() => {
+          /* No field. HYCOM in particular serves metadata while refusing
+             data reads, so one source being down is routine; the switcher
+             still lists the layer and it is simply empty. */
+        });
+    };
+
+    buildSst('/map/sst-oisst.json', sstOisst);
+    buildSst('/map/sst-navy.json', sstNavy);
+
+    /* The legend key is built from the same palette the renderer reads, so
+       the two cannot drift, and it stays hidden until a temperature layer is
+       actually on — a colour bar for a layer nobody has switched on is just
+       noise. */
+    const sstKey = document.querySelector<HTMLElement>('[data-sst-key]');
+    if (sstKey && palette.sst?.length) {
+      sstKey.style.setProperty('--sst-ramp', `linear-gradient(to right, ${palette.sst.join(', ')})`);
+      sstKey.textContent = `${SST_RANGE[0]}–${SST_RANGE[1]} °C`;
+      const showKey = () => {
+        sstKey.hidden = !ssts.some((f) => map.hasLayer(f.group));
+      };
+      map.on('overlayadd overlayremove', showKey);
+      showKey();
+    }
+
     const coastline = L.layerGroup();
     const gebco = L.tileLayer.wms('https://wms.gebco.net/mapserv?', {
       layers: 'GEBCO_LATEST',
@@ -654,6 +1002,8 @@ import 'leaflet/dist/leaflet.css';
     const overlays: Record<string, L.Layer> = {
       'Surface currents (animated)': flow,
       'Currents at 60 m (animated)': flowDeep,
+      'SST (OISST analysis)': sstOisst,
+      'SST (Navy forecast)': sstNavy,
       ...(MERCATOR_RASTER ? { 'Current speed (Mercator)': currents } : {}),
       'Hurricanes': storms,
       'NOAA USVs': usvs,
@@ -670,8 +1020,14 @@ import 'leaflet/dist/leaflet.css';
        to look at that depth. Done by listening rather than by a radio
        control, so the choice still survives the saved view, which records
        overlays by name. */
+    const EXCLUSIVE: L.Layer[][] = [
+      [flow, flowDeep],       // two particle fields cannot be told apart
+      [sstOisst, sstNavy],    // two rasters: the upper one just hides the lower
+    ];
+
     map.on('overlayadd', (e: L.LayersControlEvent) => {
-      const other = e.layer === flow ? flowDeep : e.layer === flowDeep ? flow : null;
+      const pair = EXCLUSIVE.find((p) => p.includes(e.layer));
+      const other = pair?.find((l) => l !== e.layer) ?? null;
       if (!other || !map.hasLayer(other)) return;
       /* Deferred by a tick, deliberately. The control applies every ticked
          box in one pass and re-adds anything it finds missing, so removing
@@ -877,6 +1233,7 @@ import 'leaflet/dist/leaflet.css';
        reliably from a long press, so touch is timed here instead. */
     const describePoint = (ll: L.LatLng) => {
       const water = currentAt(ll);
+      const temp = sstAt(ll);
       const popup = L.popup({ className: 'point-readout' })
         .setLatLng(ll)
         .setContent(
@@ -889,6 +1246,9 @@ import 'leaflet/dist/leaflet.css';
               ? `<dt>Current at ${water.depth ? `${water.depth} m` : 'surface'}</dt>` +
                 `<dd>${water.speed.toFixed(2)} m/s toward ${water.toward.toFixed(0)}°T</dd>`
               : `<dt>Current</dt><dd>no data here</dd>`) +
+            // Only when a temperature layer is on: otherwise there is no
+            // grid loaded and a missing row is better than an empty one.
+            (temp ? `<dt>Sea surface</dt><dd>${temp.degC.toFixed(1)} °C</dd>` : '') +
             `</dl>`
         )
         .openOn(map);
@@ -1178,6 +1538,20 @@ import 'leaflet/dist/leaflet.css';
 
     /* The surface current under a point, read out of whichever grid is
        loaded — no request, and it is the same field the particles follow. */
+    /* Temperature at a point, from the grid already loaded — no request, and
+       it is the same field being painted. */
+    const sstAt = (ll: L.LatLng) => {
+      const shown = ssts.find((f) => map.hasLayer(f.group));
+      const grid = shown?.layer?.getGrid?.();
+      const h = grid?.header;
+      if (!h) return null;
+      const i = Math.round(((((ll.lng - h.lo1) % 360) + 360) % 360) / h.dx);
+      const j = Math.round((h.la1 - ll.lat) / h.dy);
+      if (i < 0 || i >= h.nx || j < 0 || j >= h.ny) return null;
+      const v = grid.data[j * h.nx + i];
+      return typeof v === 'number' ? { degC: v, source: h.source ?? '' } : null;
+    };
+
     const currentAt = (ll: L.LatLng) => {
       const shown = flows.find((f) => map.hasLayer(f.group))?.layer;
       const grid = (shown as unknown as { options?: { data?: any } })?.options?.data;
@@ -1572,6 +1946,20 @@ import 'leaflet/dist/leaflet.css';
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     color: var(--text-muted);
+  }
+
+  /* The temperature key is a bar, not a dot: it stands for a continuum, and
+     a single swatch would have to pick one temperature to represent all of
+     them. The gradient itself is set from the palette in the script. */
+  #asset-map-figure .key.sst::before,
+  .key.sst::before {
+    background: var(--sst-ramp);
+    width: 2.4em;
+    border-radius: 2px;
+  }
+
+  .key.sst[hidden] {
+    display: none;
   }
 
   .legend {

@@ -415,6 +415,66 @@ decay from a fine even texture into a few long bright ropes with bare water
 between them, within a minute of opening the page. Respawning reseeds the
 slow water. It was 5 s, which showed that decay clearly on a phone.
 
+### Sea-surface temperature
+
+Two fields, `npm run data:sst`, built by `scripts/fetch-sst.py`:
+
+- **OISST** (NOAA/NCEI, 1/4°, daily) — an *analysis*: observations blended
+  onto a grid, so it is what happened. Uses the **preliminary** product, not
+  the final: final was 15 days behind on 2026-08-01 against 4 for
+  preliminary, and a fortnight-old field has no business beside a live storm.
+- **Navy ESPC-D-V02** (1/12°, hourly) — a *forecast*, and the same model the
+  currents come from, so temperature and flow are one ocean rather than two.
+
+Both are numeric grids in the same three tiers as the currents, drawn by a
+canvas layer in the `sst` pane (z-index 240, under the currents and under
+every track). Only one at a time — stacking two rasters shows one field
+while naming two.
+
+**There is no WMS to point at, and that was measured rather than assumed:**
+`wms.hycom.org` does not answer from two separate networks, nor does
+`coastwatch.pfeg.noaa.gov`, and NCEI's ERDDAP is up but replies "not
+accessible via WMS". GEBCO's WMS loads fine from the same probe, so the
+probe is sound. Shipping grids instead also lets the readout report a
+temperature with no request.
+
+Three things about this cost real time, all silent:
+
+- **ERDDAP writes a missing value as an empty field**, where THREDDS writes
+  `NaN`. The currents parser skips empty fields — there they only ever mean a
+  trailing comma — so land was dropped rather than marked and rows came back
+  ragged and shifted west, 81 wide over Antarctica against 360 in open water.
+  The parser now takes the width it asked for and raises on a mismatch.
+- **`www.ncei.noaa.gov` advertises an AAAA record that refuses connections.**
+  urllib has no Happy Eyeballs, so every request waited out the full TCP
+  timeout: 120 s each against 0.9 with curl. `fetch-sst.py` prefers IPv4.
+- **The ramp is cool-only** — deep blue to light teal, not blue-to-red — and
+  that is forced. `test:contrast` treats every ramp stop as another water
+  colour the markers must clear, and a conventional warm end fails it: orange
+  USVs sat ΔE 9.3 from a warm-amber stop, the storm red 16.3 from a brick
+  one, against a bar of 22. The warm end of an SST ramp is the tropics, which
+  is where the storms are. The cold end is floored above black because the
+  charcoal measuring line lives there, and the warm end stops short of pale
+  because the current particles are near-white.
+
+The raster is painted **fully opaque**, and that is load-bearing: the gate
+checks the markers against these exact ramp colours, so blending with the
+bathymetry underneath would put a different colour on screen than the one
+that was checked.
+
+Sampling is bilinear in two steps. The nearest cell decides whether a pixel
+is water at all, which keeps the shoreline where the data's mask puts it;
+the value is then averaged over whichever neighbours are water, weights
+renormalised. Refusing to interpolate beside land was the first attempt and
+it left the open ocean smooth while the whole continental shelf stayed a grid
+of squares.
+
+**Not yet built: the SST tiles.** `--tiles` exists and the client follows the
+tile index when it appears, but no tile run has happened, so the finest tier
+simply does not engage and the regional grids stand. The Navy field is also
+untested end to end — HYCOM was returning "Stale file handle" for every data
+read while this was written.
+
 ### Measuring, and the point readout
 
 Two tools on the hurricane map, both in `AssetMap.astro`.

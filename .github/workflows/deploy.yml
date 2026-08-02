@@ -52,6 +52,10 @@ jobs:
         continue-on-error: true
         run: python3 scripts/fetch-currents.py
 
+      - name: Refresh sea surface temperature
+        continue-on-error: true
+        run: python3 scripts/fetch-sst.py
+
       # The full-resolution tiles are ~92 MB per depth and only change when
       # the model does, which is once a day at 12Z. Keying the cache on the
       # run id means the hourly builds restore them instead of pulling them
