@@ -126,14 +126,33 @@ centred on 180°: the view spanned 82°E to 278°E, but only the floats
 numerically inside 82–180 were drawn, because the rest sit at negative
 longitudes one copy west — 983 of them against 1,694 once fixed.
 
-`worldCopyJump` does not fix this. It keeps the *centre* in range; it does
-not move markers. Every point layer is therefore re-homed on move to the copy
-nearest the centre (`rehome()`), one marker each rather than three copies of
-every marker — at four thousand floats that is 4,000 layers against 12,000,
-and no zoom this map offers shows a view wider than one copy.
+`worldCopyJump` is **off**, and that is the fix for the flash rather than a
+side effect. Its answer to this problem is to drag the *view* back to the
+copy the markers live in, which it does by snapping the map pane a whole
+world sideways mid-drag — measured at **2,028 px in one step**, with every
+overlay pane teleporting and repainting. Panning across the date line
+flashed the whole map. With markers re-homed instead, the view never needs
+moving: the fleet comes to it. Turning the option off leaves no pane jumps
+over 200 px across the same drag.
+
+`rehome()` moves each point layer to the copy nearest the centre — one
+marker each rather than three copies of every marker, which at four thousand
+floats is 4,000 layers against 12,000, and no zoom this map offers shows a
+view wider than one copy.
+
+It moves **only markers that need to come into view**: anything already on
+screen is left alone, and so is anything off screen in both copies. Wrapping
+every marker was correct but visible — each `setLatLng` extends the canvas
+renderer's redraw bounds, and once those span the canvas Leaflet clears and
+repaints all of it. Dragging across the seam now moves ~200–280 markers on
+the way out and **none** on the way back, since they are already home.
 
 Point features only. Re-homing a track's vertices independently would tear
 any line that legitimately crosses the seam.
+
+The centre may now wander past ±180 after enough panning. Nothing minds —
+positions are folded before they are shown — but `saveView()` wraps it,
+because a stored view is read back much later.
 
 ### Argo floats
 

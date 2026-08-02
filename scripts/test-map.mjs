@@ -1044,6 +1044,13 @@ const checks = [
       const geom = decodeURIComponent(identifyAtReadout);
       return geom.includes('"y":36.5') && geom.includes('"x":-74.5');
     })()],
+  /* With worldCopyJump off the centre can wander past ±180 after enough
+     panning, and a stored view is read back much later. */
+  ['a wandered centre is folded before it is saved', (() => {
+    host._map.setView([10, 312.5], 3, { animate: false });
+    const saved = JSON.parse(window.sessionStorage.getItem('asset-map-view') ?? '{}');
+    return host._map.getCenter().lng > 180 && saved.lng >= -180 && saved.lng <= 180;
+  })()],
   ['view is written back for the next reload',
     (() => {
       const saved = JSON.parse(window.sessionStorage.getItem('asset-map-view') ?? 'null');

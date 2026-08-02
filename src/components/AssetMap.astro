@@ -59,7 +59,19 @@ import 'leaflet/dist/leaflet.css';
 
   async function init(host: HTMLElement) {
     const map = L.map(host, {
-      worldCopyJump: true,
+      /* worldCopyJump is deliberately off. It existed to drag the *view*
+         back to the copy of the world the markers live in — but it does that
+         by snapping the map pane a whole world sideways mid-drag, measured
+         at 2,028 px in a single step, and every overlay pane teleports and
+         repaints with it. That is the flash you get panning across the date
+         line.
+
+         Now that markers are re-homed to the reader's copy instead (see
+         rehome below), the view no longer needs dragging anywhere: the fleet
+         comes to it. The centre may then wander past ±180, which nothing
+         here minds — positions are folded before they are shown, and the
+         saved view wraps on the way out. */
+      worldCopyJump: false,
       minZoom: 2,
       attributionControl: true,
     });
@@ -944,23 +956,47 @@ import 'leaflet/dist/leaflet.css';
        but only the floats numerically inside 82–180 were drawn, because the
        rest sit at negative longitudes one copy west.
 
-       worldCopyJump keeps the *centre* in range; it does not move markers.
-       So each marker is re-homed to the copy nearest the centre. One marker
-       each rather than three copies of every marker: at four thousand floats
-       that is the difference between 4,000 layers and 12,000, and a view is
-       never wider than a copy at any zoom this map offers.
+       Leaflet's own answer, worldCopyJump, moves the view rather than the
+       markers, and does it with a whole-world snap that flashes. This moves
+       the markers instead: one marker each, re-homed, rather than three
+       copies of every marker — at four thousand floats that is the
+       difference between 4,000 layers and 12,000, and a view is never wider
+       than a copy at any zoom this map offers.
 
        Point features only. A track that crosses the meridian would be torn
        in half by re-homing its vertices independently, and there is no
        correct answer for a line that legitimately spans the seam. */
     const rehome = (group: L.LayerGroup) => {
+      /* Only markers that need to come *into* view are moved.
+
+         Wrapping every marker to the copy nearest the centre is correct but
+         wasteful, and the waste is visible: each setLatLng extends the
+         canvas renderer's redraw bounds, and once those bounds span the
+         canvas Leaflet clears and repaints all of it. Dragging across the
+         date line swept the antipode of the centre through the fleet and
+         moved hundreds of off-screen markers nobody was looking at, which
+         cost a full repaint — the dots blinked out and back.
+
+         So: leave anything already on screen alone, leave anything that is
+         off screen either way alone, and move only the ones whose other copy
+         is about to be visible. A marker parked in a stale copy is corrected
+         the moment it matters. */
+      const view = map.getBounds().pad(0.25);
+      const west = view.getWest();
+      const east = view.getEast();
+      const south = view.getSouth();
+      const north = view.getNorth();
       const centre = map.getCenter().lng;
+
       group.eachLayer((layer) => {
         const marker = layer as L.CircleMarker;
         const at = marker.getLatLng?.();
         if (!at) return;
+        if (at.lat < south || at.lat > north) return;
+        if (at.lng >= west && at.lng <= east) return;      // already showing
         const lng = centre + L.Util.wrapNum(at.lng - centre, [-180, 180], true);
-        if (Math.abs(lng - at.lng) > 1e-9) marker.setLatLng([at.lat, lng]);
+        if (lng < west || lng > east) return;              // off screen either way
+        marker.setLatLng([at.lat, lng]);
       });
     };
 
@@ -1200,7 +1236,10 @@ import 'leaflet/dist/leaflet.css';
 
     const saveView = () => {
       try {
-        const centre = map.getCenter();
+        // Fold the centre back into -180..180 first: with worldCopyJump off
+        // it can wander to 540 after enough panning, and a stored view is
+        // read back much later.
+        const centre = map.getCenter().wrap();
         sessionStorage.setItem(
           VIEW_KEY,
           JSON.stringify({
