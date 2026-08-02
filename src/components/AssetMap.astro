@@ -1043,7 +1043,7 @@ import 'leaflet/dist/leaflet.css';
             }).addTo(argo),
             `<strong>Argo ${float.id}</strong>` +
               `<dl><dt>Last profile</dt><dd>${stamp(float.time)}</dd>` +
-              `<dt>Position</dt><dd>${float.lat.toFixed(3)}, ${float.lon.toFixed(3)}</dd></dl>` +
+              `<dt>Position</dt><dd>${coordText(float.lat, float.lon)}</dd></dl>` +
               outbound(
                 `https://fleetmonitoring.euro-argo.eu/float/${float.id}`,
                 'Float details'
@@ -1623,12 +1623,33 @@ import 'leaflet/dist/leaflet.css';
       return `${round(km)} km · ${round(nm)} nm`;
     };
 
-    const coordText = (ll: L.LatLng) => {
-      const lon = ((((ll.lng + 180) % 360) + 360) % 360) - 180;
-      return (
-        `${Math.abs(ll.lat).toFixed(4)}°${ll.lat >= 0 ? 'N' : 'S'}, ` +
-        `${Math.abs(lon).toFixed(4)}°${lon >= 0 ? 'E' : 'W'}`
-      );
+    /* Degrees and decimal minutes, which is what a chart, a GPS and a float's
+       own position report all speak — the readouts here are meant to be
+       compared against those without arithmetic in between.
+
+       Two details that are easy to get wrong and look almost right:
+       minutes are rounded before the degrees are taken, or 59.999' becomes
+       60.00' and the degree beside it never carries; and longitude is padded
+       to three digits, because 067° and 67° sort and scan differently in a
+       column of positions. */
+    const ddm = (value: number, positive: string, negative: string, width: number) => {
+      const hemisphere = value >= 0 ? positive : negative;
+      let degrees = Math.floor(Math.abs(value));
+      let minutes = (Math.abs(value) - degrees) * 60;
+      if (Number(minutes.toFixed(2)) >= 60) {
+        minutes = 0;
+        degrees += 1;
+      }
+      return `${String(degrees).padStart(width, '0')}° ${minutes.toFixed(2).padStart(5, '0')}′ ${hemisphere}`;
+    };
+
+    const coordText = (lat: number | L.LatLng, lng?: number) => {
+      const y = typeof lat === 'number' ? lat : lat.lat;
+      const x = typeof lat === 'number' ? (lng as number) : lat.lng;
+      // Fold into -180..180 first, so a track that has wrapped past the
+      // antimeridian does not report 293°E.
+      const lon = ((((x + 180) % 360) + 360) % 360) - 180;
+      return `${ddm(y, 'N', 'S', 2)}, ${ddm(lon, 'E', 'W', 3)}`;
     };
 
     /* The surface current under a point, read out of whichever grid is
@@ -1819,7 +1840,7 @@ import 'leaflet/dist/leaflet.css';
             ? `<dt>Deployed</dt><dd>${stamp(a.deployed)}${elapsed(a.deployed, a.time)}</dd>`
             : '') +
           `<dt>Last fix</dt><dd>${stamp(a.time)}</dd>` +
-          `<dt>Position</dt><dd>${a.lat.toFixed(3)}, ${a.lon.toFixed(3)}</dd>` +
+          `<dt>Position</dt><dd>${coordText(a.lat, a.lon)}</dd>` +
           `</dl>` +
           outbound(a.info, 'ERDDAP dataset');
 

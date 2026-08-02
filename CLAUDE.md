@@ -547,6 +547,14 @@ bearing in degrees true. Escape clears it. Distance and bearing are both
 great-circle: a rhumb line is what you would steer, but quoting the two from
 different geometries invites the reader to combine them.
 
+Positions everywhere — popups, readout, measure tooltips — are **degrees and
+decimal minutes**, which is what a chart, a GPS and a float's own position
+report speak, so a reader can compare without arithmetic in between. One
+`coordText()` formats them all. Two details in it are easy to get wrong and
+look almost right: the minutes carry into the degrees, or 59.999′ prints as
+`45° 60.00′`; and longitude is padded to three digits, since `067°` and `67°`
+scan differently down a column.
+
 **Every point asset's popup carries the same ocean block** — seafloor,
 current at whichever depth is showing, and SST when a temperature layer is
 on — under its own details, separated by a rule. One `oceanRows()` builds it

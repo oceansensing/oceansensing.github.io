@@ -749,6 +749,18 @@ const checks = [
   /* An asset popup answers both halves of the same question now: what the
      platform is, and what water it is sitting in. Before, the second half
      was only reachable by right-clicking somewhere near it. */
+  /* Positions are degrees and decimal minutes, to be compared against a
+     chart or a GPS without arithmetic. Longitude is padded to three digits.
+     The carry is the case that fails quietly: rounding the minutes before
+     taking the degrees prints 45° 60.00′ instead of 46° 00.00′, which is
+     both wrong and plausible. */
+  ['asset positions are degrees and decimal minutes',
+    /\d{2}° \d{2}\.\d{2}′ [NS], \d{3}° \d{2}\.\d{2}′ [EW]/.test(popupHtml)],
+  ['minutes never reach 60', (() => {
+    const host2 = host.querySelectorAll('.leaflet-popup-content');
+    const all = [...host2].map((n) => n.textContent).join(' ') + popupHtml;
+    return !/\d+° 60\.\d{2}′/.test(all) && !/\d+° 6[0-9]\.\d{2}′/.test(all);
+  })()],
   ['asset popup reports the seafloor', /Seafloor/.test(popupHtml)],
   ['asset popup reports the current there', /Current/.test(popupHtml)],
   // -2431.5 from the stub, rounded: 2,432.
@@ -921,7 +933,7 @@ const checks = [
       Math.abs(((shownBearing - expectedBearing + 540) % 360) - 180) < 2],
   ['escape clears the measurement', measureCleared],
   ['right-click opens a readout with the position',
-    /36\.5000°N/.test(readoutHtml) && /74\.5000°W/.test(readoutHtml)],
+    /36° 30\.00′ N/.test(readoutHtml) && /074° 30\.00′ W/.test(readoutHtml)],
   ['the readout carries the current from the loaded grid, with no request',
     /Current at surface/.test(readoutHtml) && /m\/s toward/.test(readoutHtml)],
   ['a 60 m field is offered alongside the surface one', !!deepToggle],
@@ -930,7 +942,7 @@ const checks = [
     /Current at surface/.test(surfaceRead) && /0\.50 m\/s/.test(surfaceRead)],
   ['readout names 60 m and reads the 60 m grid',
     /Current at 60 m/.test(deepRead) && /0\.10 m\/s/.test(deepRead) &&
-    /11\.0000°N/.test(deepRead)],
+    /11° 00\.00′ N/.test(deepRead)],
   ['the 60 m grid is published at 60 m', files['currents-60m'][0].header.depth === 60],
   ['an SST layer is offered for each source', !!sstOisstToggle && !!sstNavyToggle],
   ['switching SST on paints the raster', opaque > 5000],
