@@ -639,6 +639,15 @@ colormap nothing can. Legibility comes from the halo instead — a
 `drop-shadow` on the pane rather than a second polyline under every contour,
 one filter against doubling 235,000 points of geometry.
 
+**The halo follows the basemap, not the theme**, keyed off the
+`data-basemap-tone` attribute already published for the tile dimming. At the
+original near-white stroke a dark casing cost nothing on a dark basemap, so
+one value served both. Two steps darker it does cost something: a dark line
+inside a dark casing over GEBCO's navy is a single muddy smudge. Dark
+basemaps therefore get a light halo, and the pair keeps its contrast
+whichever way the water goes — measured, the stroke sits 1.42 against
+GEBCO's commonest water tones and 2.21 against its own casing there.
+
 **A custom pane holding vectors needs one CSS rule or it renders nothing.**
 The site's reset gives every `svg` `max-width: 100%`, and a Leaflet pane is a
 0×0 absolutely positioned box, so an SVG inside one is clamped to 0×0 and
