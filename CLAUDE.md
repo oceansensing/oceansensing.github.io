@@ -60,6 +60,29 @@ both ways, and a rename leaves the bare mentions dangling while every full
 path still resolves — which is how three references to a since-renamed
 `scripts/fetch-ocean-fields.py` survived a doc sweep.
 
+It also checks that **every source the map can credit is described on the page
+carrying it**. The hurricane page went two whole layers out of date before
+this existed — the isobaths and the EMODnet shoreline were both in the map's
+attribution control while the prose still credited GEBCO only as a basemap,
+and nothing noticed, because the page and the map are edited at different
+times for different reasons. Credits are read from both places they live: the
+attribution strings in the module, and the `source` fields the pipelines write
+into the data. Adding a feed to either fails this until the page says where it
+came from, and crediting something the map does *not* show fails too — which
+is what keeps Copernicus off the page while `MERCATOR_RASTER` is false.
+
+Where the page words a name differently — `US IOOS Glider DAC` against
+"US IOOS Glider Data Assembly Center" — the difference is **named** in
+`WORDED_AS` rather than matched loosely. A fuzzy match on "NOAA" would pass
+for any of five separate feeds.
+
+It guarantees that every crediting *organisation* is named, not that every
+layer's role is described: GEBCO supplies both a basemap and the isobaths, so
+dropping the isobath paragraph leaves the name on the page and passes.
+Matching the role would mean holding prose to strings like "isobaths" when the
+page reasonably says "depth contours", and a check that cries wolf gets
+switched off.
+
 It also checks **numbers the docs quote from the code** — the tile zoom
 threshold, the coastal erosion threshold, the particle lifetime, the Argo
 cycle window and how many glider sources there are — by reading each from its

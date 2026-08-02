@@ -158,6 +158,106 @@ for (const claim of claims) {
   }
 }
 
+/* 4b. Every source the map can credit has to be described on the page that
+       carries it.
+
+       The page went two whole layers out of date before this existed — the
+       isobaths and the EMODnet shoreline were both on the map and in its
+       attribution control while the prose still credited GEBCO only as a
+       basemap. Nothing noticed, because the page and the map are edited at
+       different times for different reasons.
+
+       Credits come from two places: the attribution strings baked into the
+       module, and the `source` fields the pipelines write into the data,
+       which the map displays at runtime. Both are read here, so adding a
+       feed anywhere fails this until the page says where it came from.
+
+       **What it does not guarantee**, and this is worth knowing rather than
+       assuming: it checks that every crediting *organisation* is named, not
+       that every layer's role is described. GEBCO supplies both a basemap and
+       the isobaths, so dropping the isobath paragraph would leave the name on
+       the page and pass — which is one of the two cases that prompted this.
+       Matching the role would mean matching prose against strings like
+       "isobaths" when the page reasonably says "depth contours", and a check
+       that cries wolf gets switched off. Naming the limit is the honest
+       trade: a new or removed *source* fails here, a rewritten description
+       does not. */
+const mapPages = fs
+  .readdirSync('src/content/observations')
+  .filter((f) => f.endsWith('.md'))
+  .map((f) => `src/content/observations/${f}`)
+  .filter((f) => /^map:\s*assets\s*$/m.test(fs.readFileSync(f, 'utf8')));
+
+/* How the page words a credit, where it differs from the raw string. Names
+   the difference rather than matching loosely: a fuzzy match on "NOAA" would
+   pass for any of five separate feeds. A credit with no entry here has to
+   appear verbatim, and a new one that does neither fails — which is the
+   point. */
+const WORDED_AS = {
+  'GEBCO Compilation Group': 'GEBCO',
+  'NOAA PMEL ERDDAP': 'NOAA PMEL',
+  'US IOOS Glider DAC': 'US IOOS Glider Data Assembly Center',
+  'Argo GDAC via Ifremer ERDDAP': 'Ifremer Argo GDAC',
+  'NOAA/NCEI OISST v2.1 preliminary': 'NOAA NCEI OISST v2.1',
+};
+
+/* Scaffolding, not a live layer: MERCATOR_RASTER is false, so nothing is
+   requested from Copernicus and the page must *not* credit it. Kept in the
+   module so restoring the layer is one flag. */
+const NOT_SHOWN = new Set(['Copernicus Marine']);
+
+if (mapPages.length) {
+  const moduleSource = fs.readFileSync('packages/ocean-map/index.ts', 'utf8');
+  const credits = new Set();
+  const clean = (t) =>
+    t
+      .replace(/<[^>]+>/g, '')
+      .replace(/\$\{[^}]*\}?/g, '')
+      .replace(/^(Currents|Field|Salinity|SST)\s*:\s*/i, '')
+      .split(/\s+—\s+| at\s*$/)[0]
+      .replace(/^©\s*/, '')
+      .replace(/\s+contributors$/, '')
+      .replace(/\s+\d{4}$/, '')
+      .trim();
+
+  for (const m of moduleSource.matchAll(
+    /attribution:\s*\n?\s*((?:'[^']*'|`[^`]*`)(?:\s*\+\s*\n?\s*(?:'[^']*'|`[^`]*`))*)/g
+  )) {
+    const joined = [...m[1].matchAll(/'([^']*)'|`([^`]*)`/g)].map((q) => q[1] ?? q[2]).join('');
+    const name = clean(joined);
+    if (name) credits.add(name);
+  }
+
+  // The sources the pipelines write, which the map credits at runtime.
+  const readJson = (f) => (fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null);
+  const assetsFile = readJson('public/map/ocean-assets.json');
+  for (const v of Object.values(assetsFile?.sources ?? {})) credits.add(v);
+  const argoFile = readJson('public/map/argo.json');
+  if (argoFile?.source) credits.add(argoFile.source);
+  for (const n of ['sst-oisst', 'sst-navy', 'sss-navy']) {
+    const src = readJson(`public/map/${n}.json`)?.header?.source;
+    if (src) credits.add(src);
+  }
+
+  for (const page of mapPages) {
+    // Link syntax out of the way, so "[Marine Regions](url) (VLIZ)" reads as
+    // the name the attribution control shows.
+    const prose = fs.readFileSync(page, 'utf8').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+    for (const credit of credits) {
+      if (NOT_SHOWN.has(credit)) {
+        if (prose.includes(credit)) {
+          note(page, `credits \`${credit}\`, which the map does not show`);
+        }
+        continue;
+      }
+      const wanted = WORDED_AS[credit] ?? credit;
+      if (!prose.includes(wanted)) {
+        note(page, `never mentions \`${wanted}\`, which the map credits as "${credit}"`);
+      }
+    }
+  }
+}
+
 /* 5. The README promises CI gates the deploy on `npm run verify`. Keep that
       promise honest: if the gate is removed, the claim is a lie. */
 const workflow = fs.readFileSync(WORKFLOW, 'utf8');
