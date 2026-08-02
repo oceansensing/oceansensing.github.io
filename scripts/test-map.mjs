@@ -938,8 +938,13 @@ const checks = [
   ['argo dots shrink for the global view',
     argoRadiusAt[2] > 0 && argoRadiusAt[8] > 0 && argoRadiusAt[2] < argoRadiusAt[8]],
   ['argo dots are outlined, which is what separates them from the particles', argoOutlined],
-  ['argo window matches every other asset',
-    files.argo.historyDays === assets.historyDays],
+  /* Argo's window is deliberately not the shared one: a float surfaces once
+     per ten-day cycle, so the five days that suit a glider hid half the
+     fleet. It must be at least a full cycle, and must still follow the
+     shared window upward if that is ever set longer. */
+  ['argo window covers at least one float cycle', files.argo.historyDays >= 10],
+  ['argo window is never shorter than the shared one',
+    files.argo.historyDays >= assets.historyDays],
   ['particles are actually stroked', drawn.stroke > 0 && drawn.moveTo > 100 && drawn.lineTo > 100],
   /* Guards against the sub-pixel regression, where the plugin's own zoom
      scaling left the median at 0.13 px and nothing appeared to move. Stated

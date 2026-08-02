@@ -45,6 +45,21 @@ IFREMER = 'https://erddap.ifremer.fr/erddap'
 # observed path is drawn, and how recently a dataset must have reported to
 # count as active. Change it here and the whole map follows.
 HISTORY_DAYS = 5
+
+# Argo is the one platform this window does not suit, and the reason is the
+# platform rather than the window. A glider reports hourly and a storm every
+# six, so five days asks "where has it been lately" and gets an answer. A
+# float surfaces once per **ten-day cycle**, so the same five days silently
+# means "half the fleet is mid-dive, so leave it off the map" — measured
+# against Ifremer on 2026-08-02: 1,992 floats in 5 days, 3,881 in 10, 4,138
+# in 15, 4,293 in 30. The fleet is about 4,200; five days showed half of it.
+#
+# So Argo gets at least one full cycle, and follows HISTORY_DAYS whenever
+# that is longer — the one-variable-moves-everything property still holds
+# upward, it just cannot be dragged below a cycle without hiding floats that
+# are perfectly active.
+ARGO_CYCLE_DAYS = 10
+ARGO_DAYS = max(HISTORY_DAYS, ARGO_CYCLE_DAYS)
 UA = {'User-Agent': 'oceansensing.org asset map (github.com/oceansensing)'}
 NOW = datetime.now(timezone.utc)
 
@@ -310,18 +325,22 @@ def collect_erddap(base: str, kind: str, match: re.Pattern | None = None) -> lis
 
 
 def collect_argo() -> list[dict]:
-    """One position per Argo float that has surfaced inside the window.
+    """One position per Argo float that has surfaced inside ARGO_DAYS.
 
     ArgoFloats is a profile-level dataset — every profile ever taken — so
     the work is done server-side: filter to the window, then
     orderByMax("platform_number,time") collapses it to the newest profile
-    per float. Roughly two thousand come back, about half the fleet, because
-    a float cycles every ten days and the window is shorter than that.
+    per float.
 
-    No tracks: at this cadence most floats have exactly one fix in the
-    window, so there is nothing to draw a line through.
+    The window is a full cycle rather than HISTORY_DAYS; see ARGO_DAYS. At
+    ten days about four thousand come back, which is the fleet. At five it
+    was two thousand, and the missing half were not inactive — they were
+    underwater, which is where a working float spends nine days in ten.
+
+    No tracks: even over a cycle most floats have one or two fixes, so there
+    is nothing to draw a line through.
     """
-    since = (NOW - timedelta(days=HISTORY_DAYS)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    since = (NOW - timedelta(days=ARGO_DAYS)).strftime('%Y-%m-%dT%H:%M:%SZ')
     query = (f'{IFREMER}/tabledap/ArgoFloats.json'
              f'?platform_number,time,latitude,longitude'
              f'&time%3E={since}&orderByMax(%22platform_number,time%22)')
@@ -348,7 +367,7 @@ def collect_argo() -> list[dict]:
             'time': (row[idx['time']] or '')[:16] + 'Z',
         })
     floats.sort(key=lambda f: f['id'])
-    print(f'  argo: {len(floats)} floats reporting within {HISTORY_DAYS} days')
+    print(f'  argo: {len(floats)} floats reporting within {ARGO_DAYS} days')
     return floats
 
 
@@ -398,7 +417,7 @@ def main() -> int:
     if argo or not ARGO_OUT.exists():
         ARGO_OUT.write_text(json.dumps({
             'updated': NOW.strftime('%Y-%m-%dT%H:%M:%SZ'),
-            'historyDays': HISTORY_DAYS,
+            'historyDays': ARGO_DAYS,
             'source': 'Argo GDAC via Ifremer ERDDAP',
             'floats': argo,
         }, separators=(',', ':')) + '\n')

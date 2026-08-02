@@ -130,9 +130,18 @@ three decisions:
   markers carry no class, so unlike the other platforms they **cannot be
   restyled by theme** — which is only acceptable because the colour clears
   both bathymetries in `test:contrast`.
-- **No tracks.** A float cycles every ten days and the window is five, so
-  most have exactly one fix in it. Roughly half the fleet shows at any time,
-  for the same reason.
+- **Its own window, and this is the one thing here that is not a taste
+  call.** `ARGO_DAYS = max(HISTORY_DAYS, 10)` — at least one float cycle. The
+  shared five-day window suits a glider reporting hourly; applied to Argo it
+  silently meant "half the fleet is mid-dive, so leave it off the map".
+  Measured against Ifremer on 2026-08-02: **1,992 floats in 5 days, 3,881 in
+  10, 4,138 in 15, 4,293 in 30**. The fleet is about 4,200 and five days was
+  showing half of it, with no sign on screen that anything was missing. The
+  window still follows `HISTORY_DAYS` upward; it just cannot be dragged below
+  a cycle. Costs 59 KB gzipped against 30, and no measurable frame or
+  hit-test time.
+- **No tracks.** Even over a cycle most floats have one or two fixes, so
+  there is nothing to draw a line through.
 
 Note the canvas renderer culls to the viewport, so a test that counts draw
 calls counts what is on screen, not the fleet.
