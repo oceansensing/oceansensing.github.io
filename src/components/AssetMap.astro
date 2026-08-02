@@ -64,10 +64,46 @@ import 'leaflet/dist/leaflet.css';
 <script>
   import L from 'leaflet';
 
-  const BASIN: [[number, number], [number, number]] = [
-    [7, -100],
-    [45, -20],
-  ];
+  /* Everything a second site would have to change, in one place.
+     
+     This began as a bespoke instrument for one basin and one fleet, with
+     eleven hardcoded data paths and an Atlantic bounding box written into the
+     body of a 2,600-line script. Reading them off a single object instead is
+     the seam that makes the rest of it portable; the values below are still
+     exactly what this site wants, so nothing here changes behaviour.
+     
+     Read off the container's data attributes when they are present, so the
+     markup can configure the map without a build step — which is what the
+     eventual standalone module needs, and costs nothing meanwhile. */
+  const el = document.getElementById('asset-map');
+
+  const readJson = <T,>(raw: string | undefined, fallback: T): T => {
+    if (!raw) return fallback;
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return fallback; // a malformed attribute must not take the map down
+    }
+  };
+
+  type Bounds = [[number, number], [number, number]];
+
+  const CONFIG = {
+    /* Where the generated grids live. Every fetch below is relative to this,
+       so another site points it at a URL and is done — the files are far too
+       large to ship with a package. */
+    dataBase: el?.dataset.mapData ?? '/map/',
+    /* The view the map opens on, and what Reset returns to. */
+    home: readJson<Bounds>(el?.dataset.mapHome, [
+      [7, -100],
+      [45, -20],
+    ]),
+    /* Per tab, so two maps on one page do not overwrite each other's view. */
+    storageKey: el?.dataset.mapStorageKey ?? 'asset-map-view',
+  };
+
+  const BASIN = CONFIG.home;
+  const DATA = CONFIG.dataBase.endsWith('/') ? CONFIG.dataBase : `${CONFIG.dataBase}/`;
 
   /* Every colour the map draws in lives in one file, which
      scripts/test-contrast.mjs checks against the sampled water colours of
@@ -82,7 +118,6 @@ import 'leaflet/dist/leaflet.css';
     argo: ARGO, argoEdge: ARGO_EDGE, measure: MEASURE,
   } = palette.features;
 
-  const el = document.getElementById('asset-map');
   const status = document.getElementById('map-status');
   if (el) init(el as HTMLElement);
 
@@ -541,8 +576,8 @@ import 'leaflet/dist/leaflet.css';
       });
     };
 
-    buildFlow('/map/currents.json', flow);
-    buildFlow('/map/currents-60m.json', flowDeep);
+    buildFlow(`${DATA}currents.json`, flow);
+    buildFlow(`${DATA}currents-60m.json`, flowDeep);
 
     /* ---- sea-surface temperature ---------------------------------------
 
@@ -1000,9 +1035,9 @@ import 'leaflet/dist/leaflet.css';
         });
     };
 
-    buildField('/map/sst-oisst.json', sstOisst, FIELDS.sst);
-    buildField('/map/sst-navy.json', sstNavy, FIELDS.sst);
-    buildField('/map/sss-navy.json', sssNavy, FIELDS.sss);
+    buildField(`${DATA}sst-oisst.json`, sstOisst, FIELDS.sst);
+    buildField(`${DATA}sst-navy.json`, sstNavy, FIELDS.sst);
+    buildField(`${DATA}sss-navy.json`, sssNavy, FIELDS.sss);
 
     /* The legend key is built from the same palette the renderer reads, so
        the two cannot drift, and it stays hidden until a temperature layer is
@@ -1297,7 +1332,7 @@ import 'leaflet/dist/leaflet.css';
     const loadBathyDeep = () => {
       if (bathyDeepAsked) return;
       bathyDeepAsked = true;
-      fetch('/map/bathy-deep.json')
+      fetch(`${DATA}bathy-deep.json`)
         .then((r) => r.json())
         .then((geo) => drawContours(geo, bathyDeep))
         .catch(() => {
@@ -1312,7 +1347,7 @@ import 'leaflet/dist/leaflet.css';
     const loadBathyIndex = () => {
       if (bathyIndexAsked) return;
       bathyIndexAsked = true;
-      fetch('/map/bathy-tiles/index.json')
+      fetch(`${DATA}bathy-tiles/index.json`)
         .then((r) => r.json())
         .then((index) => {
           bathyTiles = index;
@@ -1660,7 +1695,7 @@ import 'leaflet/dist/leaflet.css';
     const argoCanvas = L.canvas({ padding: 0.3, tolerance: TAP_RADIUS });
     const argo = L.layerGroup().addTo(map);
 
-    fetch('/map/argo.json')
+    fetch(`${DATA}argo.json`)
       .then((r) => r.json())
       .then((data) => {
         for (const float of data.floats ?? []) {
@@ -1795,7 +1830,7 @@ import 'leaflet/dist/leaflet.css';
        refresh would throw away their basemap, their layer choices and
        wherever they had panned to. Per-tab, so a fresh visit still opens on
        the basin rather than in someone's week-old view. */
-    const VIEW_KEY = 'asset-map-view';
+    const VIEW_KEY = CONFIG.storageKey;
 
     const saveView = () => {
       try {
@@ -2258,7 +2293,7 @@ import 'leaflet/dist/leaflet.css';
     // ---- coastline (the offline basemap) and borders (overlay) ----
     const flip = (line: number[][]) => line.map(([x, y]) => [y, x] as [number, number]);
 
-    fetch('/map/coastline.json')
+    fetch(`${DATA}coastline.json`)
       .then((r) => r.json())
       .then(({ rings }) => {
         const style = { weight: 0.8, className: 'map-land' };
@@ -2266,7 +2301,7 @@ import 'leaflet/dist/leaflet.css';
       })
       .catch(() => {});
 
-    fetch('/map/boundaries.json')
+    fetch(`${DATA}boundaries.json`)
       .then((r) => r.json())
       .then(({ countries, states }) => {
         for (const line of states as number[][][]) {
@@ -2513,7 +2548,7 @@ import 'leaflet/dist/leaflet.css';
 
     // ---- storms and assets ----
     try {
-      const data = await (await fetch('/map/ocean-assets.json')).json();
+      const data = await (await fetch(`${DATA}ocean-assets.json`)).json();
       const pts: [number, number][] = [];
       // Where each storm sits, for the zoom buttons in the status line above.
       const stormAt = new Map<string, [number, number]>();
@@ -2692,11 +2727,17 @@ import 'leaflet/dist/leaflet.css';
 
 <style>
   .map-figure {
-    margin: 0 0 var(--space-lg);
+    margin: 0 0 var(--space-lg, 1.5rem);
   }
 
   /* Map colours live here rather than in the script, so switching theme
      restyles every vector layer with no redraw. */
+  /* Every var() below carries a fallback lifted from src/styles/tokens.css.
+     The map borrows seventeen of the site's design tokens, and exactly one of
+     them used to have one — so dropped into a host that does not define them
+     it came up with an unstyled control row and invisible text. The site's
+     own values still win wherever they exist; the fallbacks only matter
+     somewhere else. */
   #asset-map {
     --map-land: #8a949f;
     --map-land-fill: 0.16;
@@ -2716,9 +2757,9 @@ import 'leaflet/dist/leaflet.css';
     --map-currents-blend: multiply;
 
     height: clamp(24rem, 62vh, 40rem);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--bg-subtle);
+    border: 1px solid var(--border, #d6dbe0);
+    border-radius: var(--radius, 4px);
+    background: var(--bg-subtle, #f4f6f8);
     z-index: 0;
   }
 
@@ -2846,32 +2887,32 @@ import 'leaflet/dist/leaflet.css';
   }
 
   #asset-map :global(.measure-control a.active) {
-    background: var(--accent);
-    color: var(--accent-contrast);
+    background: var(--accent, #1f6f8b);
+    color: var(--accent-contrast, #ffffff);
   }
 
   /* Only takes space once there is something to say. */
   #asset-map :global(.measure-readout:not(:empty)) {
     display: flex;
     align-items: center;
-    padding: 0 var(--space-xs);
-    background: var(--bg);
-    color: var(--text);
-    border-left: 1px solid var(--border);
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
+    padding: 0 var(--space-xs, 0.5rem);
+    background: var(--bg, #ffffff);
+    color: var(--text, #12181f);
+    border-left: 1px solid var(--border, #d6dbe0);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: var(--text-sm, 0.875rem);
     white-space: nowrap;
   }
 
   #asset-map :global(.point-readout dl) {
     display: grid;
     grid-template-columns: auto auto;
-    gap: 0 var(--space-xs);
-    margin: var(--space-2xs) 0 0;
+    gap: 0 var(--space-xs, 0.5rem);
+    margin: var(--space-2xs, 0.25rem) 0 0;
   }
 
   #asset-map :global(.point-readout dt) {
-    color: var(--text-muted);
+    color: var(--text-muted, #5b6672);
   }
 
   /* Desaturated so the field reads as texture behind the platforms rather
@@ -2941,19 +2982,19 @@ import 'leaflet/dist/leaflet.css';
   }
 
   .fallback {
-    padding: var(--space-md);
-    color: var(--text-muted);
+    padding: var(--space-md, 1rem);
+    color: var(--text-muted, #5b6672);
   }
 
   figcaption {
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
-    gap: var(--space-xs) var(--space-md);
-    margin-block-start: var(--space-xs);
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    color: var(--text-muted);
+    gap: var(--space-xs, 0.5rem) var(--space-md, 1rem);
+    margin-block-start: var(--space-xs, 0.5rem);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: var(--text-sm, 0.875rem);
+    color: var(--text-muted, #5b6672);
   }
 
   /* The temperature key is a bar, not a dot: it stands for a continuum, and
@@ -2976,10 +3017,10 @@ import 'leaflet/dist/leaflet.css';
   .field-controls {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-2xs);
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    color: var(--text-muted);
+    gap: var(--space-2xs, 0.25rem);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: var(--text-sm, 0.875rem);
+    color: var(--text-muted, #5b6672);
   }
 
   .field-controls[hidden] {
@@ -2990,10 +3031,10 @@ import 'leaflet/dist/leaflet.css';
   .field-controls input,
   .field-controls button {
     font: inherit;
-    color: var(--text);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    color: var(--text, #12181f);
+    background: var(--bg, #ffffff);
+    border: 1px solid var(--border, #d6dbe0);
+    border-radius: var(--radius, 4px);
     padding: 0.1rem 0.3rem;
   }
 
@@ -3018,10 +3059,10 @@ import 'leaflet/dist/leaflet.css';
   .bathy-controls {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-2xs);
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    color: var(--text-muted);
+    gap: var(--space-2xs, 0.25rem);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: var(--text-sm, 0.875rem);
+    color: var(--text-muted, #5b6672);
   }
 
   .bathy-controls[hidden] {
@@ -3031,17 +3072,17 @@ import 'leaflet/dist/leaflet.css';
   .bathy-controls label {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-2xs);
+    gap: var(--space-2xs, 0.25rem);
   }
 
   .bathy-controls input {
     width: 6em;
-    accent-color: var(--accent);
+    accent-color: var(--accent, #1f6f8b);
   }
 
   .field-controls button:not(:disabled):hover,
   .field-controls button:not(:disabled):focus-visible {
-    background: var(--bg-subtle);
+    background: var(--bg-subtle, #f4f6f8);
   }
 
   /* Labels the controls need but the layout does not. */
@@ -3057,7 +3098,7 @@ import 'leaflet/dist/leaflet.css';
   .legend {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-md);
+    gap: var(--space-md, 1rem);
   }
 
   .key::before {
@@ -3096,28 +3137,28 @@ import 'leaflet/dist/leaflet.css';
 
   /* Leaflet's chrome, matched to the site's tokens in both themes. */
   #asset-map :global(.leaflet-container) {
-    background: var(--bg-subtle);
-    font-family: var(--font-sans);
+    background: var(--bg-subtle, #f4f6f8);
+    font-family: var(--font-sans, system-ui, sans-serif);
   }
 
   #asset-map :global(.leaflet-bar a),
   #asset-map :global(.leaflet-control-layers),
   #asset-map :global(.leaflet-popup-content-wrapper),
   #asset-map :global(.leaflet-popup-tip) {
-    background: var(--bg);
-    color: var(--text);
-    border-color: var(--border);
+    background: var(--bg, #ffffff);
+    color: var(--text, #12181f);
+    border-color: var(--border, #d6dbe0);
   }
 
   #asset-map :global(.leaflet-bar a:hover) {
-    background: var(--bg-subtle);
+    background: var(--bg-subtle, #f4f6f8);
   }
 
   #asset-map :global(.view-toggle a) {
     width: auto;
     padding-inline: 0.5rem;
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: var(--text-sm, 0.875rem);
   }
 
   #asset-map :global(.leaflet-popup-content) {
@@ -3125,7 +3166,7 @@ import 'leaflet/dist/leaflet.css';
   }
 
   #asset-map :global(.leaflet-popup-content .muted) {
-    color: var(--text-muted);
+    color: var(--text-muted, #5b6672);
   }
 
   /* Deployment / last fix / position, as a compact label-value grid. */
@@ -3134,14 +3175,14 @@ import 'leaflet/dist/leaflet.css';
      reads as jitter. Pointer events off so it can never sit between the
      cursor and the marker it is naming. */
   #asset-map :global(.leaflet-tooltip.map-hover) {
-    background: var(--bg);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    background: var(--bg, #ffffff);
+    color: var(--text, #12181f);
+    border: 1px solid var(--border, #d6dbe0);
+    border-radius: var(--radius, 4px);
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.18);
     padding: 0.15rem 0.4rem;
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: var(--text-sm, 0.875rem);
     line-height: 1.3;
     white-space: nowrap;
     pointer-events: none;
@@ -3155,22 +3196,22 @@ import 'leaflet/dist/leaflet.css';
      gets a rule above it — without one the two run together and the water's
      properties read as more fields of the glider. */
   #asset-map :global(.leaflet-popup-content dl.ocean) {
-    border-top: 1px solid var(--border);
-    padding-top: var(--space-2xs);
-    margin-top: var(--space-2xs);
+    border-top: 1px solid var(--border, #d6dbe0);
+    padding-top: var(--space-2xs, 0.25rem);
+    margin-top: var(--space-2xs, 0.25rem);
   }
 
   #asset-map :global(.leaflet-popup-content dl) {
     display: grid;
     grid-template-columns: auto 1fr;
-    gap: 0.1rem var(--space-sm);
-    margin-block: var(--space-xs);
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
+    gap: 0.1rem var(--space-sm, 0.75rem);
+    margin-block: var(--space-xs, 0.5rem);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: var(--text-sm, 0.875rem);
   }
 
   #asset-map :global(.leaflet-popup-content dt) {
-    color: var(--text-muted);
+    color: var(--text-muted, #5b6672);
   }
 
   #asset-map :global(.leaflet-popup-content dd) {
@@ -3179,20 +3220,20 @@ import 'leaflet/dist/leaflet.css';
   }
 
   #asset-map :global(.leaflet-control-attribution) {
-    background: var(--bg);
-    color: var(--text-muted);
+    background: var(--bg, #ffffff);
+    color: var(--text-muted, #5b6672);
   }
 
   #asset-map :global(.leaflet-control-attribution a) {
-    color: var(--accent);
+    color: var(--accent, #1f6f8b);
   }
 
   /* Leaflet's scale bar is a translucent white box by default — the last
      piece of light chrome left on a dark page. */
   #asset-map :global(.leaflet-control-scale-line) {
-    background: var(--bg);
-    color: var(--text-muted);
-    border-color: var(--border);
-    font-family: var(--font-mono);
+    background: var(--bg, #ffffff);
+    color: var(--text-muted, #5b6672);
+    border-color: var(--border, #d6dbe0);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   }
 </style>
