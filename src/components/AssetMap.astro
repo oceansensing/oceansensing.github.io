@@ -1278,7 +1278,10 @@ import 'leaflet/dist/leaflet.css';
           .setLatLng(at)
           .setContent(withOcean ? html + oceanRows(at) : html)
           .openOn(map);
-        if (withOcean) fillDepth(popup, at);
+        if (withOcean) {
+          fillDepth(popup, at);
+          fillEez(popup, at);
+        }
       });
       return layer;
     };
@@ -1673,6 +1676,7 @@ import 'leaflet/dist/leaflet.css';
       return (
         `<dl class="ocean">` +
         `<dt>Seafloor</dt><dd data-depth>fetching…</dd>` +
+        `<dt>Jurisdiction</dt><dd data-eez>fetching…</dd>` +
         /* Named for the depth actually sampled — the reader may have the
            60 m field on, and calling that "surface current" would be wrong
            in a way nothing on screen would give away. */
@@ -1722,12 +1726,51 @@ import 'leaflet/dist/leaflet.css';
         });
     };
 
+    /* Whose water this is. Marine Regions' gazetteer answers a point, and
+       unlike their WMS GetFeatureInfo — which sends no CORS header and so
+       cannot be read from a browser at all — the REST endpoint sends
+       `access-control-allow-origin: *`.
+
+       typeID=70 asks for the EEZ record alone: 603 bytes against 20 KB for
+       the unfiltered gazetteer, which also returns Longhurst provinces, FAO
+       fishing areas and twenty other classifications nobody asked for.
+
+       A point on the high seas has no EEZ, and the service says so with a
+       404 carrying an empty list. That is an answer, not a failure, and is
+       reported as such — anything else would read as though the lookup
+       broke over exactly the water where most of these platforms work. */
+    const fillEez = (popup: L.Popup, ll: L.LatLng) => {
+      const cell = () => popup.getElement()?.querySelector('[data-eez]');
+      const lon = ((((ll.lng + 180) % 360) + 360) % 360) - 180;
+      const url =
+        `https://marineregions.org/rest/getGazetteerRecordsByLatLong.json/` +
+        `${ll.lat.toFixed(4)}/${lon.toFixed(4)}/?typeID=70`;
+
+      fetch(url)
+        .then((r) => (r.status === 404 ? [] : r.json()))
+        .then((records) => {
+          const at = cell();
+          if (!at) return;
+          const name = Array.isArray(records) && records.length
+            ? String(records[0]?.preferredGazetteerName ?? '')
+            : '';
+          // "United States Exclusive Economic Zone (Puerto Rico)" is a
+          // mouthful in a popup that is already five rows deep.
+          at.textContent = name ? name.replace(/Exclusive Economic Zone/i, 'EEZ') : 'high seas';
+        })
+        .catch(() => {
+          const at = cell();
+          if (at) at.textContent = 'unavailable';
+        });
+    };
+
     const describePoint = (ll: L.LatLng) => {
       const popup = L.popup({ className: 'point-readout' })
         .setLatLng(ll)
         .setContent(`<strong>${coordText(ll)}</strong>` + oceanRows(ll))
         .openOn(map);
       fillDepth(popup, ll);
+      fillEez(popup, ll);
     };
 
     map.on('contextmenu', (e: L.LeafletMouseEvent) => {

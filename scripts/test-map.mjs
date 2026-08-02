@@ -215,10 +215,24 @@ files['tiles-60m/index'] = { ...files['tiles/index'], depth: 60 };
    through: asset popups now ask for depth too, and the first of those fires
    long before the readout checks below install their own stub. */
 let identifyUrl = null;
+let gazetteerUrl = null;
 globalThis.fetch = async (u) => {
   if (String(u).includes('ImageServer/identify')) {
     identifyUrl = String(u);
     return { json: async () => ({ value: '-2431.5' }) };
+  }
+  /* Marine Regions. The high-seas answer is a 404 with an empty list, so the
+     stub reproduces that shape rather than a happy path only — treating it
+     as an error is the mistake worth guarding against, and most of this
+     fleet works outside anyone's EEZ. */
+  if (String(u).includes('getGazetteerRecordsByLatLong')) {
+    gazetteerUrl = String(u);
+    const highSeas = /\/30\.0000\//.test(String(u));
+    return {
+      status: highSeas ? 404 : 200,
+      json: async () =>
+        highSeas ? [] : [{ preferredGazetteerName: 'United States Exclusive Economic Zone' }],
+    };
   }
   // Longest key first: "currents" is a substring of "currents-detail", so
   // insertion order would hand the detail request the coarse grid.
@@ -308,6 +322,7 @@ const restoredBase = !!host.querySelector('.leaflet-tile-pane img[src*="arcgison
 // Open a marker popup for real, then read what it rendered.
 let popupHtml = '';
 let popupDepth = '';
+let popupEez = '';
 const marker = [...host.querySelectorAll('path')].find(
   (p) => p.getAttribute('fill') === '#f08c00' || p.getAttribute('fill') === '#e8368f'
 );
@@ -319,6 +334,7 @@ if (marker) {
   // the one on screen — by assertion time several others have opened.
   await new Promise((r) => setTimeout(r, 400));
   popupDepth = host.querySelector('.leaflet-popup-content [data-depth]')?.textContent ?? '';
+  popupEez = host.querySelector('.leaflet-popup-content [data-eez]')?.textContent ?? '';
 }
 
 /* Tap targets. The visible dots are a few pixels across — far smaller than
@@ -977,6 +993,16 @@ const eezLayer = await (async () => {
   return out;
 })();
 
+/* The high seas: no EEZ, reported as an answer rather than an error. Most of
+   this fleet works out there, so a lookup that read "unavailable" over open
+   ocean would be wrong far more often than right. */
+const highSeas = await (async () => {
+  host._map.closePopup();
+  host._map.fire('contextmenu', { latlng: window.L.latLng(30.0, -45.0) });
+  await new Promise((r) => setTimeout(r, 400));
+  return host.querySelector('.point-readout [data-eez]')?.textContent ?? '';
+})();
+
 const globalReset = await (async () => {
   const controls = document.querySelector('[data-field-controls]');
   const picker = controls.querySelector('[data-field-map]');
@@ -1060,6 +1086,9 @@ const checks = [
   ['asset popup reports the current there', /Current/.test(popupHtml)],
   // -2431.5 from the stub, rounded: 2,432.
   ['asset popup fills the depth in from the service', /2,432 m deep/.test(popupDepth)],
+  ['asset popup names the EEZ it is in', /United States EEZ/.test(popupEez)],
+  ['the EEZ query asks for the EEZ record alone, not the whole gazetteer',
+    /typeID=70/.test(gazetteerUrl ?? '')],
   ['a near miss falls outside the drawn dot', dotCoversOffset === false],
   [`tap target catches a miss by ${OFFSET} px`, targetCoversOffset === true],
   ['tap target opens the same detail as the dot', tapPopupMatches === true],
@@ -1263,6 +1292,8 @@ const checks = [
     String(scaleControls.pinnedAfterPan) === '5,9'],
   ['Auto hands the scale back to the view',
     !!scaleControls.backToAuto && String(scaleControls.backToAuto) !== '5,9'],
+  ['a point outside every EEZ reads as high seas, not an error',
+    /high seas/.test(highSeas)],
   ['an EEZ boundary layer is offered, off by default',
     eezLayer.offered && eezLayer.offByDefault],
   ['EEZ boundaries sit above the fields and below the platforms',

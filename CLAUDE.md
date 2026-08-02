@@ -757,6 +757,19 @@ for both the popups and the readout, so the two cannot drift. Point features
 only: a track or a forecast cone has no single position to sample, and the
 reader can right-click anywhere along one.
 
+**Whose water it is** comes from Marine Regions' REST gazetteer, one point at
+a time, alongside the depth lookup. Their WMS `GetFeatureInfo` would be the
+obvious route and is unusable: it sends no `access-control-allow-origin`, so
+a browser cannot read it — the same wall GEBCO's put up. The REST endpoint
+sends `*`. `typeID=70` narrows the answer to the EEZ record alone: **603
+bytes against 20 KB** for the full gazetteer, which otherwise returns
+Longhurst provinces, FAO fishing areas and twenty other classifications.
+
+A point on the high seas has no EEZ and the service says so with a **404
+carrying an empty list**. That is an answer, not a failure. Reporting it as
+an error would be wrong over most of the ocean these platforms work in, so
+404 is handled separately from the catch.
+
 **Right-click, or long-press on touch**, reports position, seafloor depth and
 the current **at the depth of whichever animated field is on** — the readout
 names it, because calling 60 m water "surface current" would be wrong with
