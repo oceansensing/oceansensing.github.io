@@ -6,7 +6,8 @@ short: >-
 summary: >-
   Live positions of underwater gliders worldwide, NOAA uncrewed surface
   vehicles and Argo floats, over modelled currents, sea-surface temperature
-  and salinity, with active National Hurricane Center tracks and cones.
+  and salinity, with seafloor contours and active National Hurricane Center
+  tracks and cones.
 cover:
   src: ./hurricane-florence-iss.jpg
   alt: >-
@@ -31,11 +32,13 @@ uncrewed surface vehicles and their launch and recovery systems.
 
 ## Data sources
 
-Everything on the map is a public feed, refetched hourly and shown only where
-a platform has reported recently. The gridded fields carry the model run they
-came from, so the map says how fresh it is rather than leaving you to assume.
-Colour scales are yours to set: pick a colormap, pin the range, or leave it to
-follow whatever water is on screen.
+Almost everything on the map is a public feed, refetched hourly and shown only
+where a platform has reported recently; the seafloor is the exception, being
+the one thing here that does not change. The gridded fields carry the model run
+they came from, so the map says how fresh it is rather than leaving you to
+assume. What you see is yours to set: pick a colormap, pin the range or let it
+follow whatever water is on screen, and set how strongly the depth contours
+show through.
 
 **Platforms**
 
@@ -51,7 +54,11 @@ follow whatever water is on screen.
 
 - [US Navy ESPC-D-V02](https://tds.hycom.org/thredds/) — a 1/12° global forecast, via HYCOM's OPeNDAP: currents at the surface and at 60 m, sea-surface temperature, and sea-surface salinity. One model, so the flow, the heat and the salt on screen are the same ocean at the same hour
 - [NOAA NCEI OISST v2.1](https://www.ncei.noaa.gov/products/optimum-interpolation-sst) — sea-surface temperature as *observed* rather than forecast: satellite and in-situ measurements blended onto a 1/4° grid. The preliminary product, a few days behind, rather than the final one a fortnight back
-- [NOAA NCEI DEM global mosaic](https://www.ncei.noaa.gov/maps/bathymetry/) — seafloor depth, queried a point at a time when you click
+**Seafloor and shoreline**
+
+- [GEBCO](https://www.gebco.net/) 2026 — the depth contours, at 20 m intervals down to 100 m and then 200, 400, 600, 800, 1000, 2000, 4000, 6000, 8000 and 10,000 m. Contoured once from GEBCO's 15 arc-second grid rather than fetched, since the seafloor does not change; the finest detail arrives as you zoom in
+- [EMODnet Bathymetry](https://emodnet.ec.europa.eu/en/bathymetry) — the shoreline, drawn at whatever scale you are looking at rather than from a fixed simplification
+- [NOAA NCEI DEM global mosaic](https://www.ncei.noaa.gov/maps/bathymetry/) — seafloor depth at a single point, queried when you click
 
 **Boundaries**
 
@@ -62,7 +69,7 @@ follow whatever water is on screen.
 - [GEBCO](https://www.gebco.net/) — global bathymetry, the default
 - [Esri Ocean](https://www.esri.com/) — alternative bathymetry
 - [OpenStreetMap](https://www.openstreetmap.org/copyright) — alternative reference map
-- [Natural Earth](https://www.naturalearthdata.com/) — coastline and boundaries, bundled with the site so one basemap option needs no third-party requests
+- [Natural Earth](https://www.naturalearthdata.com/) — country and state borders, and the land outline behind the coastline-only basemap. Bundled with the site, so that option makes no third-party requests at all
 
 The glider endpoints follow the [OceanGliders regional data
 endpoints](https://www.europeanglidercommunity.org/data-management-and-tools/)
