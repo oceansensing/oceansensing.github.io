@@ -231,7 +231,13 @@ const contour = (d, lon, lat) => ({
 });
 const bathyDeepGeo = {
   type: 'FeatureCollection',
-  features: [contour(200, -78, 22), contour(4000, -70, 22)],
+  features: [
+    contour(200, -78, 22), contour(4000, -70, 22),
+    // Just west of the antimeridian in the file's own coordinates. Seen from
+    // a view that has panned east past the date line it belongs at +181, one
+    // world copy over — which is the whole point of the check below.
+    contour(1000, -179, 10),
+  ],
 };
 // A tile carries every level, deep ones included — that is the whole point
 // of the change, and why the global set has to stand down when one is up.
@@ -1220,6 +1226,21 @@ if (bathySlider) {
   bathyOpacitySaved = Math.abs((saved.bathyOpacity ?? 0) - 0.35) < 1e-6;
 }
 
+/* Panning east past the antimeridian. Vector layers live in one copy of the
+   world, so a contour written at -179 is drawn 360 deg west of a view
+   centred at 185 and simply vanishes — the same fault rehome() fixes for
+   markers, which it deliberately does not apply to lines. */
+host._map.setView([10, 185], 5, { animate: false });
+await new Promise((r) => setTimeout(r, 800));
+const acrossDateLine = (() => {
+  const b = host._map.getBounds();
+  return Object.values(host._map._layers).filter((l) => {
+    if (!/map-bathy/.test(l.options?.className ?? '')) return false;
+    const lb = l.getBounds?.();
+    return lb && lb.isValid() && b.intersects(lb);
+  }).length;
+})();
+
 // Put the map back where the checks below expect it.
 host._map.setView([25, -75], 6, { animate: false });
 await new Promise((r) => setTimeout(r, 300));
@@ -1259,6 +1280,7 @@ const checks = [
   ['isobaths sit above the scalar fields and below the currents',
     bathyPaneZ('bathy') > bathyPaneZ('sst') && bathyPaneZ('bathy') < bathyPaneZ('currents')],
   ['no tiles are requested below the threshold', noNewTilesBelowThreshold],
+  ['contours survive panning past the date line', acrossDateLine > 0],
   ['the opacity slider shows with the layer and moves the pane',
     bathySliderShown && bathyOpacityApplied],
   ['and the opacity it sets rides in the saved view', bathyOpacitySaved],

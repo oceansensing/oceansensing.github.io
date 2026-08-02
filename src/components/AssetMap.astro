@@ -1201,7 +1201,11 @@ import 'leaflet/dist/leaflet.css';
         if (typeof depth !== 'number' || !Array.isArray(coords)) continue;
         let lines = byDepth.get(depth);
         if (!lines) byDepth.set(depth, (lines = []));
-        lines.push(coords.map(([x, y]: number[]) => [y!, x!] as [number, number]));
+        // Born into the copy the map is currently in, so a tile that lands
+        // after a crossing is not one world out on arrival.
+        lines.push(
+          coords.map(([x, y]: number[]) => [y!, x! + bathyCopy * 360] as [number, number])
+        );
       }
       const drawn: L.Polyline[] = [];
       for (const [depth, lines] of byDepth) {
@@ -1218,6 +1222,41 @@ import 'leaflet/dist/leaflet.css';
         );
       }
       return drawn;
+    };
+
+    /* Vector layers live in **one copy of the world**, so a contour written
+       at -179 is drawn a full 360 deg west of a view that has panned east
+       past the date line, and the seafloor silently disappears down one
+       side of the map. Markers already have rehome() for this; it
+       deliberately skips lines, because moving a track's vertices
+       independently would tear any line that legitimately crosses the seam.
+
+       A contour is safe to move whole, though. Each depth is one polyline
+       holding many independent sub-lines, and shifting an entire sub-line by
+       360 deg cannot tear it — the shape is untouched, only which copy it
+       sits in. Done only when the copy under the centre actually changes,
+       which is once per crossing rather than once per pan: setLatLngs over
+       half a million points is not something to run on every moveend. */
+    let bathyCopy = 0;
+
+    const shiftBathy = (shift: number) => {
+      if (!shift) return;
+      for (const group of [bathyDeep, bathyShallow]) {
+        group.eachLayer((layer: any) => {
+          if (typeof layer.getLatLngs !== 'function') return;
+          const lines = layer.getLatLngs() as L.LatLng[][];
+          layer.setLatLngs(
+            lines.map((line) => line.map((p: L.LatLng) => L.latLng(p.lat, p.lng + shift)))
+          );
+        });
+      }
+    };
+
+    const rehomeBathy = () => {
+      const copy = Math.round(map.getCenter().lng / 360);
+      if (copy === bathyCopy) return;
+      shiftBathy((copy - bathyCopy) * 360);
+      bathyCopy = copy;
     };
 
     let bathyDeepAsked = false;
@@ -1714,6 +1753,7 @@ import 'leaflet/dist/leaflet.css';
       loadBathyDeep();
       syncBathyTiles();
     });
+    map.on('moveend zoomend', rehomeBathy);
     map.on('moveend zoomend', syncBathyTiles);
 
     /* The page reloads itself when the hourly rebuild lands (below), so the

@@ -173,6 +173,22 @@ the way out and **none** on the way back, since they are already home.
 Point features only. Re-homing a track's vertices independently would tear
 any line that legitimately crosses the seam.
 
+**The isobaths needed their own version of this, and went out without it.**
+Contours are lines, so `rehome()` skips them — which meant a contour written
+at −179 was drawn a full 360° west of a view panned east past the date line,
+and the seafloor vanished down one side of the map while the floats beside it
+stayed put. Reported from a North Pacific view where everything west of the
+meridian was bare.
+
+A contour is safe to move **whole**, though, and that is the difference: each
+depth is one polyline holding many independent sub-lines, so shifting an
+entire sub-line by 360° cannot tear anything — the shape is untouched, only
+which copy it sits in. `rehomeBathy()` does it only when the copy under the
+centre actually changes, once per crossing rather than once per pan, because
+`setLatLngs` over half a million points is not a per-moveend operation. New
+geometry is born into the current copy, so a tile arriving after a crossing
+is not one world out on arrival.
+
 The centre may now wander past ±180 after enough panning. Nothing minds —
 positions are folded before they are shown — but `saveView()` wraps it,
 because a stored view is read back much later.
