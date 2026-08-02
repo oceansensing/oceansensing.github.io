@@ -152,6 +152,9 @@ globalThis.fetch = async (u) => {
 };
 
 const assets = files['ocean-assets'];
+// Read here rather than beside the particle checks: the hit-target and
+// Argo checks above them need it too.
+const palette = JSON.parse(fs.readFileSync('src/data/map-palette.json', 'utf8'));
 
 /* Stand in for the StormStatus component: one hidden zoom button per storm,
    plus one naming a storm that is not in the data — that one must stay
@@ -278,7 +281,9 @@ if (assetDot?._point) {
 
 /* Argo is drawn on canvas, where there is no element to enlarge — the
    renderer hit-tests arithmetically, so the tolerance is what widens it. */
-const argoDot = layers.find((l) => l.options?.radius === 2.8 && l.options?.renderer);
+const argoDot = layers.find(
+  (l) => l.options?.renderer && l.options?.fillColor === palette.features.argo
+);
 const argoCoversOffset = argoDot?._point
   ? argoDot._containsPoint(argoDot._point.add(px(OFFSET, 0)))
   : null;
@@ -376,7 +381,6 @@ const arcticRegion = advertised.find((d) => d.url.includes('arctic'));
    dead, or the velocity scale far too small, the particles would be stroked
    at zero length and nothing would appear on screen even though the draw
    calls all happened. */
-const palette = JSON.parse(fs.readFileSync('src/data/map-palette.json', 'utf8'));
 const sortedSegments = [...drawn.segments].sort((a, b) => a - b);
 // Kept because driftAt() below empties the recorder for each window.
 const openingSegments = sortedSegments;
@@ -416,6 +420,7 @@ const spansLongitudes =
    what shipped: 0.08 px/frame at zoom 3 against 10.7 at zoom 9, particles
    crossing the map every second. Sample two zooms and compare. */
 const p90 = (xs) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length * 0.9)] : 0);
+const argoRadiusAt = {};
 const driftAt = async (zoom) => {
   /* Empty the recorder rather than slicing from a mark. It stops recording
      at 400k segments to stay within memory, and two windows are enough to
@@ -428,6 +433,10 @@ const driftAt = async (zoom) => {
   // give it room before sampling.
   await new Promise((r) => setTimeout(r, 3000));
   const got = [...drawn.segments];
+  const dot = Object.values(host._map._layers).find(
+    (l) => l.options?.renderer && l.options?.fillColor === palette.features.argo
+  );
+  argoRadiusAt[zoom] = dot?.options?.radius ?? null;
   console.log(`   [z${zoom}] ${got.length} segments captured`);
   return p90(got);
 };
@@ -703,6 +712,12 @@ const checks = [
   ['every float became a marker', argoMarkers === fleet.length && fleet.length > 500],
   ['argo dots reach the canvas', argoDrawn > 0],
   ['argo dots use the gated colour', argoColoured],
+  /* Two thousand dots close into a sheet at globe zoom, so they shrink for
+     the wide views. Checked through a real zoom rather than by calling the
+     sizing function, since the restyle only happens if the zoomend handler
+     is wired and setStyle actually carries a radius. */
+  ['argo dots shrink for the global view',
+    argoRadiusAt[2] > 0 && argoRadiusAt[8] > 0 && argoRadiusAt[2] < argoRadiusAt[8]],
   ['argo dots are outlined, which is what separates them from the particles', argoOutlined],
   ['argo window matches every other asset',
     files.argo.historyDays === assets.historyDays],

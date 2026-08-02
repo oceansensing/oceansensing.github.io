@@ -574,10 +574,23 @@ import 'leaflet/dist/leaflet.css';
        acceptable. The dark outline earns its cost: gold sits close to the
        amber particles on fill alone, and an outlined dot still reads as a
        discrete object beside a drifting trail. */
-    /* Argo dots are 2.8 px and there are two thousand of them, so invisible
-       hit circles would double the canvas work. The canvas renderer hit-tests
-       arithmetically instead, and honours a tolerance — same effect, no extra
-       geometry. */
+    /* Two thousand dots, so how big they are matters more here than for the
+       forty gliders. At basin zoom they read as individual floats; zoomed
+       out to the globe the same size closes into a sheet of yellow that
+       hides the water under it. So they shrink for the wide views.
+
+       The outline shrinks with them. It is what separates a float from a
+       drifting current particle, and at 2 px a 0.8 px stroke is most of the
+       dot — the fill it is meant to frame all but disappears, and the fleet
+       turns muddy rather than gold. */
+    const argoStyleFor = (zoom: number) =>
+      zoom <= 3 ? { radius: 2, weight: 0.6 } : { radius: 2.8, weight: 0.8 };
+
+    /* Argo dots are a couple of pixels across and there are two thousand of
+       them, so invisible hit circles would double the canvas work. The canvas
+       renderer hit-tests arithmetically instead, and honours a tolerance —
+       same effect, no extra geometry. Note the tolerance is what a tap needs,
+       not the dot, so it does not shrink with the drawing. */
     const argoCanvas = L.canvas({ padding: 0.3, tolerance: TAP_RADIUS });
     const argo = L.layerGroup().addTo(map);
 
@@ -588,9 +601,8 @@ import 'leaflet/dist/leaflet.css';
           showDetail(
             L.circleMarker([float.lat, float.lon], {
               renderer: argoCanvas,
-              radius: 2.8,
+              ...argoStyleFor(map.getZoom()),
               color: ARGO_EDGE,
-              weight: 0.8,
               opacity: 0.9,
               fillColor: ARGO,
               fillOpacity: 0.95,
@@ -609,6 +621,18 @@ import 'leaflet/dist/leaflet.css';
           statusParts.argo = `${count} Argo floats`;
           showStatus();
         }
+
+        /* Restyle on zoom. setStyle marks each layer and the canvas renderer
+           coalesces the redraws into one frame, so this costs one repaint
+           rather than two thousand. Only when the answer changes — at two
+           thousand layers, a no-op pass on every wheel notch is not free. */
+        let styled = argoStyleFor(map.getZoom());
+        map.on('zoomend', () => {
+          const wanted = argoStyleFor(map.getZoom());
+          if (wanted.radius === styled.radius) return;
+          styled = wanted;
+          argo.eachLayer((layer) => (layer as L.CircleMarker).setStyle(wanted));
+        });
       })
       .catch(() => {
         // No fleet is survivable; the rest of the map is unaffected.
