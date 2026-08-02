@@ -9,7 +9,7 @@ client-side JavaScript — the exceptions are the theme toggle, the photo
 shuffle and lightbox on observation pages, the asset map, and the UTC clock.
 The map is the one heavyweight: gliders from four national data centres,
 NOAA saildrones, the Argo array, animated currents at two depths,
-sea-surface temperature and salinity, isobaths and EEZ boundaries — with the
+sea-surface temperature and salinity, isobaths, a detailed coastline and EEZ boundaries — with the
 colour scale, its range, the isobath opacity, and every layer under the
 reader's control.
 Every push to `main` deploys automatically via GitHub Actions, and a scheduled

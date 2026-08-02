@@ -1153,7 +1153,7 @@ const bathyPaneZ = (name) =>
   Number(host.querySelector(`.leaflet-${name}-pane`)?.style.zIndex ?? NaN);
 const bathyRequestsBeforeSwitchOn = bathyFetched.length;
 
-const bathyToggle = overlayLabelled(/Isobaths/);
+const bathyToggle = overlayLabelled(/^\s*Isobaths/);
 bathyToggle?.querySelector('input')?.click();
 await new Promise((r) => setTimeout(r, 400));
 
@@ -1243,6 +1243,19 @@ const checks = [
       bathyLayersAt7.every((l) => /map-bathy/.test(l.options.className))],
   ['vectors in a custom pane are not clamped to 0x0 by the site reset',
     paneSvgUnclamped],
+  /* The shoreline replaced a Natural Earth polyline whose vertices were 16
+     px apart at zoom 7 — as coarse as the isobaths were before they were
+     fixed, and drawn a few pixels off the basemap's own coast. It is a
+     separate layer and a separate pane, so the isobath opacity slider does
+     not drag it along. */
+  ['a coastline layer is offered separately from the isobaths',
+    !!overlayLabelled(/^\s*Coastline/) && !!overlayLabelled(/^\s*Isobaths/)],
+  ['the isobath layer no longer draws its own coastline',
+    !/coastline\.json/.test(bathyFetched.join(' ')) &&
+      bathyLayersAt7.every((l) => /map-bathy/.test(l.options.className))],
+  ['the shoreline sits above the isobaths, below the currents',
+    bathyPaneZ('coast') > bathyPaneZ('bathy') &&
+      bathyPaneZ('coast') < bathyPaneZ('currents')],
   ['isobaths sit above the scalar fields and below the currents',
     bathyPaneZ('bathy') > bathyPaneZ('sst') && bathyPaneZ('bathy') < bathyPaneZ('currents')],
   ['no tiles are requested below the threshold', noNewTilesBelowThreshold],

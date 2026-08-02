@@ -19,8 +19,8 @@ The hurricane page carries a live map: NHC forecast tracks and cones with
 data centres (US, UK, Canada, Sweden), ~4,000 Argo floats, animated global
 currents at the surface and 60 m that sharpen to 1/12° as you zoom in,
 sea-surface temperature from both an observed analysis (OISST) and the Navy
-forecast, Navy sea-surface salinity, isobaths from 20 m to 10,000 m with the
-coastline and an opacity the reader sets, and EEZ boundaries. Twenty-five colour
+forecast, Navy sea-surface salinity, isobaths from 20 m to 10,000 m with an opacity the reader
+sets, a detailed coastline, and EEZ boundaries. Twenty-five colour
 scales, with the range either following the view or pinned by hand, and a
 reset that puts everything back. Hovering an asset names it; clicking one
 reports its details plus the depth, current, temperature and — when the EEZ

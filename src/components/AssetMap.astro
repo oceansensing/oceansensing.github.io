@@ -167,6 +167,13 @@ import 'leaflet/dist/leaflet.css';
     bathyPane.style.zIndex = '245';
     bathyPane.style.pointerEvents = 'none';
 
+    /* The shoreline goes just above the isobaths — same job, same reason to
+       sit over a scalar field — and in its own pane so the isobath opacity
+       slider does not drag it along with the contours. */
+    const coastPane = map.createPane('coast');
+    coastPane.style.zIndex = '246';
+    coastPane.style.pointerEvents = 'none';
+
     /* Maritime boundaries go above the fields but below every platform: they
        are context for where a glider is working, not something to hide it. */
     const eezPane = map.createPane('eez');
@@ -1313,6 +1320,36 @@ import 'leaflet/dist/leaflet.css';
       settleBathyTiers();
     };
 
+    /* A real shoreline, from EMODnet Bathymetry's WMS.
+
+       The one that used to be drawn here was public/map/coastline.json —
+       Natural Earth, simplified hard so the offline basemap could stay
+       small. Measured, its vertices are 16 px apart at zoom 7 in the
+       mid-Atlantic, which is exactly as coarse as the isobaths were before
+       they were fixed, and it showed: a blocky line a few pixels off the
+       crisp coast the basemap already draws.
+
+       EMODnet renders vector-side at whatever scale is asked for — doubling
+       the raster halves the ink share, measured 0.50-0.54 across five
+       regions, which an upscaled bitmap would not do. Despite the European
+       remit the layer is global: checked at Tokyo Bay, Kodiak, Cook Strait,
+       the Gulf of Guinea and the Chesapeake, all with content.
+
+       Chosen over Marine Regions' world_countries_coasts, which is on a host
+       already trusted here for the EEZ lines but renders bright green with
+       about half the detail. This one comes out neutral grey, so CSS can
+       tint it the way it tints the EEZ tiles. */
+    const shoreline = L.tileLayer.wms('https://ows.emodnet-bathymetry.eu/wms?', {
+      layers: 'coastlines',
+      format: 'image/png',
+      transparent: true,
+      pane: 'coast',
+      className: 'map-coast',
+      opacity: 0.9,
+      attribution:
+        '<a href="https://emodnet.ec.europa.eu/en/bathymetry">EMODnet Bathymetry</a> — coastline',
+    });
+
     const coastline = L.layerGroup();
     const gebco = L.tileLayer.wms('https://wms.gebco.net/mapserv?', {
       layers: 'GEBCO_LATEST',
@@ -1622,7 +1659,8 @@ import 'leaflet/dist/leaflet.css';
       'NOAA USVs': usvs,
       'IOOS gliders': gliders,
       'Argo floats': argo,
-      'Isobaths & coastline': bathy,
+      'Isobaths': bathy,
+      'Coastline': shoreline,
       'Country & state borders': borders,
       'EEZ boundaries': eez,
       'Lat/lon grid': graticule,
@@ -2151,19 +2189,6 @@ import 'leaflet/dist/leaflet.css';
       .then(({ rings }) => {
         const style = { weight: 0.8, className: 'map-land' };
         for (const ring of rings as number[][][]) L.polygon(flip(ring), style).addTo(coastline);
-
-        /* The isobath layer gets the 0 m line from the same file, as one
-           multi-line polyline. Natural Earth's coastline rather than a
-           contour thresholded out of GEBCO: it is already simplified,
-           already committed, and cartographically the cleaner line. Drawn
-           as a stroke, not a filled polygon — the layer above a scalar
-           field must not fill anything in. */
-        L.polyline((rings as number[][][]).map(flip), {
-          pane: 'bathy',
-          interactive: false,
-          weight: 1.1,
-          className: 'map-bathy map-bathy-major',
-        }).addTo(bathy);
       })
       .catch(() => {});
 
@@ -2613,6 +2638,7 @@ import 'leaflet/dist/leaflet.css';
     --map-measure-halo: #ffffff;
     --map-bathy: #ced5de;
     --map-bathy-halo: rgba(9, 14, 21, 0.65);
+    --map-coast: brightness(0.55) contrast(1.3);
     --map-currents-blend: multiply;
 
     height: clamp(24rem, 62vh, 40rem);
@@ -2651,6 +2677,7 @@ import 'leaflet/dist/leaflet.css';
       --map-eez: saturate(0.5) brightness(1.4);
       --map-bathy: #dce2ea;
       --map-bathy-halo: rgba(4, 8, 13, 0.7);
+      --map-coast: brightness(1.5) contrast(1.15);
       --map-currents-blend: multiply;
       --map-measure-halo: #e8eef5;
     }
@@ -2670,6 +2697,7 @@ import 'leaflet/dist/leaflet.css';
     --map-eez: saturate(0.5) brightness(1.4);
     --map-bathy: #dce2ea;
     --map-bathy-halo: rgba(4, 8, 13, 0.7);
+    --map-coast: brightness(1.5) contrast(1.15);
     --map-currents-blend: multiply;
     --map-measure-halo: #ffffff;
   }
@@ -2776,6 +2804,12 @@ import 'leaflet/dist/leaflet.css';
      rather than shout over it. Themed like the other vector work. */
   #asset-map :global(.map-eez) {
     filter: var(--map-eez);
+  }
+
+  /* EMODnet serves the shoreline as neutral grey, so it tints like the EEZ
+     tiles do: dark over the light basemaps, light over the dark ones. */
+  #asset-map :global(.map-coast) {
+    filter: var(--map-coast);
   }
 
   /* Isobaths. Light grey, which reads over GEBCO's deep navy and over most

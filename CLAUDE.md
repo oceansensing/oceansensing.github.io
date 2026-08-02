@@ -571,10 +571,27 @@ a **tighter** tolerance than the 200–1000 m ones despite being the smoother
 features — they are drawn over abyssal plain, where a chord can run a long
 way before it strays far enough to force a vertex.
 
-The **0 m line is `coastline.json`**, not a contour thresholded out of the
-DEM: already simplified, already committed, and cartographically cleaner.
-Drawn as a stroke rather than a filled polygon — a layer above a scalar field
-must not fill anything in.
+**The shoreline is its own layer, from EMODnet, and is not drawn here.**
+The first version stroked `coastline.json` into the isobath group on the
+reasoning that Natural Earth's line was already committed and cartographically
+cleaner than thresholding a DEM. It is neither, at this scale: measured, its
+vertices sit **16 px apart at zoom 7** in the mid-Atlantic — as coarse as the
+isobaths were before they were fixed — so it drew a blocky line a few pixels
+off the crisp coast the basemap already renders.
+
+`coastlines` from **EMODnet Bathymetry's WMS** replaces it, in its own `coast`
+pane at z-index 246 and its own switch, so the isobath opacity slider does not
+drag it along. It renders vector-side at whatever scale is asked for —
+doubling the raster halves the ink share, measured 0.50–0.54 across five
+regions, which an upscaled bitmap would not do. **Global despite the European
+remit**: checked at Tokyo Bay, Kodiak, Cook Strait, the Gulf of Guinea and the
+Chesapeake, all with content. Marine Regions' `world_countries_coasts` was the
+alternative and is on a host already trusted here for the EEZ lines, but it
+renders **bright green with about half the ink**; EMODnet comes out neutral
+grey, so CSS tints it the way it tints the EEZ tiles.
+
+`coastline.json` stays exactly where it was — it is still the offline
+no-tracking basemap, which is what it was simplified for.
 
 #### Why they are SVG, and one path per depth
 
