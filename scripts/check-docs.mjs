@@ -24,6 +24,23 @@ const note = (doc, msg) => problems.push(`${doc}: ${msg}`);
    patterns, not files. dist/ is build output and may not exist. */
 const REPO_PATH = /^(src|public|scripts|\.github)\/[A-Za-z0-9._/-]+$/;
 
+/* The docs also name files without their directory — `fetch-currents.py`,
+   `AssetMap.astro` — and renaming a script leaves those pointing at nothing
+   while every full path in the doc still resolves. That is exactly what
+   happened when fetch-sst.py became fetch-ocean-fields.py: three mentions
+   rotted silently. So index every filename in the repo and check bare ones
+   too, restricted to extensions we actually author. */
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', '.astro']);
+const FILENAMES = new Set();
+(function walk(dir) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.isDirectory()) {
+      if (!SKIP_DIRS.has(e.name)) walk(`${dir}/${e.name}`);
+    } else FILENAMES.add(e.name);
+  }
+})('.');
+const BARE_FILE = /^[A-Za-z0-9._-]+\.(py|mjs|js|ts|astro|json|ya?ml|bib|css|md)$/;
+
 for (const doc of DOCS) {
   if (!fs.existsSync(doc)) {
     problems.push(`${doc} is missing`);
@@ -42,6 +59,12 @@ for (const doc of DOCS) {
     const path = token.replace(/\/$/, '');
     if (!REPO_PATH.test(path)) continue;
     if (!fs.existsSync(path)) note(doc, `points at \`${token}\`, which does not exist`);
+  }
+
+  // 2b. …including the ones named without their directory.
+  for (const token of ticked) {
+    if (!BARE_FILE.test(token) || FILENAMES.has(token)) continue;
+    note(doc, `names \`${token}\`, which is nowhere in the repo`);
   }
 }
 

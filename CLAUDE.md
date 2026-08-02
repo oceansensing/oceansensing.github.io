@@ -38,6 +38,11 @@ broken. It verifies that every `npm run …` and every backticked repo path in
 across `astro.config.mjs`, `src/config.ts` and the README, and that the deploy
 workflow still contains the gate the README promises.
 
+Paths are checked **with and without their directory**. Prose names scripts
+both ways, and a rename leaves the bare mentions dangling while every full
+path still resolves — which is how three references to a since-renamed
+`scripts/fetch-ocean-fields.py` survived a doc sweep.
+
 It also checks **numbers the docs quote from the code** — the tile zoom
 threshold, the coastal erosion threshold, the particle lifetime, the Argo
 cycle window and how many glider sources there are — by reading each from its
@@ -490,6 +495,19 @@ decay from a fine even texture into a few long bright ropes with bare water
 between them, within a minute of opening the page. Respawning reseeds the
 slow water. It was 5 s, which showed that decay clearly on a phone.
 
+### Maritime boundaries
+
+EEZ lines from Marine Regions (VLIZ), as WMS images in their own pane at
+z-index **270** — above the scalar fields and the currents, below every track
+and marker, because a boundary that hides a platform is the one thing this
+layer must not do. Off by default, `pointer-events: none`, so it never
+intercepts a click wherever it sits.
+
+Lines rather than filled zones: a filled polygon over every coastal ocean
+would bury the field underneath it. Transparency is not a concern —
+measured, the tiles are RGBA and **97.7% fully transparent** across the Gulf,
+100% where no boundary falls.
+
 ### Sea-surface temperature and salinity
 
 Three fields, `npm run data:fields`, built by `scripts/fetch-ocean-fields.py`:
@@ -561,13 +579,11 @@ to blue, chosen by the same search under one extra constraint — maximise
 distance from the SST ramp, so two ocean scalars never read alike. ΔE 66 per
 stop apart, clearing the markers by 28.6.
 
-Every raster is mutually exclusive with every other, not just the two SSTs:
-they share a pane, so the upper one hides the lower and the map would name
-two fields while showing one.
-
-Both are numeric grids drawn by a canvas layer in the `sst` pane (z-index
-240, under the currents and under every track). Only one at a time —
-stacking two rasters shows one field while naming two.
+All three are numeric grids drawn by one canvas layer in the `sst` pane
+(z-index 240, under the currents and under every track). They are **mutually
+exclusive with each other**, not just the two SSTs: they share that pane, so
+the upper one hides the lower and the map would name two fields while showing
+one.
 
 **The tiers differ per product, and OISST has no tile tier on purpose.**
 Tiles exist to reach a product's native resolution; OISST *is* 1/4° natively,
@@ -626,7 +642,7 @@ Three things about this cost real time, all silent:
   The parser now takes the width it asked for and raises on a mismatch.
 - **`www.ncei.noaa.gov` advertises an AAAA record that refuses connections.**
   urllib has no Happy Eyeballs, so every request waited out the full TCP
-  timeout: 120 s each against 0.9 with curl. `fetch-sst.py` prefers IPv4.
+  timeout: 120 s each against 0.9 with curl. `fetch-ocean-fields.py` prefers IPv4.
 - **The ramp stays out of the warm half of the wheel**, and that is forced.
   `test:contrast` treats every ramp stop as another water colour the markers
   must clear, and a conventional blue-to-red end fails it: orange USVs sat
@@ -707,7 +723,7 @@ identical request, minutes apart, and a small read that had just succeeded
 failed on the next try. Metadata (`.das`, the time axis) keeps working
 throughout, so the server looks healthy.
 
-Two things follow, both in `fetch-sst.py`:
+Two things follow, both in `fetch-ocean-fields.py`:
 
 - **The time step is probed before it is used.** `usable_step()` walks the
   eight steps nearest now, testing each with a handful of cells, and takes

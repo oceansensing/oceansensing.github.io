@@ -17,10 +17,13 @@ tools, per-person CVs at `/cv/<person-id>/`, and Significant Observations
 The hurricane page carries a live map: NHC forecast tracks and cones with
 5-day observed storm history, NOAA saildrones, ~50 gliders from four national
 data centres (US, UK, Canada, Sweden), ~4,000 Argo floats, animated global
-currents at the surface and 60 m that sharpen to 1/12° as you zoom in, and
+currents at the surface and 60 m that sharpen to 1/12° as you zoom in,
 sea-surface temperature from both an observed analysis (OISST) and the Navy
-forecast. Hovering an asset names it; clicking one reports its details plus
-the depth, current and temperature of the water it is in; right-click or
+forecast, Navy sea-surface salinity, and EEZ boundaries. Twenty-five colour
+scales, with the range either following the view or pinned by hand, and a
+reset that puts everything back. Hovering an asset names it; clicking one
+reports its details plus the depth, current, temperature and — when the EEZ
+layer is on — the jurisdiction of the water it is in; right-click or
 long-press does the same anywhere. There is a distance and bearing tool.
 Above the map, an active-storm status line that updates without a reload;
 beside that, a server-synchronised UTC clock. The page refreshes itself when
@@ -54,6 +57,27 @@ a new build lands, keeping your basemap, layers and position.
 
 ### Decisions to make
 
+- **Vessel density has no source that covers this basin.** EMODnet Human
+  Activities publishes it, and measured against the water that matters here
+  it is empty: the same request returns 82 KB over the North Sea and an
+  identical 3,665-byte transparent tile over the Gulf of Mexico, the
+  Caribbean and the US East Coast. It is a European programme and an annual
+  composite besides. The options are Global Fishing Watch, which is genuinely
+  global but needs a free API token stored as a GitHub secret; NOAA's
+  MarineCadastre AIS transit counts, which cover the US EEZ and would need
+  the current service URL tracking down; or shipping EMODnet anyway, clearly
+  labelled, if North Sea and Mediterranean work matters.
+- **Two glider regions are still missing, and one is a judgement call.**
+  Coriolis has a machine endpoint after all — OceanGlidersGDACTrajectories on
+  the same Ifremer ERDDAP as Argo — but it is delayed mode: on 2026-08-02 its
+  newest fix anywhere was 2026-06-23, with 3 gliders in the previous 45 days.
+  Right for finished missions, wrong for a live map. Australia's IMOS routes
+  through the AODN portal with no open endpoint. The lead worth following for
+  both is the OceanOPS platform API, which knows all 3,949 OceanGliders
+  platforms; this map needs only an id, a position and a time, which is what
+  it holds. Its field names for last-known position were not obvious on a
+  first pass.
+
 - **No layer on the map is Mercator any more.** Mercator was the original ask.
   The animation never could be — particles need numeric u/v and Copernicus
   publishes those only behind credentials — so it runs on the US Navy
@@ -78,15 +102,26 @@ a new build lands, keeping your basemap, layers and position.
 
 ### Known limits
 
+- **Seventeen of the twenty-five colour scales cannot keep the markers
+  visible**, and that is accepted rather than fixed. Every stop of every map
+  is measured against every feature colour; the five under *High contrast*
+  clear ΔE 22 everywhere, and none of the standard maps does — a full-gamut
+  colormap sweeps the whole wheel, so somewhere along it it passes close to a
+  marker. Worst clearances run from `cmo.haline` at 11.2 down to `inferno` at
+  3.0. They are offered because the choice belongs to the reader, they are
+  not defaults, and the markers keep their dark outlines. What is still
+  guaranteed is that the labelling is honest in both directions.
+
 - **Full-resolution tiles are cached in CI, not committed.** If the Actions
   cache is evicted (7 days unused) the next build rebuilds them — 159 of 162
-  current tiles per depth, plus the Navy SST set. Nothing breaks; it is just
-  slower that once.
-- **The Navy SST tile run is not always complete.** HYCOM fails per request
-  rather than outright, and the last local run finished 145 of 162 after
-  retries with backoff. The map falls back to the regional grid over the
-  missing water, silently — the run itself reports the count and exits
-  non-zero. CI retries on the next model run.
+  current tiles per depth, plus a Navy temperature set and a Navy salinity
+  set at ~43 MB each. Nothing breaks; it is just slower that once.
+- **The Navy field tile runs depend on HYCOM behaving.** It fails per request
+  rather than outright. With retries and backoff a healthy run now completes
+  clean — the last one wrote 159 of 162, 3 all land, 0 failed — but a bad
+  spell left 145 of 162 earlier the same day. Where a tile is missing the map
+  falls back to the coarser grid silently; the run itself counts the failures
+  and exits non-zero. CI retries on the next model run.
 - **Currents can still bleed slightly over land**, though much less than
   they did — and far less again at 1/12°, which is what any view at zoom 7+
   now gets. Coastal erosion plus the finer regional grids cut it hard — over
@@ -110,7 +145,7 @@ a new build lands, keeping your basemap, layers and position.
 
 - **HYCOM is flaky per request, not up or down.** It serves some time steps
   and not others, and metadata keeps working throughout so it looks healthy.
-  `fetch-sst.py` probes a step before using it and retries tiles with
+  `fetch-ocean-fields.py` probes a step before using it and retries tiles with
   backoff; `fetch-currents.py` has neither guard and degrades to the previous
   file instead, which is why an outage there shows as stale rather than
   wrong. Worth giving the current pipeline the same treatment.
