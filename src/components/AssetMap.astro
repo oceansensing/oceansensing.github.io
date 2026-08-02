@@ -955,7 +955,35 @@ import 'leaflet/dist/leaflet.css';
        and the reader would have to avoid their own assets to measure
        between them. Hence the explicit popup rather than bindPopup: the
        decision has to be made before anything opens. */
-    const showDetail = (layer: L.Path, html: string, withOcean = false) => {
+    /* Hovering is a mouse idea. On a touchscreen Leaflet opens a tooltip on
+       tap, which would fight the popup for the same gesture, so the label is
+       not bound there.
+
+       Asked as "is hover absent?" rather than "is hover present?" on
+       purpose: the negative form treats an unknown answer as a mouse, so a
+       browser that does not support the query keeps the labels instead of
+       silently losing them. */
+    const CAN_HOVER = !window.matchMedia('(hover: none)').matches;
+
+    type DetailOptions = { ocean?: boolean; label?: string };
+
+    const showDetail = (layer: L.Path, html: string, opts: DetailOptions = {}) => {
+      const withOcean = opts.ocean === true;
+
+      /* A name follows the pointer, so a basin full of identical dots can be
+         read without clicking each one. Sticky rather than anchored: on a
+         track or a wide tap circle an anchored tooltip would sit at the
+         shape's centre, which is nowhere near the cursor. */
+      if (opts.label && CAN_HOVER) {
+        layer.bindTooltip(opts.label, {
+          sticky: true,
+          direction: 'right',
+          offset: [12, 0],
+          className: 'map-hover',
+          opacity: 1,
+        });
+      }
+
       /* Leaflet hands a click on a feature to the map afterwards as well.
          While measuring that lands the same point twice — a zero-length leg
          reported as "0.00 km" — so the feature has to claim the click. */
@@ -984,7 +1012,12 @@ import 'leaflet/dist/leaflet.css';
       return layer;
     };
 
-    const tapTarget = (at: L.LatLngExpression, html: string, layer: L.LayerGroup) =>
+    const tapTarget = (
+      at: L.LatLngExpression,
+      html: string,
+      layer: L.LayerGroup,
+      opts: DetailOptions = {}
+    ) =>
       showDetail(
         L.circleMarker(at, {
           radius: TAP_RADIUS,
@@ -996,7 +1029,7 @@ import 'leaflet/dist/leaflet.css';
         }).addTo(layer),
         html,
         // A tap target only ever stands in for a point asset.
-        true
+        { ocean: true, ...opts }
       );
 
     /* Argo floats: two thousand dots, against forty gliders and saildrones.
@@ -1048,7 +1081,7 @@ import 'leaflet/dist/leaflet.css';
                 `https://fleetmonitoring.euro-argo.eu/float/${float.id}`,
                 'Float details'
               ),
-            true
+            { ocean: true, label: `Argo ${float.id}` }
           );
         }
         const count = (data.floats ?? []).length;
@@ -1756,7 +1789,7 @@ import 'leaflet/dist/leaflet.css';
             `Moving ${s.movementDir ?? '?'}° at ${s.movementSpeedKt ?? '?'} kt<br>` +
             (s.advisoryUrl ? outbound(s.advisoryUrl, 'NHC advisory') : '');
 
-          tapTarget([s.lat, s.lon], stormPopup, storms);
+          tapTarget([s.lat, s.lon], stormPopup, storms, { label: s.name });
           showDetail(
             L.circleMarker([s.lat, s.lon], {
               radius: 8,
@@ -1766,7 +1799,7 @@ import 'leaflet/dist/leaflet.css';
               fillOpacity: 0.55,
             }).addTo(storms),
             stormPopup,
-            true
+            { ocean: true, label: s.name }
           );
         }
       }
@@ -1844,7 +1877,7 @@ import 'leaflet/dist/leaflet.css';
           `</dl>` +
           outbound(a.info, 'ERDDAP dataset');
 
-        tapTarget([a.lat, a.lon], assetPopup, layer);
+        tapTarget([a.lat, a.lon], assetPopup, layer, { label: a.id });
         showDetail(
           L.circleMarker([a.lat, a.lon], {
             radius: isUsv ? 6 : 4.5,
@@ -1854,7 +1887,7 @@ import 'leaflet/dist/leaflet.css';
             fillOpacity: 0.95,
           }).addTo(layer),
           assetPopup,
-          true
+          { ocean: true, label: a.id }
         );
       }
 
@@ -2157,6 +2190,28 @@ import 'leaflet/dist/leaflet.css';
   }
 
   /* Deployment / last fix / position, as a compact label-value grid. */
+  /* The hover label: a plain box beside the pointer, nothing more. No arrow,
+     because a sticky tooltip moves with the cursor and an arrow chasing it
+     reads as jitter. Pointer events off so it can never sit between the
+     cursor and the marker it is naming. */
+  #asset-map :global(.leaflet-tooltip.map-hover) {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.18);
+    padding: 0.15rem 0.4rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: 1.3;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  #asset-map :global(.leaflet-tooltip.map-hover::before) {
+    display: none;
+  }
+
   /* The ocean block is a second list under the platform's own details, so it
      gets a rule above it — without one the two run together and the water's
      properties read as more fields of the glider. */

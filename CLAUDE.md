@@ -547,6 +547,15 @@ bearing in degrees true. Escape clears it. Distance and bearing are both
 great-circle: a rhumb line is what you would steer, but quoting the two from
 different geometries invites the reader to combine them.
 
+**Hovering a point asset names it beside the pointer** — a sticky Leaflet
+tooltip, so it tracks the cursor rather than anchoring to the shape's centre,
+which on a wide tap circle or a track is nowhere near where you are pointing.
+Bound only where a mouse exists, and the test is `!matches('(hover: none)')`
+rather than `matches('(hover: hover)')`: the negative form treats an unknown
+answer as a mouse, so a browser that does not support the query keeps the
+labels instead of quietly losing them. On a touchscreen Leaflet opens a
+tooltip on tap, which would fight the popup for the same gesture.
+
 Positions everywhere — popups, readout, measure tooltips — are **degrees and
 decimal minutes**, which is what a chart, a GPS and a float's own position
 report speak, so a reader can compare without arithmetic in between. One

@@ -338,6 +338,31 @@ const argoCoversOffset = argoDot?._point
   ? argoDot._containsPoint(argoDot._point.add(px(OFFSET, 0)))
   : null;
 
+/* Hovering an asset names it beside the pointer. Fired through Leaflet's own
+   event so the tooltip machinery runs, and read out of the DOM rather than
+   from the layer, since binding a tooltip and actually showing one are
+   different things. */
+let hoverLabel = '';
+let hoverFollowsPointer = false;
+let hoverCleared = false;
+{
+  const dot = Object.values(host._map._layers).find((l) => l.options?.className === 'map-asset');
+  if (dot) {
+    dot.fire('mouseover', { latlng: dot.getLatLng(), layerPoint: dot._point }, true);
+    await new Promise((r) => setTimeout(r, 150));
+    const tip = host.querySelector('.leaflet-tooltip.map-hover');
+    hoverLabel = tip?.textContent ?? '';
+    hoverFollowsPointer = dot.getTooltip()?.options?.sticky === true;
+    dot.fire('mouseout', {}, true);
+    await new Promise((r) => setTimeout(r, 150));
+    // Read now: later checks click markers, which opens labels again.
+    /* Asked of the layer, not the DOM: Leaflet fades a tooltip out over
+       200 ms, so the element outlives the close and a DOM check here is a
+       race against an animation rather than a test of behaviour. */
+    hoverCleared = dot.isTooltipOpen() === false;
+  }
+}
+
 /* Zoom buttons: the ones naming a real storm are revealed and wired, the
    unknown one stays hidden. Clicking must centre the map on that storm. */
 const zoomButtons = [...document.querySelectorAll('[data-storm-zoom]')];
@@ -745,6 +770,10 @@ const checks = [
   ['data pipeline completed', /assets reporting within/.test(status)],
   ['asset tracks drawn', host.querySelectorAll('path[stroke="#e8368f"], path[stroke="#f08c00"]').length >= assets.assets.length],
   ['glider colour is not the old teal', !host.querySelector('path[stroke="#0a7d8c"]')],
+  ['hovering an asset names it',
+    (assets.assets ?? []).some((a) => a.id === hoverLabel)],
+  ['the label follows the pointer rather than anchoring', hoverFollowsPointer],
+  ['hover label is gone once the pointer leaves', hoverCleared],
   ['popup shows deployment date', popupHtml.includes('Deployed')],
   /* An asset popup answers both halves of the same question now: what the
      platform is, and what water it is sitting in. Before, the second half
