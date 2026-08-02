@@ -19,7 +19,8 @@ The hurricane page carries a live map: NHC forecast tracks and cones with
 data centres (US, UK, Canada, Sweden), ~4,000 Argo floats, animated global
 currents at the surface and 60 m that sharpen to 1/12° as you zoom in,
 sea-surface temperature from both an observed analysis (OISST) and the Navy
-forecast, Navy sea-surface salinity, and EEZ boundaries. Twenty-five colour
+forecast, Navy sea-surface salinity, isobaths from 20 m to 10,000 m with the
+coastline and an opacity the reader sets, and EEZ boundaries. Twenty-five colour
 scales, with the range either following the view or pinned by hand, and a
 reset that puts everything back. Hovering an asset names it; clicking one
 reports its details plus the depth, current, temperature and — when the EEZ
@@ -101,6 +102,14 @@ a new build lands, keeping your basemap, layers and position.
   public domain and needs none, but the lab may want it shown somewhere.
 
 ### Known limits
+
+- **The isobaths are a reference layer, not a chart.** They are contoured
+  from GEBCO 2026 at 15", but the deep tier is sampled at 0.033° and the
+  shallow tier at 0.008°, so neither is survey resolution and neither should
+  be navigated on. Contours smaller than 0.1° (200-1000 m) or 0.3° (2000 m
+  and below) are dropped as sampling speckle, so small seamounts and abyssal
+  hills are absent by design. The 8000 and 10,000 m levels exist only in the
+  trenches — 26 and 3 lines globally — so most of the map shows none.
 
 - **Seventeen of the twenty-five colour scales cannot keep the markers
   visible**, and that is accepted rather than fixed. Every stop of every map

@@ -16,6 +16,8 @@ npm run data:tiles   # the 1/12° current tiles (~92 MB per depth, several minut
 npm run data:fields  # global + regional SST and salinity grids, all products
 npm run data:field-tiles # the Navy field tiles (OISST needs none — see below)
 npm run data:basemaps # re-sample basemap ocean colours (needs Pillow; slow, GEBCO's WMS)
+npm run data:bathymetry # contour GEBCO into the isobath layer (needs a local grid; once)
+npm run data:bathy-tiles # just the 20-100 m tiles of that
 npm run test:contrast # map colours stay visible on both bathymetries
 npm run test:map     # headless test of the built map bundle
 npm run test:clock   # headless test of the built UTC clock
@@ -123,8 +125,11 @@ Layer stacking is deliberate, and there are two current panes rather than one:
 | pane | z-index | holds |
 | --- | --- | --- |
 | `tilePane` | 200 | the basemap |
+| `sst` | 240 | the scalar field raster (SST or salinity) |
+| `bathy` | 245 | isobaths + coastline — above the field, under the flow |
 | `currents-raster` | 250 | Mercator speed raster — **multiplied** over the basemap |
 | `currents` | 260 | particle canvas — **composites normally** |
+| `eez` | 270 | EEZ boundary WMS images |
 | `overlayPane` | 400 | tracks, markers, and the Argo canvas |
 
 Whichever basemap is selected, both current layers sit under every track and
@@ -494,6 +499,99 @@ advect into the fast cores and stay there, so a long life lets the picture
 decay from a fine even texture into a few long bright ropes with bare water
 between them, within a minute of opening the page. Respawning reseeds the
 slow water. It was 5 s, which showed that decay clearly on a phone.
+
+### Isobaths
+
+`scripts/fetch-bathymetry.py`, and it is the one dataset here that is
+**computed once by hand and committed**. The seafloor does not change, so
+there is no workflow, no cache key and no hourly cost — re-run it only to
+change the levels or the simplification.
+
+It reads **GEBCO 2026 at 15 arc-seconds from a local file** rather than over
+the network: the grid is 7.5 GB, so it is neither in the repo nor fetched.
+Pass `--grid` or set `$GEBCO_GRID`. ETOPO 2022 at 60" is servable over
+OPeNDAP from NGDC and was the fallback; GEBCO is four times finer per axis
+and the difference lands exactly where this layer is read, on the shelf.
+Needs numpy, matplotlib and h5py — a local tool like `sample-basemaps.py`,
+so CI pays nothing. GEBCO's netCDF is HDF5 underneath with the elevation
+array **contiguous and uncompressed** (7,464,960,000 bytes of data in a
+7,466,018,396-byte file), so a windowed read is a seek and no tile needs the
+whole grid in memory.
+
+**Two tiers, split by depth rather than by region**, because the shallow
+contours are almost all of the bytes and none of the use at basin scale:
+
+| tier | levels | spacing | size | fetched |
+| --- | --- | --- | --- | --- |
+| `bathy-deep.json` | 200–10000 m | stride 8 (0.033°) | 1.2 MB gz | on switch-on |
+| `bathy-tiles/<s>_<w>.json` | 20–100 m | stride 2 (0.008°) | 16 KB gz median | per view, zoom ≥ 6 |
+
+144 tiles of 162 have shelf water; the rest are pure ocean or land and are
+absent from the index. Whole layer: 41 MB raw, ~7 MB compressed in git.
+Neither tier is fetched with the page — the layer is **off by default** and a
+reader who never asks for the seafloor never pays for it.
+
+**Contours of a nearly flat plain shatter, and that had to be filtered.**
+4000 m is the abyssal mean, so unfiltered that one level came out as 32,644
+separate lines, median 0.12° across — sampling speckle, noise at every zoom,
+and most of the file. `min_extent()` is per depth rather than flat, because a
+small closed ring means different things at different levels: at 200–1000 m
+it is an island or a bank and belongs on the map (bar 0.1°, ~11 km, three
+cells of the sampled grid), at 2000 m and below it is an abyssal hill (bar
+0.3°). Shallow contours are not filtered at all — a small ring at 20 m is a
+shoal or a reef, which is what someone reads this layer for. Measured, that
+keeps 2,648 lines at 200 m against 1,480 under a flat 0.2° filter while
+cutting 4000 m to 6,000.
+
+The deep tolerances look coarse and are not. The deep tier is sampled at
+stride 8, so its grid is already 0.033° and a 0.08° tolerance removes about
+two cells of wiggle — dropping from 0.05/0.02 to 0.08/0.04 took the global
+file from 1.9 MB gzipped to 1.25 with nothing visible to show for it,
+because the line's real resolution is the sampling either way.
+
+The **0 m line is `coastline.json`**, not a contour thresholded out of the
+DEM: already simplified, already committed, and cartographically cleaner.
+Drawn as a stroke rather than a filled polygon — a layer above a scalar field
+must not fill anything in.
+
+#### Why they are SVG, and one path per depth
+
+Every contour at one depth becomes a **single multi-line polyline** rather
+than one layer each. Leaflet renders that as one path element with many
+subpaths, so the global file's 19,707 contours are **ten DOM nodes instead of
+nineteen thousand**. That is what lets this stay SVG — and so stay themed in
+CSS like the rest of the linework — instead of needing the canvas renderer
+Argo uses. Measured after: 21 paths, 2,243 rendered points and eight pans in
+33 ms at zoom 8.
+
+Colour is **not** in `map-palette.json`, and that is deliberate. It is
+reference linework like the borders, the graticule, the track casings and the
+measure halo, all of which live in CSS. Gating it as a feature colour would
+be wrong and would fail: measured, no light grey clears ΔE 22 over more than
+half of Esri's water against the gate's 90% bar, and against a *grey*
+colormap nothing can. Legibility comes from the halo instead — a
+`drop-shadow` on the pane rather than a second polyline under every contour,
+one filter against doubling 235,000 points of geometry.
+
+**A custom pane holding vectors needs one CSS rule or it renders nothing.**
+The site's reset gives every `svg` `max-width: 100%`, and a Leaflet pane is a
+0×0 absolutely positioned box, so an SVG inside one is clamped to 0×0 and
+`overflow: hidden` clips every path away: right geometry, right transform,
+right stroke, zero pixels, no error. Leaflet ships exactly this counter-rule
+itself but scoped to `.leaflet-overlay-pane`, which is why tracks and markers
+were never affected and why this only appeared on the first custom pane to
+hold vectors. `.leaflet-pane > svg { max-width: none; max-height: none }`
+covers every pane so the next one does not rediscover it. `test:map` asserts
+the rule survives in the built CSS — jsdom does no layout, so nothing else in
+that harness can see it.
+
+Opacity is the reader's, in the legend row beside the colour-scale controls
+and for the same reason. Applied **to the pane, not to each contour** — one
+CSS property for the whole layer however many tiles are loaded, against a
+`setStyle` across every contour on every drag of the slider. It rides in the
+saved view like the colour scales, and resets with everything else. The floor
+is 10% rather than 0: a layer switched on but completely invisible reads as
+broken, and the layer switcher is already the way to turn it off.
 
 ### Maritime boundaries
 

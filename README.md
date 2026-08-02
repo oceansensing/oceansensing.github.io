@@ -9,8 +9,9 @@ client-side JavaScript — the exceptions are the theme toggle, the photo
 shuffle and lightbox on observation pages, the asset map, and the UTC clock.
 The map is the one heavyweight: gliders from four national data centres,
 NOAA saildrones, the Argo array, animated currents at two depths,
-sea-surface temperature and salinity, and EEZ boundaries — with the colour
-scale, its range, and every layer under the reader's control.
+sea-surface temperature and salinity, isobaths and EEZ boundaries — with the
+colour scale, its range, the isobath opacity, and every layer under the
+reader's control.
 Every push to `main` deploys automatically via GitHub Actions, and a scheduled
 run rebuilds hourly to refresh the map data; the hurricane page picks that up
 on its own without losing your place on the map.
@@ -100,3 +101,15 @@ Settings" default overwrite them**, or lab email stops.
 
 Working on this repo with Claude Code? `CLAUDE.md` has the architecture notes
 and `PLAN.md` tracks what is still open.
+
+## Licence
+
+Copyright (c) 2026 Donglai Gong and C4PO. All rights reserved — see
+[LICENSE](LICENSE). The repository is public so the site can be served from
+GitHub Pages and so the work is open to inspection; that is not a grant of
+any licence to reuse it.
+
+Third-party material keeps its own terms: dependencies as declared in
+`package.json`, and the scientific data in `public/map/` under the terms of
+the bodies that produced it (GEBCO, Natural Earth, NOAA, IOOS, Ifremer, the
+US Navy via HYCOM, Marine Regions and others), each credited on the map.

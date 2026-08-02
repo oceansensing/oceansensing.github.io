@@ -20,7 +20,9 @@
     "data:field-tiles": "python3 scripts/fetch-ocean-fields.py --tiles",
     "test:contrast": "node scripts/test-contrast.mjs",
     "data:basemaps": "python3 scripts/sample-basemaps.py",
-    "data:tiles": "python3 scripts/fetch-currents.py --tiles"
+    "data:tiles": "python3 scripts/fetch-currents.py --tiles",
+    "data:bathymetry": "python3 scripts/fetch-bathymetry.py",
+    "data:bathy-tiles": "python3 scripts/fetch-bathymetry.py --tiles"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",

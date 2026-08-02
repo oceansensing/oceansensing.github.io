@@ -43,6 +43,19 @@ import 'leaflet/dist/leaflet.css';
         </label>
         <button type="button" data-field-auto>Auto</button>
       </span>
+      <span class="bathy-controls" data-bathy-controls hidden>
+        <label>
+          Isobaths
+          <input
+            type="range"
+            data-bathy-opacity
+            min="10"
+            max="100"
+            step="5"
+            aria-label="Isobath opacity"
+          />
+        </label>
+      </span>
     </span>
     <span class="status" id="map-status">Loading…</span>
   </figcaption>
@@ -143,6 +156,16 @@ import 'leaflet/dist/leaflet.css';
     const sstPane = map.createPane('sst');
     sstPane.style.zIndex = '240';
     sstPane.style.pointerEvents = 'none';
+
+    /* Isobaths sit directly on top of the scalar fields, which is the whole
+       point of them: a temperature field with no seafloor under it says
+       nothing about why the water is that temperature. Below the currents,
+       because the particles are the thing in motion and a static line grid
+       over them reads as interference. Its own pane so one opacity applies
+       to every contour at once, and so the reader can set it. */
+    const bathyPane = map.createPane('bathy');
+    bathyPane.style.zIndex = '245';
+    bathyPane.style.pointerEvents = 'none';
 
     /* Maritime boundaries go above the fields but below every platform: they
        are context for where a glider is working, not something to hide it. */
@@ -1098,6 +1121,149 @@ import 'leaflet/dist/leaflet.css';
         '<a href="https://www.marineregions.org/">Marine Regions</a> (VLIZ) — EEZ boundaries',
     });
 
+    /* Isobaths, contoured from GEBCO 2026 by scripts/fetch-bathymetry.py and
+       committed. The seafloor does not change, so this is the one dataset
+       here that is computed once by hand rather than fetched on a schedule —
+       no workflow, no cache key, no hourly cost.
+
+       Two tiers for the same reason the fields have them, but split by depth
+       rather than by region: 200 m and below is 1.2 MB gzipped globally and
+       is the basin-scale picture, while 20-100 m is five times that and is
+       unreadable until you are zoomed in — a 20 m isobath threads every
+       sandbar. So the deep set is one file and the shallow set is tiled on
+       the same 20 deg lattice as the current and field tiles.
+
+       Neither is fetched with the page. This layer is off by default, and a
+       reader who never switches it on never pays for it. */
+    const bathy = L.layerGroup([], {
+      attribution:
+        '<a href="https://www.gebco.net/">GEBCO</a> 2026 — isobaths',
+    });
+    const bathyDeep = L.layerGroup().addTo(bathy);
+    const bathyShallow = L.layerGroup().addTo(bathy);
+
+    // How see-through the contours are. Part of the reader's view, so it
+    // rides in the saved view with the basemap and the colour scales.
+    const BATHY_OPACITY = 0.7;
+    let bathyOpacity = BATHY_OPACITY;
+    const bathyControls = document.querySelector<HTMLElement>('[data-bathy-controls]');
+    const bathySlider = bathyControls?.querySelector<HTMLInputElement>('[data-bathy-opacity]');
+
+    /* Contours at the round hundreds and thousands are drawn heavier, which
+       is what a chart does: without an index contour every line reads the
+       same and counting them is the only way to know which is which. */
+    const BATHY_MAJOR = new Set([100, 1000, 4000, 8000]);
+
+    /* Every contour at one depth becomes a single multi-line polyline rather
+       than one layer each. Leaflet renders that as one path element with
+       many subpaths, so the global file's 19,707 contours are ten DOM nodes
+       instead of nineteen thousand — the difference between this layer being
+       free and it being the most expensive thing on the map. It is also what
+       lets the contours stay SVG, and so stay themed in CSS like the other
+       linework, instead of needing the canvas renderer Argo uses. */
+    const drawContours = (geo: any, target: L.LayerGroup): L.Polyline[] => {
+      const byDepth = new Map<number, [number, number][][]>();
+      for (const feature of geo?.features ?? []) {
+        const depth = feature?.properties?.d;
+        const coords = feature?.geometry?.coordinates;
+        if (typeof depth !== 'number' || !Array.isArray(coords)) continue;
+        let lines = byDepth.get(depth);
+        if (!lines) byDepth.set(depth, (lines = []));
+        lines.push(coords.map(([x, y]: number[]) => [y!, x!] as [number, number]));
+      }
+      const drawn: L.Polyline[] = [];
+      for (const [depth, lines] of byDepth) {
+        const major = BATHY_MAJOR.has(depth);
+        // No colour here: CSS owns the stroke, so a theme switch restyles
+        // every contour with no redraw.
+        drawn.push(
+          L.polyline(lines, {
+            pane: 'bathy',
+            interactive: false,
+            weight: major ? 1.1 : 0.7,
+            className: major ? 'map-bathy map-bathy-major' : 'map-bathy',
+          }).addTo(target)
+        );
+      }
+      return drawn;
+    };
+
+    let bathyDeepAsked = false;
+    const loadBathyDeep = () => {
+      if (bathyDeepAsked) return;
+      bathyDeepAsked = true;
+      fetch('/map/bathy-deep.json')
+        .then((r) => r.json())
+        .then((geo) => drawContours(geo, bathyDeep))
+        .catch(() => {
+          bathyDeepAsked = false; // let a later switch-on try again
+        });
+    };
+
+    let bathyTiles: any = null;
+    let bathyIndexAsked = false;
+    const bathyLoaded = new Map<string, L.Polyline[]>();
+
+    const loadBathyIndex = () => {
+      if (bathyIndexAsked) return;
+      bathyIndexAsked = true;
+      fetch('/map/bathy-tiles/index.json')
+        .then((r) => r.json())
+        .then((index) => {
+          bathyTiles = index;
+          syncBathyTiles();
+        })
+        .catch(() => {
+          // No shallow tiles published. The deep contours stand on their own.
+        });
+    };
+
+    /* Which shallow tiles the view touches. Overlap rather than containment,
+       for the same reason the current tiles use overlap: a viewport narrower
+       than a tile still straddles seams, and requiring containment drops the
+       whole tier as you pan. */
+    const bathyTileKeys = (): string[] => {
+      if (!bathyTiles || map.getZoom() < bathyTiles.minZoom) return [];
+      const { size, south: s0, west: w0 } = bathyTiles;
+      const view = map.getBounds();
+      const floorTo = (v: number, origin: number) =>
+        Math.floor((v - origin) / size) * size + origin;
+      const keys: string[] = [];
+      for (let sy = floorTo(view.getSouth(), s0); sy <= view.getNorth(); sy += size) {
+        for (let wx = floorTo(view.getWest(), w0); wx <= view.getEast(); wx += size) {
+          const wrapped = ((((wx - w0) % 360) + 360) % 360) + w0;
+          const key = `${sy}_${wrapped}`;
+          if (bathyTiles.available.includes(key) && !keys.includes(key)) keys.push(key);
+        }
+      }
+      return keys;
+    };
+
+    const syncBathyTiles = () => {
+      if (!map.hasLayer(bathy)) return;
+      loadBathyIndex();
+      const wanted = new Set(bathyTileKeys());
+      for (const [key, layers] of [...bathyLoaded]) {
+        if (wanted.has(key)) continue;
+        for (const layer of layers) bathyShallow.removeLayer(layer);
+        bathyLoaded.delete(key);
+      }
+      for (const key of wanted) {
+        if (bathyLoaded.has(key)) continue;
+        bathyLoaded.set(key, []); // claim it now, so one pan is one request
+        fetch(`/map/bathy-tiles/${key}.json`)
+          .then((r) => r.json())
+          .then((geo) => {
+            // Panned off it while the request was in flight; drop the answer.
+            if (!bathyLoaded.has(key)) return;
+            bathyLoaded.set(key, drawContours(geo, bathyShallow));
+          })
+          .catch(() => {
+            bathyLoaded.delete(key);
+          });
+      }
+    };
+
     const coastline = L.layerGroup();
     const gebco = L.tileLayer.wms('https://wms.gebco.net/mapserv?', {
       layers: 'GEBCO_LATEST',
@@ -1407,6 +1573,7 @@ import 'leaflet/dist/leaflet.css';
       'NOAA USVs': usvs,
       'IOOS gliders': gliders,
       'Argo floats': argo,
+      'Isobaths & coastline': bathy,
       'Country & state borders': borders,
       'EEZ boundaries': eez,
       'Lat/lon grid': graticule,
@@ -1453,6 +1620,15 @@ import 'leaflet/dist/leaflet.css';
       }, 0);
     });
 
+    /* Neither isobath tier is fetched until the layer is switched on, and
+       the shallow tiles follow the view from then on. */
+    map.on('overlayadd', (e: L.LayersControlEvent) => {
+      if (e.layer !== bathy) return;
+      loadBathyDeep();
+      syncBathyTiles();
+    });
+    map.on('moveend zoomend', syncBathyTiles);
+
     /* The page reloads itself when the hourly rebuild lands (below), so the
        reader's setup is stashed first and restored here — otherwise every
        refresh would throw away their basemap, their layer choices and
@@ -1484,6 +1660,10 @@ import 'leaflet/dist/leaflet.css';
                pinned range would quietly revert to automatic mid-session —
                the one thing "fixed until reset" must not do. */
             fields: choices,
+            /* Same reason as the colour scales: the page reloads itself when
+               a new build lands, and an opacity that silently jumped back to
+               default mid-session would read as the slider not holding. */
+            bathyOpacity,
           })
         );
       } catch {
@@ -1523,6 +1703,10 @@ import 'leaflet/dist/leaflet.css';
         }
       }
 
+      if (typeof saved.bathyOpacity === 'number' && Number.isFinite(saved.bathyOpacity)) {
+        bathyOpacity = Math.max(0.1, Math.min(1, saved.bathyOpacity));
+      }
+
       if (Array.isArray(saved.overlays)) {
         /* Anything the saved view never knew about keeps its default.
            When it carries no list at all — every view saved before this was
@@ -1548,6 +1732,32 @@ import 'leaflet/dist/leaflet.css';
 
     const restored = restoreView();
     map.on('moveend zoomend baselayerchange overlayadd overlayremove', saveView);
+
+    /* Isobath opacity, in the legend row beside the colour-scale controls
+       rather than as a Leaflet control — the same reason those are there: a
+       slider inside the map is awkward on a touchscreen, and this is where
+       the reader is already looking.
+
+       Applied to the pane, not to each contour. That is one CSS property for
+       the whole layer however many tiles are loaded, and no path is restyled
+       — setStyle across every contour on every drag of the slider would be
+       the expensive way to do the same thing.
+
+       The floor is 10% rather than 0: a layer that is switched on but
+       completely invisible reads as broken, and the layer switcher is
+       already the way to turn it off. */
+    const applyBathyOpacity = () => {
+      bathyPane.style.opacity = String(bathyOpacity);
+      if (bathySlider) bathySlider.value = String(Math.round(bathyOpacity * 100));
+      if (bathyControls) bathyControls.hidden = !map.hasLayer(bathy);
+    };
+    bathySlider?.addEventListener('input', () => {
+      bathyOpacity = Math.max(0.1, Math.min(1, Number(bathySlider.value) / 100));
+      bathyPane.style.opacity = String(bathyOpacity);
+      saveView();
+    });
+    map.on('overlayadd overlayremove', applyBathyOpacity);
+    applyBathyOpacity();
 
     if (!restored) map.fitBounds(BASIN);
 
@@ -1866,6 +2076,9 @@ import 'leaflet/dist/leaflet.css';
         if (!wanted && map.hasLayer(layer)) map.removeLayer(layer);
       }
 
+      bathyOpacity = BATHY_OPACITY;
+      applyBathyOpacity();
+
       setMeasuring(false);
       map.closePopup();
       try {
@@ -1889,6 +2102,19 @@ import 'leaflet/dist/leaflet.css';
       .then(({ rings }) => {
         const style = { weight: 0.8, className: 'map-land' };
         for (const ring of rings as number[][][]) L.polygon(flip(ring), style).addTo(coastline);
+
+        /* The isobath layer gets the 0 m line from the same file, as one
+           multi-line polyline. Natural Earth's coastline rather than a
+           contour thresholded out of GEBCO: it is already simplified,
+           already committed, and cartographically the cleaner line. Drawn
+           as a stroke, not a filled polygon — the layer above a scalar
+           field must not fill anything in. */
+        L.polyline((rings as number[][][]).map(flip), {
+          pane: 'bathy',
+          interactive: false,
+          weight: 1.1,
+          className: 'map-bathy map-bathy-major',
+        }).addTo(bathy);
       })
       .catch(() => {});
 
@@ -2336,6 +2562,8 @@ import 'leaflet/dist/leaflet.css';
     --map-currents: saturate(0.6);
     --map-eez: saturate(0.4) opacity(0.8);
     --map-measure-halo: #ffffff;
+    --map-bathy: #ced5de;
+    --map-bathy-halo: rgba(9, 14, 21, 0.65);
     --map-currents-blend: multiply;
 
     height: clamp(24rem, 62vh, 40rem);
@@ -2372,6 +2600,8 @@ import 'leaflet/dist/leaflet.css';
       --map-tiles: brightness(0.62) saturate(0.85) contrast(1.08);
       --map-currents: saturate(0.55) brightness(1.15);
       --map-eez: saturate(0.5) brightness(1.4);
+      --map-bathy: #dce2ea;
+      --map-bathy-halo: rgba(4, 8, 13, 0.7);
       --map-currents-blend: multiply;
       --map-measure-halo: #e8eef5;
     }
@@ -2389,6 +2619,8 @@ import 'leaflet/dist/leaflet.css';
     --map-tiles: brightness(0.62) saturate(0.85) contrast(1.08);
     --map-currents: saturate(0.55) brightness(1.15);
     --map-eez: saturate(0.5) brightness(1.4);
+    --map-bathy: #dce2ea;
+    --map-bathy-halo: rgba(4, 8, 13, 0.7);
     --map-currents-blend: multiply;
     --map-measure-halo: #ffffff;
   }
@@ -2497,6 +2729,44 @@ import 'leaflet/dist/leaflet.css';
     filter: var(--map-eez);
   }
 
+  /* Isobaths. Light grey, which reads over GEBCO's deep navy and over most
+     of the colour scales — but not over the light Esri bathymetry, and not
+     over a pale stop of a ramp the reader has chosen. No single line colour
+     can: that is why this is linework carrying a halo rather than a feature
+     colour in the palette, which is the same answer the measuring line and
+     the track casings arrived at. Measured, no grey clears ΔE 22 over more
+     than half of Esri's water against the gate's 90% bar.
+
+     The halo is a drop-shadow on the pane rather than a second polyline
+     underneath every contour: one filter for the whole layer, against
+     doubling 235,000 points of geometry. */
+  #asset-map :global(.map-bathy) {
+    fill: none;
+    stroke: var(--map-bathy);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  #asset-map :global(.leaflet-bathy-pane) {
+    filter: drop-shadow(0 0 0.6px var(--map-bathy-halo));
+  }
+
+  /* Vectors in a custom pane render as nothing without this, and nothing is
+     all you get to debug with — correct geometry, correct transform, correct
+     stroke, zero pixels.
+
+     The site's reset gives every `svg` `max-width: 100%`, and a Leaflet pane
+     is a 0x0 absolutely positioned box, so an SVG inside one is clamped to
+     0x0 and `overflow: hidden` clips the paths away. Leaflet ships exactly
+     this counter-rule itself — but scoped to `.leaflet-overlay-pane`, which
+     is why the tracks and markers were never affected and why this only
+     appeared on the first custom pane to hold vectors. Written for every
+     pane so the next one does not rediscover it. */
+  #asset-map :global(.leaflet-pane > svg) {
+    max-width: none;
+    max-height: none;
+  }
+
   #asset-map :global(.leaflet-currents-raster-pane) {
     mix-blend-mode: var(--map-currents-blend);
   }
@@ -2571,6 +2841,33 @@ import 'leaflet/dist/leaflet.css';
   .field-controls button:disabled {
     opacity: 0.5;
     cursor: default;
+  }
+
+  /* Isobath opacity, in the same row and for the same reason. Shown only
+     while the layer is on — a slider for a layer that is not drawn is a
+     control with nothing behind it. */
+  .bathy-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2xs);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  .bathy-controls[hidden] {
+    display: none;
+  }
+
+  .bathy-controls label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2xs);
+  }
+
+  .bathy-controls input {
+    width: 6em;
+    accent-color: var(--accent);
   }
 
   .field-controls button:not(:disabled):hover,

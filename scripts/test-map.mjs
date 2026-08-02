@@ -20,6 +20,8 @@ const dom = new JSDOM(
   '<span class="field-controls" data-field-controls hidden>' +
   '<select data-field-map></select><input type="number" data-field-min />' +
   '<input type="number" data-field-max /><button type="button" data-field-auto></button></span>' +
+  '<span class="bathy-controls" data-bathy-controls hidden>' +
+  '<input type="range" data-bathy-opacity min="10" max="100" step="5" /></span>' +
     // Deliberately wrong server-rendered content: if the client does not
     // rebuild it, the assertions below will still see "STALE".
     '<div class="storm-status" data-storm-status><span class="label">STALE</span>' +
@@ -211,12 +213,46 @@ files['tiles-60m/index'] = { ...files['tiles/index'], depth: 60 };
     data: Array.from({ length: nx * ny }, () => 7.5),
   };
 }
+/* Isobaths. Both tiers are stubbed, and the two carry different depths on
+   purpose: the deep file is 200/4000 m and a tile is 20/100 m, so a tier
+   reading the wrong file draws contours that are the wrong count in the
+   wrong place rather than merely "something got drawn" — which is the bug
+   the 60 m current layer shipped with when its tile path was hardcoded. */
+const bathyFetched = [];
+const ring = (lon, lat) => [
+  [lon, lat], [lon + 2, lat], [lon + 2, lat + 2], [lon, lat + 2], [lon, lat],
+];
+const contour = (d, lon, lat) => ({
+  type: 'Feature',
+  properties: { d },
+  geometry: { type: 'LineString', coordinates: ring(lon, lat) },
+});
+const bathyDeepGeo = {
+  type: 'FeatureCollection',
+  features: [contour(200, -78, 21), contour(4000, -70, 21)],
+};
+const bathyTileGeo = {
+  type: 'FeatureCollection',
+  features: [contour(20, -76, 25), contour(100, -74, 25)],
+};
+const bathyIndex = {
+  size: 20, west: -180, south: -80, north: 85, minZoom: 6,
+  levels: [20, 40, 60, 80, 100],
+  available: ['20_-80', '20_-100', '0_-80', '0_-100', '40_-80', '40_-100'],
+};
+
 /* The bathymetry service, stubbed from the start rather than partway
    through: asset popups now ask for depth too, and the first of those fires
    long before the readout checks below install their own stub. */
 let identifyUrl = null;
 let gazetteerUrl = null;
 globalThis.fetch = async (u) => {
+  if (String(u).includes('/map/bathy')) {
+    bathyFetched.push(String(u));
+    if (String(u).includes('bathy-deep')) return { json: async () => bathyDeepGeo };
+    if (String(u).includes('index.json')) return { json: async () => bathyIndex };
+    return { json: async () => bathyTileGeo };
+  }
   if (String(u).includes('ImageServer/identify')) {
     identifyUrl = String(u);
     return { json: async () => ({ value: '-2431.5' }) };
@@ -1054,8 +1090,124 @@ const globalReset = await (async () => {
 
 
 const status = document.getElementById('map-status').textContent;
+/* ---- isobaths -------------------------------------------------------------
+
+   The layer is off by default and neither tier is fetched until it is
+   switched on, which is most of the point: the deep file alone is 1.2 MB
+   gzipped and a reader who never asks for the seafloor must not pay for it.
+   Everything below drives the layer switcher the way a reader would. */
+/* jsdom does no layout, so nothing below can see that the contours render
+   at all — which is exactly how this shipped invisible the first time. The
+   site's reset gives every svg `max-width: 100%`, a Leaflet pane is a 0x0
+   positioned box, and the SVG inside a custom pane therefore computed to
+   0x0 and clipped every path away: right geometry, right transform, right
+   stroke, no pixels. Leaflet ships the counter-rule for its own overlay
+   pane only. This asserts the rule survives in the built CSS; it is a guard
+   against deleting the fix, not a rendering test. */
+const builtCss = fs
+  .readdirSync(path.join('dist', '_astro'))
+  .filter((f) => f.endsWith('.css'))
+  .map((f) => fs.readFileSync(path.join('dist', '_astro', f), 'utf8'))
+  .join('\n');
+const paneSvgUnclamped =
+  /\.leaflet-pane>svg\{[^}]*max-width:none/.test(builtCss.replace(/\s+/g, '')) ||
+  /\.leaflet-pane>svg\{[^}]*max-width:none/.test(builtCss);
+
+const bathyPaneZ = (name) =>
+  Number(host.querySelector(`.leaflet-${name}-pane`)?.style.zIndex ?? NaN);
+const bathyRequestsBeforeSwitchOn = bathyFetched.length;
+
+const bathyToggle = overlayLabelled(/Isobaths/);
+bathyToggle?.querySelector('input')?.click();
+await new Promise((r) => setTimeout(r, 400));
+
+// Zoom 7 is inside the shallow tier; the deep file is drawn at every zoom.
+host._map.setView([25, -75], 7, { animate: false });
+await new Promise((r) => setTimeout(r, 700));
+
+const bathyLayersAt7 = Object.values(host._map._layers).filter((l) =>
+  /map-bathy/.test(l.options?.className ?? '')
+);
+const bathyDeepAsked = bathyFetched.filter((u) => u.includes('bathy-deep')).length;
+const bathyTilesAsked = bathyFetched.filter((u) => /bathy-tiles\/-?\d/.test(u));
+
+/* Which tier drew what, read off the geometry rather than trusted: the deep
+   stub sits at 21-23 N and a tile stub at 25-27 N, so a tier reading the
+   other tier's file lands in the wrong place. */
+const bathyAtLat = (lo, hi) =>
+  bathyLayersAt7.filter((l) => {
+    const c = l.getBounds?.()?.getCenter?.();
+    return c && c.lat > lo && c.lat < hi;
+  }).length;
+const deepDrawn = bathyAtLat(21, 24);
+const shallowDrawn = bathyAtLat(25, 28);
+
+/* No colour on any contour. CSS owns the stroke so a theme switch restyles
+   the layer with no redraw, and Leaflet's own default is the only `color`
+   allowed to be there — anything else is a hardcoded colour the contrast
+   gate cannot see. */
+const bathyColoured = bathyLayersAt7.filter(
+  (l) => l.options?.color && l.options.color !== '#3388ff'
+);
+
+// Below the tile threshold the shallow tier stands down and its layers go.
+const tilesBeforeZoomOut = bathyTilesAsked.length;
+host._map.setView([25, -75], 4, { animate: false });
+await new Promise((r) => setTimeout(r, 500));
+const shallowAfterZoomOut = bathyAtLat(25, 28) === 0 ||
+  Object.values(host._map._layers).filter((l) => {
+    const c = l.getBounds?.()?.getCenter?.();
+    return /map-bathy/.test(l.options?.className ?? '') && c && c.lat > 25 && c.lat < 28;
+  }).length === 0;
+const noNewTilesBelowThreshold =
+  bathyFetched.filter((u) => /bathy-tiles\/-?\d/.test(u)).length === tilesBeforeZoomOut;
+
+/* Opacity is one property on the pane rather than a restyle of every
+   contour, and it is part of the reader's view — a build landing mid-session
+   reloads the page, and a slider that silently sprang back to default would
+   read as not holding. */
+const bathySlider = document.querySelector('[data-bathy-opacity]');
+const bathySliderShown = !document.querySelector('[data-bathy-controls]')?.hidden;
+let bathyOpacityApplied = false;
+let bathyOpacitySaved = false;
+if (bathySlider) {
+  bathySlider.value = '35';
+  bathySlider.dispatchEvent(new window.Event('input', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 200));
+  bathyOpacityApplied =
+    Math.abs(Number(host.querySelector('.leaflet-bathy-pane')?.style.opacity) - 0.35) < 1e-6;
+  const saved = JSON.parse(window.sessionStorage.getItem('asset-map-view') ?? '{}');
+  bathyOpacitySaved = Math.abs((saved.bathyOpacity ?? 0) - 0.35) < 1e-6;
+}
+
+// Put the map back where the checks below expect it.
+host._map.setView([25, -75], 6, { animate: false });
+await new Promise((r) => setTimeout(r, 300));
+
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
+
+  // ---- isobaths
+  ['isobaths fetch nothing until the layer is switched on',
+    bathyRequestsBeforeSwitchOn === 0],
+  ['switching them on fetches the global deep file once',
+    bathyDeepAsked === 1],
+  ['the deep tier draws at every zoom, the shallow tier only at zoom >= 6',
+    deepDrawn > 0 && shallowDrawn > 0 && bathyTilesAsked.length > 0],
+  ['each depth is one multi-line path, not one layer per contour',
+    bathyLayersAt7.length > 0 && bathyLayersAt7.length < 40],
+  ['contours carry a class and no colour, so CSS can theme them',
+    bathyColoured.length === 0 &&
+      bathyLayersAt7.every((l) => /map-bathy/.test(l.options.className))],
+  ['vectors in a custom pane are not clamped to 0x0 by the site reset',
+    paneSvgUnclamped],
+  ['isobaths sit above the scalar fields and below the currents',
+    bathyPaneZ('bathy') > bathyPaneZ('sst') && bathyPaneZ('bathy') < bathyPaneZ('currents')],
+  ['below the tile threshold the shallow tier stands down',
+    shallowAfterZoomOut && noNewTilesBelowThreshold],
+  ['the opacity slider shows with the layer and moves the pane',
+    bathySliderShown && bathyOpacityApplied],
+  ['and the opacity it sets rides in the saved view', bathyOpacitySaved],
   ['borders + markers drawn', host.querySelectorAll('path').length > 200],
   ['layer switcher', host.querySelectorAll('.leaflet-control-layers-selector').length >= 10],
   ['bathymetry is the default base', !!host.querySelector('.leaflet-tile-pane .leaflet-layer')],
