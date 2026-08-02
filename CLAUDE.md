@@ -107,11 +107,26 @@ into `dist/_astro/*.js`. `AssetMap` is large enough to be bundled; `UtcClock` is
 inlined. The two test harnesses locate their code accordingly — if a component
 crosses that threshold, its harness needs updating.
 
-### The map (`src/components/AssetMap.astro`)
+### The map (`src/lib/ocean-map/`, placed by `src/components/AssetMap.astro`)
 
-**It is being made reusable, and the first two seams are cut.** The intent is
-a framework-agnostic module this and other sites can embed, so anything that
-tied it to *this page* is going or gone.
+**The map is a plain module now; the component is its placement on this
+site.** `src/lib/ocean-map/index.ts` exports `createOceanMap(host, options)`
+and `mountOceanMaps(scope)`, with no Astro in it, so another project imports
+it directly — see `src/lib/ocean-map/README.md`. `AssetMap.astro` is down to
+markup, styling and a two-line call.
+
+That split moved two gates. `check:docs` reads the particle lifetime from the
+module now, and `test:contrast` reads **both** files — the module names the
+particle pane, the component styles it, and a blend mode reappearing in
+either place is what the check exists to catch.
+
+**Watch the closing tags when slicing this file.** Lifting the script out by
+line range left a stray `</script>` before `<style>`, which Astro swallowed
+along with the entire stylesheet — the map came up unstyled and the only thing
+that noticed was `test:map`'s guard on the pane-SVG rule. The build did not
+complain.
+
+The remaining seams, in order of what they unlock:
 
 - **Configuration** comes off one `CONFIG` object — data base URL, home
   bounds, storage key — read from `data-map-*` attributes on the container
@@ -127,6 +142,16 @@ tied it to *this page* is going or gone.
   `getElementById` would hand each of them the first. Every container matching
   `[data-ocean-map-canvas]` is now initialised separately and scopes its
   lookups to the nearest `[data-ocean-map]` ancestor.
+- **Still to do**: the CSS lives in the component and would go global if moved
+  as-is (bare `.legend`, `.status`, `.field-controls` selectors need
+  prefixing); the module is one 2,700-line file; and the platform layers
+  assume this fleet.
+
+**Keep logic that does not touch `L.` out of the Leaflet path.** An iOS port
+would reuse the pipelines, the JSON schemas and tile lattice, the palette and
+its gate, and every measured decision here — and reimplement only the drawing.
+Colour ramps, coordinate formatting, grid sampling and tile selection are all
+renderer-independent and are the natural next things to lift out.
 
 Two things that bit while doing it, both worth not repeating. The storage key
 was briefly derived from the container id, which silently changed the key

@@ -106,7 +106,7 @@ const claims = [
      which is the argument for checking them rather than trusting a habit. */
   {
     what: 'particle lifetime',
-    file: 'src/components/AssetMap.astro',
+    file: 'src/lib/ocean-map/index.ts',
     from: /const PARTICLE_SECONDS = (\d+)/,
     doc: (v) => new RegExp(`${v} s at \\d+ fps`),
   },

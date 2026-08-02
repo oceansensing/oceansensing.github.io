@@ -30,16 +30,20 @@ import { hex, deltaE } from './lib/colour.mjs';
    was multiply(amber, water) — near-invisible — while this gate happily
    measured the amber. The gate was right about a colour nobody could see.
    So check the assumption before trusting the numbers. */
-const component = fs.readFileSync('src/components/AssetMap.astro', 'utf8');
-const particlePane = /paneName:\s*'([^']+)'/.exec(component)?.[1];
+/* Two files, because behaviour and styling now live apart: the module names
+   the pane, the component styles it. The check spans both on purpose — a
+   blend mode reappearing in either place is what it exists to catch. */
+const behaviour = fs.readFileSync('src/lib/ocean-map/index.ts', 'utf8');
+const styling = fs.readFileSync('src/components/AssetMap.astro', 'utf8');
+const particlePane = /paneName:\s*'([^']+)'/.exec(behaviour)?.[1];
 if (!particlePane) {
-  console.error('FAIL  cannot find the particle pane name in AssetMap.astro');
+  console.error('FAIL  cannot find the particle pane name in src/lib/ocean-map/index.ts');
   process.exit(1);
 }
 const blended = new RegExp(
   `leaflet-${particlePane}-pane\\)?\\s*\\{[^}]*mix-blend-mode`,
   's'
-).test(component);
+).test(`${behaviour}\n${styling}`);
 if (blended) {
   console.error(
     `FAIL  the particle pane (${particlePane}) has a mix-blend-mode.\n` +
