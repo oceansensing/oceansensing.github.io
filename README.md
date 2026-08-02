@@ -7,6 +7,9 @@ Virginia Institute of Marine Science, live at
 Built with [Astro](https://astro.build). Static output, and close to zero
 client-side JavaScript — the exceptions are the theme toggle, the photo
 shuffle and lightbox on observation pages, the asset map, and the UTC clock.
+The map is the one heavyweight: gliders from four national data centres,
+NOAA saildrones, the Argo array, animated currents at two depths and
+sea-surface temperature from two models.
 Every push to `main` deploys automatically via GitHub Actions, and a scheduled
 run rebuilds hourly to refresh the map data; the hurricane page picks that up
 on its own without losing your place on the map.
@@ -64,10 +67,12 @@ Refreshing map data by hand — CI does all of this on every deploy, so you only
 need it locally when working on the map:
 
 ```sh
-npm run data          # storms, gliders, USVs, Argo floats
-npm run data:currents # global + regional current grids
-npm run data:tiles    # the 1/12° current tiles (~92 MB, a few minutes)
-npm run data:basemaps # re-sample basemap ocean colours (slow; GEBCO's WMS)
+npm run data           # storms, gliders (four regional ERDDAPs), USVs, Argo floats
+npm run data:currents  # global + regional current grids, surface and 60 m
+npm run data:tiles     # the 1/12° current tiles (~92 MB per depth, a few minutes)
+npm run data:sst       # global + regional sea-surface temperature grids
+npm run data:sst-tiles # the Navy SST tiles (OISST needs none — its regions are already native)
+npm run data:basemaps  # re-sample basemap ocean colours (slow; GEBCO's WMS)
 ```
 
 The tiles are gitignored, so a fresh clone has none and the map simply uses
@@ -80,9 +85,10 @@ checks fail, nothing is published. The same workflow runs hourly on a schedule
 to refresh the map data; that run commits nothing, so the repository does not
 grow.
 
-The 1/12° current tiles are the exception to "refresh everything hourly": they
-are ~92 MB and only change when the ocean model runs, once a day at 12Z, so CI
-caches them keyed on the model run and rebuilds them only when it advances.
+The full-resolution tiles are the exception to "refresh everything hourly":
+the current tiles are ~92 MB per depth and the Navy SST tiles another ~39 MB,
+and none of them change until the ocean model runs, once a day at 12Z. CI
+caches them keyed on that model run and rebuilds only when it advances.
 
 DNS lives at the registrar: apex `A` records to `185.199.108.153`,
 `185.199.109.153`, `185.199.110.153`, `185.199.111.153`, and a `www` CNAME to

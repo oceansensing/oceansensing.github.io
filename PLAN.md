@@ -15,9 +15,14 @@ tools, per-person CVs at `/cv/<person-id>/`, and Significant Observations
 (harmful algal blooms, hurricanes).
 
 The hurricane page carries a live map: NHC forecast tracks and cones with
-5-day observed storm history, NOAA saildrones, IOOS gliders, ~2,000 Argo
-floats, and animated global currents — surface or 60 m — that sharpen to 1/12° as you
-zoom in. Above it, an active-storm status line that updates without a reload;
+5-day observed storm history, NOAA saildrones, ~50 gliders from four national
+data centres (US, UK, Canada, Sweden), ~4,000 Argo floats, animated global
+currents at the surface and 60 m that sharpen to 1/12° as you zoom in, and
+sea-surface temperature from both an observed analysis (OISST) and the Navy
+forecast. Hovering an asset names it; clicking one reports its details plus
+the depth, current and temperature of the water it is in; right-click or
+long-press does the same anywhere. There is a distance and bearing tool.
+Above the map, an active-storm status line that updates without a reload;
 beside that, a server-synchronised UTC clock. The page refreshes itself when
 a new build lands, keeping your basemap, layers and position.
 
@@ -49,21 +54,23 @@ a new build lands, keeping your basemap, layers and position.
 
 ### Decisions to make
 
-- **The animated current layer is not Mercator.** Mercator was the original
-  ask, and the static speed raster still is — but that layer is rendered
-  tiles, and particles need numeric u/v. Copernicus publishes those only
-  behind credentials; their old open OPeNDAP hosts are dead. So the animation
-  runs on the US Navy ESPC-D-V02 global forecast (via HYCOM), which is open
-  and the same 1/12 degree resolution. Both layers name their model in the
-  switcher. If Mercator specifically matters for the animation, it is doable:
-  add Copernicus Marine credentials as GitHub secrets and the pipeline can
-  pull u/v from the toolbox instead. That needs a Copernicus account.
-- **Payload.** Three tiers: a 0.96° global grid loading with the page
-  (~118 KB), 0.24°/0.12° regional grids fetched on zooming into them, and
-  1/12° tiles covering all ocean fetched per view at zoom 7+ (79–144 KB
-  each). The Mercator raster's 707 KB stays opt-in. The site itself carries
-  92 MB of tiles, built by CI and never committed — that is a deploy cost,
-  not a reader's.
+- **No layer on the map is Mercator any more.** Mercator was the original ask.
+  The animation never could be — particles need numeric u/v and Copernicus
+  publishes those only behind credentials — so it runs on the US Navy
+  ESPC-D-V02 forecast via HYCOM, open and the same 1/12°. The static Mercator
+  speed raster was the one genuinely Mercator layer, and it is now switched
+  off at your request (`MERCATOR_RASTER = false`), scaffolding left in place.
+  If Mercator matters again, either flip that flag back, or add Copernicus
+  Marine credentials as GitHub secrets and the pipeline can pull numeric u/v
+  from the toolbox for the animation too. Both need a Copernicus account.
+- **Payload.** Currents come in three tiers per depth: a 0.96° global grid
+  with the page, 0.24°/0.12° regional grids on zooming in, and 1/12° tiles
+  per view at zoom 7+ (79–144 KB each). SST is two tiers — OISST has no tile
+  tier because its regional grids are already at its native 1/4°. Argo is
+  61 KB gzipped. What the *site* carries, built by CI and never committed:
+  ~92 MB of current tiles per depth (two depths) and ~39 MB of Navy SST
+  tiles. That is a deploy cost, not a reader's — someone working one region
+  fetches a handful of tiles.
 - **The Hurricane Florence cover has no visible credit.** The page now opens
   on the map, and the credit line lived under the hero that was removed, so
   the attribution survives only in the Markdown front matter. NASA imagery is
@@ -72,8 +79,14 @@ a new build lands, keeping your basemap, layers and position.
 ### Known limits
 
 - **Full-resolution tiles are cached in CI, not committed.** If the Actions
-  cache is evicted (7 days unused) the next build rebuilds all 159 tiles,
-  which adds about a minute. Nothing breaks; it is just slower that once.
+  cache is evicted (7 days unused) the next build rebuilds them — 159 of 162
+  current tiles per depth, plus the Navy SST set. Nothing breaks; it is just
+  slower that once.
+- **The Navy SST tile run is not always complete.** HYCOM fails per request
+  rather than outright, and the last local run finished 145 of 162 after
+  retries with backoff. The map falls back to the regional grid over the
+  missing water, silently — the run itself reports the count and exits
+  non-zero. CI retries on the next model run.
 - **Currents can still bleed slightly over land**, though much less than
   they did — and far less again at 1/12°, which is what any view at zoom 7+
   now gets. Coastal erosion plus the finer regional grids cut it hard — over
@@ -84,22 +97,29 @@ a new build lands, keeping your basemap, layers and position.
 
 ### Needs a human eye
 
-- **Nobody working on this has watched the particles move.** They are
-  verified only indirectly — the harness records canvas draw calls and
-  confirms segments are stroked, in the checked palette, at ~1.6 px a frame,
-  and holding steady across zoom levels. That indirection has a track record:
-  the runaway-speed bug reached the live site and was found by a reader
-  looking at it, not by any check here. The browser in this environment never
-  paints, so screenshots from a real device remain the fastest way to catch a
-  rendering fault. The data, grid geometry,
-  land masking, pane order, plugin loading and per-frame drift were all
-  verified numerically, but the headless browser here never paints — it
-  reports zero animation frames per second — so the animation itself was
-  never observed. Worth a look on the live site, along with whether the
-  particles now read as prominently as intended.
+- **Rendering is now observed, not only measured.** A real browser is
+  attached, so the animation, the SST raster, the hover labels and the popups
+  have all been watched running at ~120 fps rather than inferred from draw
+  calls. Two things still came from a reader rather than any check, and both
+  were invisible to a green suite: the currents vanishing at globe zoom, and
+  the Argo fleet sliced at the date line. Both now have regression checks.
+  Screenshots from a real device remain the fastest way to catch a rendering
+  fault — every visual bug this project has had was reported that way.
 
 ### Depends on someone else's service
 
+- **HYCOM is flaky per request, not up or down.** It serves some time steps
+  and not others, and metadata keeps working throughout so it looks healthy.
+  `fetch-sst.py` probes a step before using it and retries tiles with
+  backoff; `fetch-currents.py` has neither guard and degrades to the previous
+  file instead, which is why an outage there shows as stale rather than
+  wrong. Worth giving the current pipeline the same treatment.
+- **Glider coverage is four countries, not the world.** IOOS (US), NOC/BODC
+  (UK), OTN (Canada) and VOTO (Sweden) are the regional OceanGliders
+  endpoints that expose an ERDDAP. Coriolis publishes through a selection
+  portal with no machine endpoint, and `erddap.aodn.org.au` does not resolve,
+  so Europe-wide and Australian gliders are missing. Both would need a
+  different access route rather than another entry in `GLIDER_SOURCES`.
 - **Seafloor depth in the point readout** comes from NOAA's ArcGIS
   ImageServer DEM mosaic, live, per click. It is the only bathymetry service
   reachable from a browser that sends CORS. If it goes away the readout says
@@ -123,6 +143,12 @@ a new build lands, keeping your basemap, layers and position.
   particle drift that was fine at the tested zoom and 100× off elsewhere, a
   contrast gate that passed a colour the blend mode then erased. A single
   sample cannot tell "correct" from "correct here".
+- **Put the check where the bug can show.** A date-line regression test was
+  placed at 20°N, where the prime meridian crosses the Sahara and the column
+  is blank either way — it passed against the bug it was written for. Moved to
+  open water it still passed, because it looked for a single empty column
+  while the gap was a whole grid cell wide. Two wrong versions before a
+  working one, both green.
 - **A test written to match code just written proves little.** Seeding a
   fixture from the same assumption as the implementation makes them agree by
   construction — a saved-view test that used the new format never exercised

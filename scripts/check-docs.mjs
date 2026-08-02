@@ -65,24 +65,55 @@ else if (siteUrl !== configUrl) {
       stale generated index still said 6, and nothing noticed. Read the value
       from the source, not from a build artefact, so this works in CI where
       the tiles do not exist. */
-const pipeline = fs.readFileSync('scripts/fetch-currents.py', 'utf8');
 const claims = [
   {
     what: 'tile zoom threshold',
+    file: 'scripts/fetch-currents.py',
     from: /'minZoom':\s*(\d+),\s*\n\s*#\s*0\.08/,
     doc: (v) => new RegExp(`zoom \u2265 ${v}\\b`),
   },
   {
     what: 'coastal erosion threshold',
+    file: 'scripts/fetch-currents.py',
     from: /COASTAL_DRY_NEIGHBOURS = (\d+)/,
     doc: (v) => new RegExp(`\\b${['zero', 'one', 'two', 'three', 'four'][+v] ?? v}\\b`),
   },
+  /* Numbers the docs quote from the map component and the asset pipeline.
+     Each of these has already gone stale once in a single working session,
+     which is the argument for checking them rather than trusting a habit. */
+  {
+    what: 'particle lifetime',
+    file: 'src/components/AssetMap.astro',
+    from: /const PARTICLE_SECONDS = (\d+)/,
+    doc: (v) => new RegExp(`${v} s at \\d+ fps`),
+  },
+  {
+    what: 'Argo cycle window',
+    file: 'scripts/fetch-ocean-assets.py',
+    from: /ARGO_CYCLE_DAYS = (\d+)/,
+    doc: (v) => new RegExp(`max\\(\`?HISTORY_DAYS\`?, ${v}\\)`),
+  },
+  {
+    what: 'number of glider sources',
+    file: 'scripts/fetch-ocean-assets.py',
+    // count the entries in GLIDER_SOURCES
+    from: /GLIDER_SOURCES = \[([\s\S]*?)\n\]/,
+    count: (block) => (block.match(/\{'base':/g) ?? []).length,
+    // Tolerate markdown emphasis between the word and the phrase.
+    doc: (v) =>
+      new RegExp(`\\b${['zero', 'one', 'two', 'three', 'four', 'five', 'six'][+v] ?? v}\\*{0,2}\\s+regional ERDDAPs`),
+  },
 ];
-const claimDoc = fs.readFileSync('CLAUDE.md', 'utf8');
+/* Whitespace-normalised, because these docs are hard-wrapped: a claim like
+   "four regional ERDDAPs" can straddle a line break, and a pattern with a
+   literal space would then report drift that is only a newline. */
+const claimDoc = fs.readFileSync('CLAUDE.md', 'utf8').replace(/\s+/g, ' ');
 for (const claim of claims) {
-  const found = claim.from.exec(pipeline);
+  const source = fs.readFileSync(claim.file, 'utf8');
+  const raw = claim.from.exec(source);
+  const found = raw && [raw[0], claim.count ? String(claim.count(raw[1])) : raw[1]];
   if (!found) {
-    problems.push(`scripts/fetch-currents.py: cannot read the ${claim.what}`);
+    problems.push(`${claim.file}: cannot read the ${claim.what}`);
     continue;
   }
   if (!claim.doc(found[1]).test(claimDoc)) {

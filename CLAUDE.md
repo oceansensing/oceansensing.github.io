@@ -10,9 +10,11 @@ npm run dev          # dev server at localhost:4321
 npm run build        # production build into dist/
 npm run check        # astro check — type-checks .astro and .ts; must be 0 errors
 npm run check:docs   # docs reference real scripts, real paths, the right URL
-npm run data         # regenerate public/map/ocean-assets.json from NOAA/IOOS live
-npm run data:currents # regenerate the global + regional current grids
-npm run data:tiles   # regenerate the 1/12° tiles (~92 MB, several minutes)
+npm run data         # storms, gliders (4 regional ERDDAPs), USVs, Argo floats
+npm run data:currents # the global + regional current grids, both depths
+npm run data:tiles   # the 1/12° current tiles (~92 MB per depth, several minutes)
+npm run data:sst     # the global + regional SST grids, both products
+npm run data:sst-tiles # the Navy SST tiles (OISST needs none — see below)
 npm run data:basemaps # re-sample basemap ocean colours (needs Pillow; slow, GEBCO's WMS)
 npm run test:contrast # map colours stay visible on both bathymetries
 npm run test:map     # headless test of the built map bundle
@@ -35,6 +37,14 @@ broken. It verifies that every `npm run …` and every backticked repo path in
 `README.md`, `CLAUDE.md` and `PLAN.md` is real, that the canonical URL agrees
 across `astro.config.mjs`, `src/config.ts` and the README, and that the deploy
 workflow still contains the gate the README promises.
+
+It also checks **numbers the docs quote from the code** — the tile zoom
+threshold, the coastal erosion threshold, the particle lifetime, the Argo
+cycle window and how many glider sources there are — by reading each from its
+own source file. Every one of those has gone stale at least once. The
+document is whitespace-normalised before matching, because these files are
+hard-wrapped and a claim can straddle a line break; without that the check
+reports drift that is only a newline.
 
 `npm run check` truncates long diagnostics when piped through `tail`; read the
 whole output or grep for `^- [0-9]+ error`.
@@ -81,6 +91,9 @@ Site metadata, navigation, and the author names bolded in citations live in
 The site is near-zero-JS by intent. The exceptions are the theme toggle, the
 observation photo shuffle and lightbox, `AssetMap.astro`, and `UtcClock.astro`.
 Prefer no JS, but do not contort a design to avoid it.
+
+Colour maths shared between the contrast gate and the ramp search lives in
+`scripts/lib/colour.mjs` — Node-side only, never shipped to a reader.
 
 Astro inlines small component scripts into the page HTML and bundles larger ones
 into `dist/_astro/*.js`. `AssetMap` is large enough to be bundled; `UtcClock` is
@@ -156,10 +169,10 @@ because a stored view is read back much later.
 
 ### Argo floats
 
-About two thousand dots, against forty gliders and saildrones — which drives
+About four thousand dots, against sixty gliders and saildrones — which drives
 three decisions:
 
-- **Own file** (`public/map/argo.json`, ~30 KB gzipped). `ocean-assets.json`
+- **Own file** (`public/map/argo.json`, ~61 KB gzipped). `ocean-assets.json`
   is re-fetched every hour by the auto-refresh poll; Argo does not belong in
   that.
 - **Canvas renderer**, not SVG. That many vector elements would compete with
@@ -173,7 +186,7 @@ three decisions:
   silently meant "half the fleet is mid-dive, so leave it off the map".
   Measured against Ifremer on 2026-08-02: **1,992 floats in 5 days, 3,881 in
   10, 4,138 in 15, 4,293 in 30**. The fleet is about 4,200 and five days was
-  showing half of it, with no sign on screen that anything was missing. The
+  showing half of it, with no sign on screen that anything was missing.
   Twelve rather than the nominal ten because floats run late — ice
   avoidance, a missed satellite pass — and a window set exactly to the cycle
   clips whichever tail of the fleet is behind: 3,881 at 10 days against
