@@ -9,9 +9,17 @@ client-side JavaScript — the exceptions are the theme toggle, the photo
 shuffle and lightbox on observation pages, the asset map, and the UTC clock.
 The map is the one heavyweight: gliders from four national data centres,
 NOAA saildrones, the Argo array, animated currents at two depths,
-sea-surface temperature and salinity, isobaths, a detailed coastline and EEZ boundaries — with the
-colour scale, its range, the isobath opacity, and every layer under the
-reader's control.
+sea-surface temperature and salinity, isobaths, a detailed coastline and EEZ
+boundaries — with the colour scale, its range, the isobath opacity, and every
+layer under the reader's control.
+
+It lives in **[`packages/ocean-map`](packages/ocean-map/)**, an npm workspace
+package rather than a page component, so it can be used elsewhere: see its
+[README](packages/ocean-map/README.md),
+[EMBEDDING.md](packages/ocean-map/EMBEDDING.md) for another website, and
+[PORTING-IOS.md](packages/ocean-map/PORTING-IOS.md) for the native app.
+Anything added to it has to keep both of those viable —
+[BOUNDARIES.md](packages/ocean-map/BOUNDARIES.md) says what that means.
 Every push to `main` deploys automatically via GitHub Actions, and a scheduled
 run rebuilds hourly to refresh the map data; the hurricane page picks that up
 on its own without losing your place on the map.

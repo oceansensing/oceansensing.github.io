@@ -9,6 +9,16 @@ right-click readout of depth, current, temperature and jurisdiction.
 Built for <https://oceansensing.org/observations/hurricanes/>, and kept free of
 that site so it can be dropped somewhere else.
 
+| if you are… | read |
+| --- | --- |
+| adding a feature to the map | **[BOUNDARIES.md](BOUNDARIES.md) first** |
+| putting it in another website | [EMBEDDING.md](EMBEDDING.md) |
+| writing the native iOS app | [PORTING-IOS.md](PORTING-IOS.md) |
+
+**Anything added here has to keep both of those last two viable.** The
+separations that make them possible are easy to breach by accident and
+expensive to restore — `BOUNDARIES.md` lists them, with the test behind each.
+
 ## Using it
 
 ```js
@@ -70,11 +80,11 @@ Leaflet's own CSS with it.
   hurricanes, NOAA USVs, IOOS gliders and Argo floats, and the layer switcher
   matches. Fine for another deployment reading the same `dataBase`; a
   blocker for one with different platforms.
-- **It is one 2,700-line file.** The Leaflet-independent parts — colour ramps,
-  coordinate formatting, grid sampling, tile selection — are worth pulling out
-  as their own modules, and not only for tidiness: an iOS port would reuse
-  every one of them and reimplement only the drawing. Keep new logic that does
-  not touch `L.` out of the Leaflet path.
+- **`index.ts` is still ~2,700 lines.** The renderer-independent parts are
+  out — `geo.ts`, `ramp.ts`, `tiles.ts`, `schema.ts` — but what remains is one
+  long Leaflet adapter. Splitting it further is tidiness rather than capability
+  now, since a native port rewrites that layer anyway. Keep new logic that does
+  not touch `L.` out of it regardless: see S1 in `BOUNDARIES.md`.
 
 ## Layout
 

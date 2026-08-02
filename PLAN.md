@@ -30,6 +30,19 @@ Above the map, an active-storm status line that updates without a reload;
 beside that, a server-synchronised UTC clock. The page refreshes itself when
 a new build lands, keeping your basemap, layers and position.
 
+The map is no longer part of the page. It is `packages/ocean-map`, an npm
+workspace package — configurable, multiple-instances-per-page, self-styling,
+fully typed against a published data contract, with the renderer-independent
+half split out so a native port can keep it. `AssetMap.astro` is 86 lines of
+placement. The package carries its own hand-offs: `EMBEDDING.md` for another
+website, `PORTING-IOS.md` for the iOS app, and `BOUNDARIES.md` for anyone
+adding to it — those separations are what keep the other two possible, and
+they are easy to breach by accident.
+
+`npm run verify` stands at 844 checks across nine steps: build, type-check,
+docs, the renderer-independent units, the published data contract, colour
+contrast, the rendered map, two maps on a page, and the clock.
+
 ## Open items
 
 ### Content the lab needs to supply
@@ -55,6 +68,21 @@ a new build lands, keeping your basemap, layers and position.
   chase." That is plausible and conventional, but it is not sourced and it is
   the kind of claim a PI should sign off on. Same for "where blooms
   concentrate and where conventional platforms struggle to sample."
+
+### Next, and who it needs
+
+- **The site's own content is now the gap, not the map.** Two people have no
+  photograph (`james-guymon`, `jonathan-williams`), Jonathan Williams' bio is
+  a placeholder, two BibTeX entries are `% UNVERIFIED` — reconstructed from
+  the old site rather than DOI-negotiated — and the HAB page carries unsourced
+  process claims. The citations can be chased without anyone's help; the
+  photographs cannot.
+- **Two map improvements are deliberately not done**, and both are recorded in
+  `packages/ocean-map/README.md`. The module could build its own chrome, which
+  would reduce a second deployment to one `<div>` — worth nothing to the iOS
+  port, which is why it is last. And the platform layers assume this fleet;
+  making them pluggable is blocked on a second use defining what it needs
+  rather than on effort.
 
 ### Decisions to make
 

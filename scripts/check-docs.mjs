@@ -11,7 +11,19 @@
  */
 import fs from 'node:fs';
 
-const DOCS = ['README.md', 'CLAUDE.md', 'PLAN.md'];
+/* The package's own docs are checked too. They are hand-offs for work nobody
+   has started yet — a second website, and the iOS app — so they are exactly
+   the documents most likely to rot unnoticed: no one is reading them week to
+   week to catch a path that moved. */
+const DOCS = [
+  'README.md',
+  'CLAUDE.md',
+  'PLAN.md',
+  'packages/ocean-map/README.md',
+  'packages/ocean-map/BOUNDARIES.md',
+  'packages/ocean-map/EMBEDDING.md',
+  'packages/ocean-map/PORTING-IOS.md',
+];
 const WORKFLOW = '.github/workflows/deploy.yml';
 
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));

@@ -50,6 +50,11 @@ broken. It verifies that every `npm run …` and every backticked repo path in
 across `astro.config.mjs`, `src/config.ts` and the README, and that the deploy
 workflow still contains the gate the README promises.
 
+It covers the package's own docs too — `packages/ocean-map/README.md`,
+`BOUNDARIES.md`, `EMBEDDING.md` and `PORTING-IOS.md`. Those are hand-offs for
+work nobody has started, so they are the documents most likely to rot
+unnoticed: no one reads them week to week to catch a path that moved.
+
 Paths are checked **with and without their directory**. Prose names scripts
 both ways, and a rename leaves the bare mentions dangling while every full
 path still resolves — which is how three references to a since-renamed
@@ -118,6 +123,18 @@ inlined. The two test harnesses locate their code accordingly — if a component
 crosses that threshold, its harness needs updating.
 
 ### The map (`packages/ocean-map/`, placed by `src/components/AssetMap.astro`)
+
+> **Before changing the map, read `packages/ocean-map/BOUNDARIES.md`.** The
+> package exists to be used twice more — in another website, and as a native
+> iOS app — and both depend on separations that are easy to breach by accident
+> and expensive to restore. Every rule there has a test behind it and every one
+> was learned by breaking it. `packages/ocean-map/EMBEDDING.md` and
+> `packages/ocean-map/PORTING-IOS.md` are the hand-offs for those two jobs.
+>
+> The short form: renderer-independent logic goes in `geo.ts`, `ramp.ts`,
+> `tiles.ts` or `schema.ts` and never imports Leaflet or the DOM; every fetch
+> goes through `dataBase`; file shapes change in `schema.ts` first; colours live
+> in the palette; nothing is document-scoped or assumes a single map.
 
 **The map is an npm workspace package now; the component is its placement on
 this site.** `packages/ocean-map` is `@c4po/ocean-map`, imported by name, with
