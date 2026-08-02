@@ -323,6 +323,7 @@ const restoredBase = !!host.querySelector('.leaflet-tile-pane img[src*="arcgison
 let popupHtml = '';
 let popupDepth = '';
 let popupEez = '';
+let gazetteerBeforeEez = null;
 const marker = [...host.querySelectorAll('path')].find(
   (p) => p.getAttribute('fill') === '#f08c00' || p.getAttribute('fill') === '#e8368f'
 );
@@ -335,6 +336,9 @@ if (marker) {
   await new Promise((r) => setTimeout(r, 400));
   popupDepth = host.querySelector('.leaflet-popup-content [data-depth]')?.textContent ?? '';
   popupEez = host.querySelector('.leaflet-popup-content [data-eez]')?.textContent ?? '';
+  // Captured here, not at assertion time: the EEZ block later on turns the
+  // layer on and legitimately does query the gazetteer.
+  gazetteerBeforeEez = gazetteerUrl;
 }
 
 /* Tap targets. The visible dots are a few pixels across — far smaller than
@@ -976,7 +980,22 @@ const eezLayer = await (async () => {
   toggle?.querySelector('input')?.click();
   await new Promise((r) => setTimeout(r, 900));
   const pane = host.querySelector('.leaflet-eez-pane');
+  // With the layer on, the readout should name the jurisdiction — and say
+  // "high seas" where there is none rather than reporting a failure.
+  host._map.closePopup();
+  host._map.fire('contextmenu', { latlng: window.L.latLng(36.5, -74.5) });
+  await new Promise((r) => setTimeout(r, 400));
+  const jurisdictionOn = host.querySelector('.point-readout [data-eez]')?.textContent ?? '';
+  host._map.closePopup();
+  host._map.fire('contextmenu', { latlng: window.L.latLng(30.0, -45.0) });
+  await new Promise((r) => setTimeout(r, 400));
+  const openOcean = host.querySelector('.point-readout [data-eez]')?.textContent ?? '';
+  host._map.closePopup();
+
   const out = {
+    jurisdictionOn,
+    openOcean,
+    askedGazetteer: /typeID=70/.test(gazetteerUrl ?? ''),
     offered: !!toggle,
     offByDefault: before === 0,
     hasPane: !!pane,
@@ -991,16 +1010,6 @@ const eezLayer = await (async () => {
   toggle?.querySelector('input')?.click();
   await new Promise((r) => setTimeout(r, 300));
   return out;
-})();
-
-/* The high seas: no EEZ, reported as an answer rather than an error. Most of
-   this fleet works out there, so a lookup that read "unavailable" over open
-   ocean would be wrong far more often than right. */
-const highSeas = await (async () => {
-  host._map.closePopup();
-  host._map.fire('contextmenu', { latlng: window.L.latLng(30.0, -45.0) });
-  await new Promise((r) => setTimeout(r, 400));
-  return host.querySelector('.point-readout [data-eez]')?.textContent ?? '';
 })();
 
 const globalReset = await (async () => {
@@ -1086,9 +1095,11 @@ const checks = [
   ['asset popup reports the current there', /Current/.test(popupHtml)],
   // -2431.5 from the stub, rounded: 2,432.
   ['asset popup fills the depth in from the service', /2,432 m deep/.test(popupDepth)],
-  ['asset popup names the EEZ it is in', /United States EEZ/.test(popupEez)],
-  ['the EEZ query asks for the EEZ record alone, not the whole gazetteer',
-    /typeID=70/.test(gazetteerUrl ?? '')],
+  /* The row follows the layer. With the EEZ layer off — the default — a
+     popup should carry no jurisdiction at all and should not have asked the
+     gazetteer for one. */
+  ['no jurisdiction row while the EEZ layer is off', popupEez === ''],
+  ['and no request made for it either', gazetteerBeforeEez === null],
   ['a near miss falls outside the drawn dot', dotCoversOffset === false],
   [`tap target catches a miss by ${OFFSET} px`, targetCoversOffset === true],
   ['tap target opens the same detail as the dot', tapPopupMatches === true],
@@ -1292,8 +1303,12 @@ const checks = [
     String(scaleControls.pinnedAfterPan) === '5,9'],
   ['Auto hands the scale back to the view',
     !!scaleControls.backToAuto && String(scaleControls.backToAuto) !== '5,9'],
+  ['with the layer on, the readout names the jurisdiction',
+    /United States EEZ/.test(eezLayer.jurisdictionOn)],
   ['a point outside every EEZ reads as high seas, not an error',
-    /high seas/.test(highSeas)],
+    /high seas/.test(eezLayer.openOcean)],
+  ['the EEZ query asks for the EEZ record alone, not the whole gazetteer',
+    eezLayer.askedGazetteer],
   ['an EEZ boundary layer is offered, off by default',
     eezLayer.offered && eezLayer.offByDefault],
   ['EEZ boundaries sit above the fields and below the platforms',

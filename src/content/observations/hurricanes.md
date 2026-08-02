@@ -55,7 +55,7 @@ follow whatever water is on screen.
 
 **Boundaries**
 
-- [Marine Regions](https://www.marineregions.org/) (VLIZ) — Exclusive Economic Zone boundaries, drawn as lines rather than filled zones so the ocean field underneath stays readable. Their gazetteer also answers which country's EEZ a given point falls in, which is what the popups report
+- [Marine Regions](https://www.marineregions.org/) (VLIZ) — Exclusive Economic Zone boundaries, drawn as lines rather than filled zones so the ocean field underneath stays readable. Their gazetteer also answers which country's EEZ a given point falls in — reported in the popups while the EEZ layer is switched on
 
 **Basemaps**
 

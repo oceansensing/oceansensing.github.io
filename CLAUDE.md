@@ -758,7 +758,10 @@ only: a track or a forecast cone has no single position to sample, and the
 reader can right-click anywhere along one.
 
 **Whose water it is** comes from Marine Regions' REST gazetteer, one point at
-a time, alongside the depth lookup. Their WMS `GetFeatureInfo` would be the
+a time, alongside the depth lookup — and **only while the EEZ layer is on**,
+for the same reason the temperature row waits for a temperature layer. No
+row, and no request either: a reader who has not asked about maritime
+boundaries is not asking here. Their WMS `GetFeatureInfo` would be the
 obvious route and is unusable: it sends no `access-control-allow-origin`, so
 a browser cannot read it — the same wall GEBCO's put up. The REST endpoint
 sends `*`. `typeID=70` narrows the answer to the EEZ record alone: **603

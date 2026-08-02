@@ -1676,7 +1676,11 @@ import 'leaflet/dist/leaflet.css';
       return (
         `<dl class="ocean">` +
         `<dt>Seafloor</dt><dd data-depth>fetching…</dd>` +
-        `<dt>Jurisdiction</dt><dd data-eez>fetching…</dd>` +
+        /* Only when the EEZ layer is on, for the same reason the temperature
+           row waits for a temperature layer: a reader who has not asked about
+           maritime boundaries is not asking about them here either, and the
+           row costs a request to fill. */
+        (map.hasLayer(eez) ? `<dt>Jurisdiction</dt><dd data-eez>fetching…</dd>` : '') +
         /* Named for the depth actually sampled — the reader may have the
            60 m field on, and calling that "surface current" would be wrong
            in a way nothing on screen would give away. */
@@ -1740,6 +1744,8 @@ import 'leaflet/dist/leaflet.css';
        reported as such — anything else would read as though the lookup
        broke over exactly the water where most of these platforms work. */
     const fillEez = (popup: L.Popup, ll: L.LatLng) => {
+      // No row, no request. oceanRows only writes the row when the layer is on.
+      if (!map.hasLayer(eez)) return;
       const cell = () => popup.getElement()?.querySelector('[data-eez]');
       const lon = ((((ll.lng + 180) % 360) + 360) % 360) - 180;
       const url =
