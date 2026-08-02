@@ -104,9 +104,11 @@ a new build lands, keeping your basemap, layers and position.
 ### Known limits
 
 - **The isobaths are a reference layer, not a chart.** They are contoured
-  from GEBCO 2026 at 15", but the deep tier is sampled at 0.033° and the
-  shallow tier at 0.008°, so neither is survey resolution and neither should
-  be navigated on. Contours smaller than 0.1° (200-1000 m) or 0.3° (2000 m
+  from GEBCO 2026 at 15" but sampled at 0.008° (~925 m) for the tiles and
+  0.033° for the global overview, so neither is survey resolution and
+  neither should be navigated on. At 107 MB raw they are also the largest
+  thing in the repo; halving the sampling would halve that and roughly
+  double the vertex spacing, from 2.0 screen pixels at zoom 7 to about 4. Contours smaller than 0.1° (200-1000 m) or 0.3° (2000 m
   and below) are dropped as sampling speckle, so small seamounts and abyssal
   hills are absent by design. The 8000 and 10,000 m levels exist only in the
   trenches — 26 and 3 lines globally — so most of the map shows none.

@@ -213,11 +213,13 @@ files['tiles-60m/index'] = { ...files['tiles/index'], depth: 60 };
     data: Array.from({ length: nx * ny }, () => 7.5),
   };
 }
-/* Isobaths. Both tiers are stubbed, and the two carry different depths on
-   purpose: the deep file is 200/4000 m and a tile is 20/100 m, so a tier
-   reading the wrong file draws contours that are the wrong count in the
-   wrong place rather than merely "something got drawn" — which is the bug
-   the 60 m current layer shipped with when its tile path was hardcoded. */
+/* Isobaths. Both tiers are stubbed at *disjoint latitudes*, which is what
+   makes the coarse/fine swap testable from the outside: the global file
+   draws only at 22-24 N and a tile only at 25-27 N, so which tier is on the
+   map can be read off the geometry rather than off an internal handle. A
+   tier reading the wrong file lands in the wrong place rather than merely
+   "something got drawn" — the bug the 60 m current layer shipped with when
+   its tile path was hardcoded. */
 const bathyFetched = [];
 const ring = (lon, lat) => [
   [lon, lat], [lon + 2, lat], [lon + 2, lat + 2], [lon, lat + 2], [lon, lat],
@@ -229,15 +231,17 @@ const contour = (d, lon, lat) => ({
 });
 const bathyDeepGeo = {
   type: 'FeatureCollection',
-  features: [contour(200, -78, 21), contour(4000, -70, 21)],
+  features: [contour(200, -78, 22), contour(4000, -70, 22)],
 };
+// A tile carries every level, deep ones included — that is the whole point
+// of the change, and why the global set has to stand down when one is up.
 const bathyTileGeo = {
   type: 'FeatureCollection',
-  features: [contour(20, -76, 25), contour(100, -74, 25)],
+  features: [contour(20, -76, 25), contour(100, -74, 25), contour(4000, -72, 25)],
 };
 const bathyIndex = {
   size: 20, west: -180, south: -80, north: 85, minZoom: 6,
-  levels: [20, 40, 60, 80, 100],
+  levels: [20, 40, 60, 80, 100, 200, 400, 600, 800, 1000, 2000, 4000, 6000, 8000, 10000],
   available: ['20_-80', '20_-100', '0_-80', '0_-100', '40_-80', '40_-100'],
 };
 
@@ -1153,9 +1157,10 @@ const bathyToggle = overlayLabelled(/Isobaths/);
 bathyToggle?.querySelector('input')?.click();
 await new Promise((r) => setTimeout(r, 400));
 
-// Zoom 7 is inside the shallow tier; the deep file is drawn at every zoom.
-host._map.setView([25, -75], 7, { animate: false });
-await new Promise((r) => setTimeout(r, 700));
+// Zoom 7 is inside the tile tier, and the view spans both stubs' latitudes,
+// so if both tiers drew at once both would be visible.
+host._map.setView([24.5, -75], 7, { animate: false });
+await new Promise((r) => setTimeout(r, 900));
 
 const bathyLayersAt7 = Object.values(host._map._layers).filter((l) =>
   /map-bathy/.test(l.options?.className ?? '')
@@ -1171,8 +1176,8 @@ const bathyAtLat = (lo, hi) =>
     const c = l.getBounds?.()?.getCenter?.();
     return c && c.lat > lo && c.lat < hi;
   }).length;
-const deepDrawn = bathyAtLat(21, 24);
-const shallowDrawn = bathyAtLat(25, 28);
+const coarseDrawnAtFineZoom = bathyAtLat(21.5, 24.5);
+const fineDrawn = bathyAtLat(24.8, 28);
 
 /* No colour on any contour. CSS owns the stroke so a theme switch restyles
    the layer with no redraw, and Leaflet's own default is the only `color`
@@ -1182,15 +1187,18 @@ const bathyColoured = bathyLayersAt7.filter(
   (l) => l.options?.color && l.options.color !== '#3388ff'
 );
 
-// Below the tile threshold the shallow tier stands down and its layers go.
+// Below the tile threshold the fine tier stands down and the coarse one
+// comes back, so the map is never left with no isobaths at all.
 const tilesBeforeZoomOut = bathyTilesAsked.length;
-host._map.setView([25, -75], 4, { animate: false });
-await new Promise((r) => setTimeout(r, 500));
-const shallowAfterZoomOut = bathyAtLat(25, 28) === 0 ||
+host._map.setView([24.5, -75], 4, { animate: false });
+await new Promise((r) => setTimeout(r, 700));
+const atLat = (lo, hi) =>
   Object.values(host._map._layers).filter((l) => {
     const c = l.getBounds?.()?.getCenter?.();
-    return /map-bathy/.test(l.options?.className ?? '') && c && c.lat > 25 && c.lat < 28;
-  }).length === 0;
+    return /map-bathy/.test(l.options?.className ?? '') && c && c.lat > lo && c.lat < hi;
+  }).length;
+const fineGoneAtCoarseZoom = atLat(24.8, 28) === 0;
+const coarseBackAtCoarseZoom = atLat(21.5, 24.5) > 0;
 const noNewTilesBelowThreshold =
   bathyFetched.filter((u) => /bathy-tiles\/-?\d/.test(u)).length === tilesBeforeZoomOut;
 
@@ -1224,8 +1232,10 @@ const checks = [
     bathyRequestsBeforeSwitchOn === 0],
   ['switching them on fetches the global deep file once',
     bathyDeepAsked === 1],
-  ['the deep tier draws at every zoom, the shallow tier only at zoom >= 6',
-    deepDrawn > 0 && shallowDrawn > 0 && bathyTilesAsked.length > 0],
+  ['at zoom >= 6 the fine tiles draw and the coarse global set stands down',
+    fineDrawn > 0 && bathyTilesAsked.length > 0 && coarseDrawnAtFineZoom === 0],
+  ['and below the threshold the coarse set comes back',
+    coarseBackAtCoarseZoom && fineGoneAtCoarseZoom],
   ['each depth is one multi-line path, not one layer per contour',
     bathyLayersAt7.length > 0 && bathyLayersAt7.length < 40],
   ['contours carry a class and no colour, so CSS can theme them',
@@ -1235,8 +1245,7 @@ const checks = [
     paneSvgUnclamped],
   ['isobaths sit above the scalar fields and below the currents',
     bathyPaneZ('bathy') > bathyPaneZ('sst') && bathyPaneZ('bathy') < bathyPaneZ('currents')],
-  ['below the tile threshold the shallow tier stands down',
-    shallowAfterZoomOut && noNewTilesBelowThreshold],
+  ['no tiles are requested below the threshold', noNewTilesBelowThreshold],
   ['the opacity slider shows with the layer and moves the pane',
     bathySliderShown && bathyOpacityApplied],
   ['and the opacity it sets rides in the saved view', bathyOpacitySaved],

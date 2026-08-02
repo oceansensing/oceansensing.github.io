@@ -1163,6 +1163,7 @@ import 'leaflet/dist/leaflet.css';
       attribution:
         '<a href="https://www.gebco.net/">GEBCO</a> 2026 — isobaths',
     });
+    // The coarse global set, and the fine per-view set. Only one is ever on.
     const bathyDeep = L.layerGroup().addTo(bathy);
     const bathyShallow = L.layerGroup().addTo(bathy);
 
@@ -1238,11 +1239,11 @@ import 'leaflet/dist/leaflet.css';
           syncBathyTiles();
         })
         .catch(() => {
-          // No shallow tiles published. The deep contours stand on their own.
+          // No tiles published. The coarse global file stands on its own.
         });
     };
 
-    /* Which shallow tiles the view touches. Overlap rather than containment,
+    /* Which tiles the view touches. Overlap rather than containment,
        for the same reason the current tiles use overlap: a viewport narrower
        than a tile still straddles seams, and requiring containment drops the
        whole tier as you pan. */
@@ -1263,6 +1264,27 @@ import 'leaflet/dist/leaflet.css';
       return keys;
     };
 
+    /* Finest that fits, the same rule the current and field grids follow.
+       A tile carries *every* level at 0.004 deg — a 2 px vertex spacing at
+       zoom 7 — while the global file carries only the deep ones at 0.04, and
+       drawing both would put a coarse polygonal line under a fine one, offset
+       by a few pixels, on every contour they share.
+
+       The swap waits until the tiles it is waiting on have actually drawn,
+       rather than firing when they are merely requested: hiding the global
+       set the moment a fetch starts leaves the map briefly bare, which is
+       worse than a moment of the coarse line. */
+    const bathyTilesDrawn = () => {
+      const wanted = bathyTileKeys();
+      return wanted.length > 0 && wanted.every((k) => (bathyLoaded.get(k)?.length ?? 0) > 0);
+    };
+
+    const settleBathyTiers = () => {
+      const fine = bathyTilesDrawn();
+      if (fine && bathy.hasLayer(bathyDeep)) bathy.removeLayer(bathyDeep);
+      if (!fine && !bathy.hasLayer(bathyDeep)) bathy.addLayer(bathyDeep);
+    };
+
     const syncBathyTiles = () => {
       if (!map.hasLayer(bathy)) return;
       loadBathyIndex();
@@ -1281,11 +1303,14 @@ import 'leaflet/dist/leaflet.css';
             // Panned off it while the request was in flight; drop the answer.
             if (!bathyLoaded.has(key)) return;
             bathyLoaded.set(key, drawContours(geo, bathyShallow));
+            settleBathyTiers();
           })
           .catch(() => {
             bathyLoaded.delete(key);
+            settleBathyTiers();
           });
       }
+      settleBathyTiers();
     };
 
     const coastline = L.layerGroup();

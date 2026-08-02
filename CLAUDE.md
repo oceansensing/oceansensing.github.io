@@ -518,18 +518,27 @@ array **contiguous and uncompressed** (7,464,960,000 bytes of data in a
 7,466,018,396-byte file), so a windowed read is a seek and no tile needs the
 whole grid in memory.
 
-**Two tiers, split by depth rather than by region**, because the shallow
-contours are almost all of the bytes and none of the use at basin scale:
+**Two tiers, and the split is by detail rather than by depth** — finest that
+fits, the same rule the current and field grids follow:
 
-| tier | levels | spacing | size | fetched |
-| --- | --- | --- | --- | --- |
-| `bathy-deep.json` | 200–10000 m | stride 8 (0.033°) | 2.9 MB gz | on switch-on |
-| `bathy-tiles/<s>_<w>.json` | 20–100 m | stride 2 (0.008°) | 16 KB gz median | per view, zoom ≥ 6 |
+| tier | levels | sampling | tolerance | size | fetched |
+| --- | --- | --- | --- | --- | --- |
+| `bathy-tiles/<s>_<w>.json` | **all 15** | stride 2 (0.008°) | 0.004° | 81 KB gz median, 747 KB max | per view, zoom ≥ 6 |
+| `bathy-deep.json` | 200–10000 m | stride 8 (0.033°) | 0.04° | 2.0 MB gz | on switch-on |
 
-144 tiles of 162 have shelf water; the rest are pure ocean or land and are
-absent from the index. Whole layer: 47 MB raw, ~9 MB compressed in git.
-Neither tier is fetched with the page — the layer is **off by default** and a
-reader who never asks for the seafloor never pays for it.
+161 tiles of 162; the one missing is pure land. Whole layer **107 MB raw,
+22.6 MB gzipped** — the single largest thing in the repo, and the price of
+contours that read as curves. A reader pays the global file plus the one to
+four tiles in view, never the set, and nothing at all unless they switch the
+layer on: it is **off by default**.
+
+**The two tiers are mutually exclusive, and the swap waits for pixels.**
+A tile carries every level, so drawing the global file underneath would put
+a coarse polygonal line a few pixels off a fine one on every contour they
+share. `settleBathyTiers()` drops the global set once the tiles in view have
+actually *drawn* — not when they are merely requested, since hiding it at
+request time leaves the map briefly bare, which is worse than a moment of
+the coarse line.
 
 **Contours of a nearly flat plain shatter, and that had to be filtered.**
 4000 m is the abyssal mean, so unfiltered that one level came out as 32,644

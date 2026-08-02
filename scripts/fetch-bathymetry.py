@@ -22,14 +22,19 @@ GEBCO's netCDF is HDF5 underneath and its elevation array is contiguous and
 uncompressed — 7,464,960,000 bytes of data in a 7,466,018,396-byte file — so
 a windowed read is a seek, and no tile needs the whole grid in memory.
 
-Two tiers, because the shallow contours are almost all of the bytes and none
-of the use at basin scale. Measured over five contrasting regions and
-projected across the world ocean: 200 m and below comes to ~2.9 MB gzipped,
-while 20-100 m comes to ~6 MB — a 20 m isobath threads every sandbar, and
-at zoom 4 that is a smear. So the deep set is one global file fetched when
-the layer is switched on, and the shallow set is tiled on the same 20 deg
-lattice the current and field tiles already use, fetched per view at zoom 6
-and in. Per tile that is well under what one current tile costs.
+Two tiers, and the split is by *detail*, not by depth. A tile carries every
+level at stride 2 and a 0.004 deg tolerance — a 2.0 px vertex spacing at
+zoom 7, which is smooth — and there are 161 of them on the same 20 deg
+lattice the current and field tiles use, 99 MB raw and 20.6 MB gzipped, a
+median of 81 KB gzipped each. The global file carries only the deep levels
+at stride 8 and 0.04 deg, 2.0 MB gzipped, and exists for the zooms below the
+tiles. A reader pays for the one global file plus the one to four tiles in
+view, never the set.
+
+The first cut had it the other way round — deep levels globally, shallow
+ones tiled — and it looked wrong for the reason recorded under epsilon()
+below: a contour traced through a 0.033 deg lattice is polygonal before any
+simplification touches it, and no tolerance recovers that.
 
 The 0 m line is deliberately absent: public/map/coastline.json is already
 committed, already simplified, and cartographically cleaner than anything
@@ -57,17 +62,19 @@ OUT = pathlib.Path(__file__).resolve().parent.parent / 'public' / 'map'
 DEEP_FILE = OUT / 'bathy-deep.json'
 TILE_DIR = OUT / 'bathy-tiles'
 
-# The levels the map offers. Shallow ones go in the tiles, the rest in the
-# global file.
+# The levels the map offers. The split is not what goes where — the tiles
+# carry *every* level at full detail, and the global file carries the deep
+# ones coarsely for the zooms the tiles do not cover.
 SHALLOW = [20, 40, 60, 80, 100]
 DEEP = [200, 400, 600, 800, 1000, 2000, 4000, 6000, 8000, 10000]
+ALL = SHALLOW + DEEP
 
 # 8000 and 10000 exist only in the trenches — the Mariana, Tonga, Kuril,
 # Philippine and a few others. Almost every tile and most of the globe has
 # none, which is correct rather than a bug.
 
 
-def epsilon(depth: int) -> float:
+def epsilon(depth: int, tile: bool = False) -> float:
     """Douglas-Peucker tolerance in degrees.
 
     Detail should match the scale the contour is read at: a 4000 m isobath
@@ -85,20 +92,25 @@ def epsilon(depth: int) -> float:
     with a median segment of 16 screen pixels at zoom 7 and a p90 over 25 —
     visibly polygonal, which is exactly how it looked.
 
-    0.015/0.018 brings that to a 6.9 px median and a 16 px p90, for 2.9 MB
-    gzipped against 1.25 — the deep levels alone go from 10-11 px to 7.4.
-    Sampling finer does not help here and was measured too: stride 4 at the
-    same tolerance only moves the median from 8.2 px to 7.6, because the
-    tolerance and not the grid is what is binding. Which is also why the
-    deep levels needed a tighter tolerance than the 200-1000 m ones rather
-    than a looser one, despite being the smoother features: they are drawn
-    over abyssal plain where a chord can run a long way before it strays.
+    Tightening it to 0.015/0.018 got the median to 6.9 px, and that was as
+    far as tolerance alone goes: at stride 8 the contour is traced through a
+    0.033 deg lattice, so its *shape* is polygonal before any simplification
+    touches it. Past that point the sampling is what binds, which is why the
+    tiles below are built at stride 2 and this tolerance stops mattering to
+    anything a reader sees at zoom 6 and in.
+
+    So there are two answers, per tier. A tile is read at zoom 6+ and gets
+    0.004 deg — measured, a 2.0 px median vertex spacing at zoom 7, which is
+    smooth. The global file is only ever drawn below zoom 6, where 0.04 deg
+    is under two pixels and anything finer is bytes nobody can see.
     """
+    if tile:
+        return 0.004
     if depth <= 100:
         return 0.01
     if depth <= 1000:
-        return 0.015
-    return 0.018
+        return 0.02
+    return 0.04
 
 
 def min_extent(depth: int) -> float:
@@ -129,12 +141,12 @@ def min_extent(depth: int) -> float:
 
 # Sampling strides into the 15" grid, per tier.
 #
-# Shallow uses stride 2 (~925 m) rather than every cell. Measured on the US
-# East Coast and Gulf, the worst shelf in the Atlantic: every cell gives 113
-# KB gzipped against 91 at stride 2, for detail that sits below the 1.1 km
-# simplification tolerance either way. Deep uses stride 8 (~3.7 km), which is
-# still finer than its own coarsest tolerance.
-SHALLOW_STRIDE = 2
+# Tiles sample at stride 2 (~925 m). Stride 1 is the full 15" grid and was
+# measured against it: 1.7 px median vertex spacing against 2.0, for 25%
+# more bytes — the tolerance has taken over by then. The global file samples
+# at stride 8 (~3.7 km), which is far finer than anything visible at the
+# zooms it serves.
+TILE_STRIDE = 2
 DEEP_STRIDE = 8
 
 # Same lattice as the current and field tiles, so a reader who has one has
@@ -208,7 +220,7 @@ def simplify(points: np.ndarray, eps: float) -> np.ndarray:
 
 
 def contours(z: np.ndarray, lat: np.ndarray, lon: np.ndarray,
-             levels: list[int]) -> list[dict]:
+             levels: list[int], tile: bool = False) -> list[dict]:
     """Contour a grid of elevations into simplified GeoJSON LineStrings."""
     fig = plt.figure()
     try:
@@ -216,7 +228,7 @@ def contours(z: np.ndarray, lat: np.ndarray, lon: np.ndarray,
         features = []
         for level, segments in zip(cs.levels, cs.allsegs):
             depth = int(round(float(level)))
-            eps = epsilon(depth)
+            eps = epsilon(depth, tile)
             floor = min_extent(depth)
             for seg in segments:
                 if len(seg) < 4:
@@ -288,19 +300,18 @@ def build_tile(grid: Grid, south: int, west: int) -> tuple[int, int, int]:
     lat, lon = grid.lat, grid.lon
     # A margin, so a contour does not stop dead at the tile edge and leave a
     # gap against its neighbour. Four cells is under two simplified points.
-    margin = 4 * SHALLOW_STRIDE
+    margin = 4 * TILE_STRIDE
     la0 = max(0, int(np.searchsorted(lat, south)) - margin)
     la1 = min(lat.size, int(np.searchsorted(lat, south + size)) + margin)
     lo0 = max(0, int(np.searchsorted(lon, west)) - margin)
     lo1 = min(lon.size, int(np.searchsorted(lon, west + size)) + margin)
 
-    z, sub_lat, sub_lon = grid.window(la0, la1, lo0, lo1, SHALLOW_STRIDE)
+    z, sub_lat, sub_lon = grid.window(la0, la1, lo0, lo1, TILE_STRIDE)
 
-    depth = -z
-    if not np.any((depth >= SHALLOW[0]) & (depth <= SHALLOW[-1])):
-        return 0, 0, 0  # no shelf water — nothing to draw, and no file
+    if not np.any(-z >= ALL[0]):
+        return 0, 0, 0  # no water deep enough for any level — no file
 
-    features = contours(z, sub_lat, sub_lon, SHALLOW)
+    features = contours(z, sub_lat, sub_lon, ALL, tile=True)
     if not features:
         return 0, 0, 0
     written = write(TILE_DIR / f'{south}_{west}.json', features)
@@ -310,8 +321,8 @@ def build_tile(grid: Grid, south: int, west: int) -> tuple[int, int, int]:
 
 def build_tiles(grid: Grid) -> None:
     cells = tile_cells()
-    print(f'shallow contours {SHALLOW} over {len(cells)} tiles at stride '
-          f'{SHALLOW_STRIDE} ({(grid.lat[1] - grid.lat[0]) * SHALLOW_STRIDE:.4f} deg)')
+    print(f'all {len(ALL)} levels over {len(cells)} tiles at stride '
+          f'{TILE_STRIDE} ({(grid.lat[1] - grid.lat[0]) * TILE_STRIDE:.4f} deg)')
     written: list[str] = []
     empty = 0
     total = 0
@@ -326,10 +337,10 @@ def build_tiles(grid: Grid) -> None:
         print(f'  {south}_{west}.json: {lines} lines, {points} points, '
               f'{size / 1024:.0f} KB')
 
-    index = dict(TILES, levels=SHALLOW, available=sorted(written))
+    index = dict(TILES, levels=ALL, available=sorted(written))
     TILE_DIR.mkdir(parents=True, exist_ok=True)
     (TILE_DIR / 'index.json').write_text(json.dumps(index, separators=(',', ':')))
-    print(f'wrote {len(written)} tiles ({empty} with no shelf water), '
+    print(f'wrote {len(written)} tiles ({empty} with no ocean), '
           f'{total / 1024 / 1024:.1f} MB')
 
 
