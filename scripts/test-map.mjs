@@ -160,10 +160,12 @@ files['tiles/index'] = {
 }
 files['tiles-60m/index'] = { ...files['tiles/index'], depth: 60 };
 
-/* A stand-in Navy SST field. HYCOM is refusing data reads, so the real one
-   could not be generated — and a constant is better here anyway: it differs
-   from OISST everywhere, so the readout naming one field while sampling the
-   other cannot pass. */
+/* A stand-in Navy SST field, kept synthetic on purpose even though the real
+   one now builds: a constant differs from OISST everywhere, so the readout
+   naming one field while sampling the other cannot pass. Real data would
+   agree with OISST to about a degree — the two were measured within 1 C at
+   five separated points — which is exactly what makes it a poor discriminator
+   for this check. */
 {
   const nx = 360;
   const ny = 166;

@@ -81,6 +81,22 @@ jobs:
         continue-on-error: true
         run: python3 scripts/fetch-currents.py --tiles
 
+      # Navy SST tiles, keyed on the same model run — they come from the same
+      # forecast, so they go stale together. OISST has no tile tier: its
+      # regional grids are already at its native 1/4 degree.
+      - name: Restore Navy SST tiles
+        id: ssttiles
+        if: steps.model.outputs.run != ''
+        uses: actions/cache@v4
+        with:
+          path: public/map/tiles-sst-navy
+          key: sst-tiles-${{ steps.model.outputs.run }}
+
+      - name: Build Navy SST tiles
+        if: steps.model.outputs.run != '' && steps.ssttiles.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: python3 scripts/fetch-sst.py --tiles --only=navy
+
       - uses: withastro/action@v3
         with:
           node-version: 22

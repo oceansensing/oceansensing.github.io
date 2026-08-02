@@ -38,6 +38,7 @@ import math
 import pathlib
 import socket
 import sys
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -233,13 +234,19 @@ def frange(start: float, stop: float, step: float) -> list[float]:
     return out
 
 
-def newest(product: dict) -> tuple[str, str]:
-    """The time index expression to fetch, and the stamp it corresponds to.
+def newest(product: dict) -> list[tuple[str, str]]:
+    """Candidate time steps to fetch, nearest to now first.
+
+    A list rather than one step, because HYCOM's aggregation is unreliable
+    per step rather than as a whole: measured on 2026-08-02, index 70 served
+    a full global field while index 76 answered 500 "Stale file handle" for
+    the very same request, minutes apart. Picking the nearest step and giving
+    up on failure therefore loses the whole field to one bad member file,
+    when the step an hour either side is fine. The caller walks this list.
 
     ERDDAP understands "last" directly. THREDDS does not, so the Navy product
-    is asked for the step nearest now, the same way the current pipeline picks
-    its step — the forecast runs days ahead, so the last step is not the one
-    anybody wants.
+    is asked for the step nearest now — the forecast runs days ahead, so the
+    last step is not the one anybody wants.
     """
     if product['kind'] == 'erddap':
         body = get(encode(f"{product['base']}.asc?time[last]"), timeout=90)
@@ -253,7 +260,12 @@ def newest(product: dict) -> tuple[str, str]:
         if seconds is None:
             raise RuntimeError('no time value returned')
         stamp = datetime.fromtimestamp(seconds, timezone.utc)
-        return 'last', stamp.strftime('%Y-%m-%dT%H:%M:%SZ')
+        # ERDDAP indexes from the end, so one step back is the only sensible
+        # alternative and its stamp is a day earlier for a daily product.
+        return [
+            ('last', stamp.strftime('%Y-%m-%dT%H:%M:%SZ')),
+            ('last-1', (stamp - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')),
+        ]
 
     das = get(f"{product['base']}.das", timeout=60)
     marker = 'hours since '
@@ -268,8 +280,11 @@ def newest(product: dict) -> tuple[str, str]:
     if not hours:
         raise RuntimeError('no time axis')
     target = (datetime.now(timezone.utc) - epoch).total_seconds() / 3600
-    index = min(range(len(hours)), key=lambda i: abs(hours[i] - target))
-    return str(index), (epoch + timedelta(hours=hours[index])).strftime('%Y-%m-%dT%H:%M:%SZ')
+    order = sorted(range(len(hours)), key=lambda i: abs(hours[i] - target))
+    return [
+        (str(i), (epoch + timedelta(hours=hours[i])).strftime('%Y-%m-%dT%H:%M:%SZ'))
+        for i in order[:8]
+    ]
 
 
 def fetch(product: dict, when: str, y0: int, y1: int, x0: int, x1: int,
@@ -353,26 +368,50 @@ def build(product: dict, when: str, valid: str, out: pathlib.Path,
 
 
 def build_tile(product: dict, when: str, valid: str,
-               south: float, west: float) -> str | None:
-    """One native-resolution tile. Returns its key, or None if it is all land."""
+               south: float, west: float) -> tuple[str | None, str]:
+    """One native-resolution tile.
+
+    Returns (key, outcome) where outcome is 'written', 'empty' or 'failed'.
+    Those last two must not be conflated, and were: a failed fetch was
+    reported as an all-land tile, so a run against a flaky server produced an
+    index listing half the ocean and said "81 empty" as though that were the
+    coastline. The map then quietly falls back to the coarse grid over
+    everything missing, with nothing on screen to say so.
+
+    HYCOM fails per request rather than outright, so a tile is retried before
+    it is believed — and the retries are spaced. Three back-to-back attempts
+    left 24 of 162 tiles missing, because a transient fault is still there a
+    millisecond later; the point of waiting is to let it pass.
+    """
     north = min(south + TILES['size'], TILES['north'])
     east = west + TILES['size']
     key = f'{south:g}_{west:g}'
     out = MAP_DIR / f"tiles-sst-{product['key']}" / f'{key}.json'
-    try:
-        header = build(product, when, valid, out, south, north, west, east,
-                       product['strides']['tile'], wrap=False)
-    except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError):
-        return None
+
+    last = None
+    backoff = [0, 3, 8, 20]
+    for wait in backoff:
+        if wait:
+            time.sleep(wait)
+        try:
+            header = build(product, when, valid, out, south, north, west, east,
+                           product['strides']['tile'], wrap=False)
+            break
+        except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:
+            last = exc
+    else:
+        print(f'  ! tile {key} failed after {len(backoff)} tries: {last}', file=sys.stderr)
+        return None, 'failed'
+
     if header['nx'] < 2 or header['ny'] < 2:
         out.unlink(missing_ok=True)
-        return None
-    # A tile with nothing in it is never written, so the map can skip a
+        return None, 'empty'
+    # A tile with no water in it is never written, so the map can skip a
     # request it knows would 404.
     if not any(v is not None for v in json.loads(out.read_text())['data']):
         out.unlink()
-        return None
-    return key
+        return None, 'empty'
+    return key, 'written' 
 
 
 def build_tiles(product: dict, when: str, valid: str) -> None:
@@ -385,9 +424,11 @@ def build_tiles(product: dict, when: str, valid: str) -> None:
     ]
     print(f"  {len(corners)} tiles, {product['label']}")
     with ThreadPoolExecutor(max_workers=TILES['workers']) as pool:
-        keys = list(pool.map(lambda c: build_tile(product, when, valid, *c), corners))
+        results = list(pool.map(lambda c: build_tile(product, when, valid, *c), corners))
 
-    available = sorted(k for k in keys if k)
+    available = sorted(k for k, _ in results if k)
+    failed = sum(1 for _, why in results if why == 'failed')
+    empty = sum(1 for _, why in results if why == 'empty')
     tile_dir = MAP_DIR / f"tiles-sst-{product['key']}"
     tile_dir.mkdir(parents=True, exist_ok=True)
     (tile_dir / 'index.json').write_text(json.dumps({
@@ -400,12 +441,35 @@ def build_tiles(product: dict, when: str, valid: str) -> None:
         'available': available,
     }, separators=(',', ':')) + '\n')
     total = sum((tile_dir / f'{k}.json').stat().st_size for k in available)
-    print(f'  wrote {len(available)} tiles ({len(corners) - len(available)} empty), '
+    print(f'  wrote {len(available)} tiles ({empty} all land, {failed} failed), '
           f'{total / 1024 / 1024:.1f} MB')
+    if failed:
+        # Loud, and non-zero exit, because a short index is invisible on the
+        # map: it just quietly reads the coarse grid over the missing water.
+        print(f'  ! {failed} tiles missing from the index — the map will fall back '
+              f'to the regional grid over that water', file=sys.stderr)
+        raise RuntimeError(f'{failed} of {len(corners)} tiles failed')
+
+
+def usable_step(product: dict) -> tuple[str, str]:
+    """The first candidate step that actually serves data.
+
+    Probed with a deliberately tiny read rather than the real one: a step
+    that is broken fails on any read, so a few cells are enough to tell, and
+    it costs a fraction of a second against a minute for the global grid.
+    """
+    candidates = newest(product)
+    for when, valid in candidates:
+        try:
+            fetch(product, when, 2000, 2004, 2000, 2004, 2, 2)
+            return when, valid
+        except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:
+            print(f'  step {when} ({valid}) unusable: {exc}', file=sys.stderr)
+    raise RuntimeError(f'no usable time step in {len(candidates)} candidates')
 
 
 def build_product(product: dict, tiles_only: bool) -> None:
-    when, valid = newest(product)
+    when, valid = usable_step(product)
     print(f"{product['label']} — valid {valid}")
 
     if tiles_only:

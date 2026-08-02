@@ -486,11 +486,30 @@ renormalised. Refusing to interpolate beside land was the first attempt and
 it left the open ocean smooth while the whole continental shelf stayed a grid
 of squares.
 
-**Not yet built: the Navy SST tiles.** `--tiles` exists and the client
-follows a tile index when one appears, but no tile run has happened, so that
-tier does not engage and the Navy regional grid stands. OISST needs no such
-run. The Navy field is also untested end to end — HYCOM was returning
-"Stale file handle" for every data read while this was written.
+#### HYCOM fails per request, not outright
+
+Worth knowing before debugging anything against it. Its aggregation serves
+some time steps and not others: measured on 2026-08-02, index 70 returned a
+full global field while index 76 answered 500 "Stale file handle" for the
+identical request, minutes apart, and a small read that had just succeeded
+failed on the next try. Metadata (`.das`, the time axis) keeps working
+throughout, so the server looks healthy.
+
+Two things follow, both in `fetch-sst.py`:
+
+- **The time step is probed before it is used.** `usable_step()` walks the
+  eight steps nearest now, testing each with a handful of cells, and takes
+  the first that answers. Picking the nearest and giving up loses the whole
+  field to one bad member file when the step an hour either side is fine.
+- **A failed tile is not an empty tile.** Those were conflated, and a run
+  against a flaky server wrote 81 of 162 tiles and reported "81 empty" as
+  though that were the coastline. Tiles are retried three times, failures
+  are counted separately, and any failure fails the run — a short index is
+  otherwise invisible, because the map just reads the coarse grid over the
+  missing water and says nothing.
+
+The current pipeline has neither guard yet; it degrades to the previous file
+instead, which is why an outage there shows up as stale rather than wrong.
 
 ### Measuring, and the point readout
 
