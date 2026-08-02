@@ -547,6 +547,13 @@ bearing in degrees true. Escape clears it. Distance and bearing are both
 great-circle: a rhumb line is what you would steer, but quoting the two from
 different geometries invites the reader to combine them.
 
+**Every point asset's popup carries the same ocean block** — seafloor,
+current at whichever depth is showing, and SST when a temperature layer is
+on — under its own details, separated by a rule. One `oceanRows()` builds it
+for both the popups and the readout, so the two cannot drift. Point features
+only: a track or a forecast cone has no single position to sample, and the
+reader can right-click anywhere along one.
+
 **Right-click, or long-press on touch**, reports position, seafloor depth and
 the current **at the depth of whichever animated field is on** — the readout
 names it, because calling 60 m water "surface current" would be wrong with

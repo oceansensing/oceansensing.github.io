@@ -955,7 +955,7 @@ import 'leaflet/dist/leaflet.css';
        and the reader would have to avoid their own assets to measure
        between them. Hence the explicit popup rather than bindPopup: the
        decision has to be made before anything opens. */
-    const showDetail = (layer: L.Path, html: string) => {
+    const showDetail = (layer: L.Path, html: string, withOcean = false) => {
       /* Leaflet hands a click on a feature to the map afterwards as well.
          While measuring that lands the same point twice — a zero-length leg
          reported as "0.00 km" — so the feature has to claim the click. */
@@ -971,7 +971,15 @@ import 'leaflet/dist/leaflet.css';
           addMeasurePoint(at);
           return;
         }
-        L.popup().setLatLng(at).setContent(html).openOn(map);
+        /* Assets carry the state of the water they are sitting in, on top
+           of their own details. Only the point features: a track or a
+           forecast cone has no one position for the ocean to be sampled at,
+           and the reader can right-click anywhere along it. */
+        const popup = L.popup()
+          .setLatLng(at)
+          .setContent(withOcean ? html + oceanRows(at) : html)
+          .openOn(map);
+        if (withOcean) fillDepth(popup, at);
       });
       return layer;
     };
@@ -986,7 +994,9 @@ import 'leaflet/dist/leaflet.css';
           // hides the dot it stands in for.
           className: 'map-tap-target',
         }).addTo(layer),
-        html
+        html,
+        // A tap target only ever stands in for a point asset.
+        true
       );
 
     /* Argo floats: two thousand dots, against forty gliders and saildrones.
@@ -1037,7 +1047,8 @@ import 'leaflet/dist/leaflet.css';
               outbound(
                 `https://fleetmonitoring.euro-argo.eu/float/${float.id}`,
                 'Float details'
-              )
+              ),
+            true
           );
         }
         const count = (data.floats ?? []).length;
@@ -1299,32 +1310,40 @@ import 'leaflet/dist/leaflet.css';
     /* Right-click, or a long press on a touch screen, reports the position.
        Leaflet raises contextmenu for the mouse; iOS Safari does not raise it
        reliably from a long press, so touch is timed here instead. */
-    const describePoint = (ll: L.LatLng) => {
+    /* What the ocean is doing at a point, as popup rows. Shared by the
+       right-click readout and by every asset popup — a reader who clicks a
+       glider wants to know the water it is in, and having that only on
+       right-click meant the two halves of the same question were answered by
+       two different gestures. Seafloor comes back asynchronously, so it goes
+       in as a placeholder and fillDepth patches it. */
+    const oceanRows = (ll: L.LatLng) => {
       const water = currentAt(ll);
       const temp = sstAt(ll);
-      const popup = L.popup({ className: 'point-readout' })
-        .setLatLng(ll)
-        .setContent(
-          `<strong>${coordText(ll)}</strong><dl>` +
-            `<dt>Seafloor</dt><dd data-depth>fetching…</dd>` +
-            /* Named for the depth actually sampled — the reader may have
-               the 60 m field on, and calling that "surface current" would be
-               wrong in a way nothing on screen would give away. */
-            (water
-              ? `<dt>Current at ${water.depth ? `${water.depth} m` : 'surface'}</dt>` +
-                `<dd>${water.speed.toFixed(2)} m/s toward ${water.toward.toFixed(0)}°T</dd>`
-              : `<dt>Current</dt><dd>no data here</dd>`) +
-            // Only when a temperature layer is on: otherwise there is no
-            // grid loaded and a missing row is better than an empty one.
-            (temp ? `<dt>Sea surface</dt><dd>${temp.degC.toFixed(1)} °C</dd>` : '') +
-            `</dl>`
-        )
-        .openOn(map);
+      return (
+        `<dl class="ocean">` +
+        `<dt>Seafloor</dt><dd data-depth>fetching…</dd>` +
+        /* Named for the depth actually sampled — the reader may have the
+           60 m field on, and calling that "surface current" would be wrong
+           in a way nothing on screen would give away. */
+        (water
+          ? `<dt>Current at ${water.depth ? `${water.depth} m` : 'surface'}</dt>` +
+            `<dd>${water.speed.toFixed(2)} m/s toward ${water.toward.toFixed(0)}°T</dd>`
+          : `<dt>Current</dt><dd>no data here</dd>`) +
+        /* Only when a temperature layer is on. With none loaded there is no
+           grid to miss, and "no data" would claim something untrue about the
+           ocean rather than about the map. */
+        (temp ? `<dt>Sea surface</dt><dd>${temp.degC.toFixed(1)} °C</dd>` : '') +
+        `</dl>`
+      );
+    };
 
-      /* NOAA's DEM mosaic, queried a point at a time. It is the only
-         bathymetry service reached from the browser that sends CORS —
-         GEBCO's WMS advertises GetFeatureInfo but returns nothing, and
-         neither HYCOM nor OpenTopoData allows cross-origin reads. */
+    /* NOAA's DEM mosaic, queried a point at a time. It is the only
+       bathymetry service reached from the browser that sends CORS — GEBCO's
+       WMS advertises GetFeatureInfo but returns nothing, and neither HYCOM
+       nor OpenTopoData allows cross-origin reads. Asynchronous, so a slow or
+       failed lookup never delays the rest of the popup. */
+    const fillDepth = (popup: L.Popup, ll: L.LatLng) => {
+      const cell = () => popup.getElement()?.querySelector('[data-depth]');
       const lon = ((((ll.lng + 180) % 360) + 360) % 360) - 180;
       const query =
         'https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_global_mosaic/ImageServer/identify' +
@@ -1334,22 +1353,30 @@ import 'leaflet/dist/leaflet.css';
       fetch(query)
         .then((r) => r.json())
         .then((info) => {
-          const cell = popup.getElement()?.querySelector('[data-depth]');
-          if (!cell) return;
+          const at = cell();
+          if (!at) return;
           const value = Number(info?.value);
           if (!Number.isFinite(value)) {
-            cell.textContent = 'no data';
+            at.textContent = 'no data';
             return;
           }
-          cell.textContent =
+          at.textContent =
             value < 0
               ? `${Math.round(-value).toLocaleString()} m deep`
               : `${Math.round(value).toLocaleString()} m above sea level`;
         })
         .catch(() => {
-          const cell = popup.getElement()?.querySelector('[data-depth]');
-          if (cell) cell.textContent = 'unavailable';
+          const at = cell();
+          if (at) at.textContent = 'unavailable';
         });
+    };
+
+    const describePoint = (ll: L.LatLng) => {
+      const popup = L.popup({ className: 'point-readout' })
+        .setLatLng(ll)
+        .setContent(`<strong>${coordText(ll)}</strong>` + oceanRows(ll))
+        .openOn(map);
+      fillDepth(popup, ll);
     };
 
     map.on('contextmenu', (e: L.LeafletMouseEvent) => {
@@ -1717,7 +1744,8 @@ import 'leaflet/dist/leaflet.css';
               fillColor: STORM,
               fillOpacity: 0.55,
             }).addTo(storms),
-            stormPopup
+            stormPopup,
+            true
           );
         }
       }
@@ -1804,7 +1832,8 @@ import 'leaflet/dist/leaflet.css';
             fillColor: tint,
             fillOpacity: 0.95,
           }).addTo(layer),
-          assetPopup
+          assetPopup,
+          true
         );
       }
 
@@ -2107,6 +2136,15 @@ import 'leaflet/dist/leaflet.css';
   }
 
   /* Deployment / last fix / position, as a compact label-value grid. */
+  /* The ocean block is a second list under the platform's own details, so it
+     gets a rule above it — without one the two run together and the water's
+     properties read as more fields of the glider. */
+  #asset-map :global(.leaflet-popup-content dl.ocean) {
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-2xs);
+    margin-top: var(--space-2xs);
+  }
+
   #asset-map :global(.leaflet-popup-content dl) {
     display: grid;
     grid-template-columns: auto 1fr;

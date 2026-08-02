@@ -178,7 +178,15 @@ files['tiles-60m/index'] = { ...files['tiles/index'], depth: 60 };
     data: Array.from({ length: nx * ny }, () => 7.5),
   };
 }
+/* The bathymetry service, stubbed from the start rather than partway
+   through: asset popups now ask for depth too, and the first of those fires
+   long before the readout checks below install their own stub. */
+let identifyUrl = null;
 globalThis.fetch = async (u) => {
+  if (String(u).includes('ImageServer/identify')) {
+    identifyUrl = String(u);
+    return { json: async () => ({ value: '-2431.5' }) };
+  }
   // Longest key first: "currents" is a substring of "currents-detail", so
   // insertion order would hand the detail request the coarse grid.
   const key = Object.keys(files)
@@ -266,6 +274,7 @@ const restoredBase = !!host.querySelector('.leaflet-tile-pane img[src*="arcgison
 
 // Open a marker popup for real, then read what it rendered.
 let popupHtml = '';
+let popupDepth = '';
 const marker = [...host.querySelectorAll('path')].find(
   (p) => p.getAttribute('fill') === '#f08c00' || p.getAttribute('fill') === '#e8368f'
 );
@@ -273,6 +282,10 @@ if (marker) {
   marker.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
   await new Promise((r) => setTimeout(r, 300));
   popupHtml = host.querySelector('.leaflet-popup-content')?.innerHTML ?? '';
+  // Depth arrives after the popup does, so read it while this popup is still
+  // the one on screen — by assertion time several others have opened.
+  await new Promise((r) => setTimeout(r, 400));
+  popupDepth = host.querySelector('.leaflet-popup-content [data-depth]')?.textContent ?? '';
 }
 
 /* Tap targets. The visible dots are a few pixels across — far smaller than
@@ -558,15 +571,6 @@ const measureCleared = (measureReadout?.textContent ?? '') === '' &&
 /* The right-click readout. The depth lookup is stubbed; what matters here is
    that a popup opens with the position and the current already filled from
    the loaded grid, without waiting on the network. */
-let identifyUrl = null;
-const realFetch = globalThis.fetch;
-globalThis.fetch = async (u, ...rest) => {
-  if (String(u).includes('ImageServer/identify')) {
-    identifyUrl = String(u);
-    return { json: async () => ({ value: '-2431.5' }) };
-  }
-  return realFetch(u, ...rest);
-};
 host._map.fire('contextmenu', { latlng: window.L.latLng(36.5, -74.5) });
 await new Promise((r) => setTimeout(r, 300));
 const readoutHtml = host.querySelector('.point-readout .leaflet-popup-content')?.innerHTML ?? '';
@@ -742,6 +746,13 @@ const checks = [
   ['asset tracks drawn', host.querySelectorAll('path[stroke="#e8368f"], path[stroke="#f08c00"]').length >= assets.assets.length],
   ['glider colour is not the old teal', !host.querySelector('path[stroke="#0a7d8c"]')],
   ['popup shows deployment date', popupHtml.includes('Deployed')],
+  /* An asset popup answers both halves of the same question now: what the
+     platform is, and what water it is sitting in. Before, the second half
+     was only reachable by right-clicking somewhere near it. */
+  ['asset popup reports the seafloor', /Seafloor/.test(popupHtml)],
+  ['asset popup reports the current there', /Current/.test(popupHtml)],
+  // -2431.5 from the stub, rounded: 2,432.
+  ['asset popup fills the depth in from the service', /2,432 m deep/.test(popupDepth)],
   ['a near miss falls outside the drawn dot', dotCoversOffset === false],
   [`tap target catches a miss by ${OFFSET} px`, targetCoversOffset === true],
   ['tap target opens the same detail as the dot', tapPopupMatches === true],
