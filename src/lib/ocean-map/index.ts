@@ -115,6 +115,15 @@ export async function createOceanMap(
 
   const BASIN = CONFIG.home;
   const DATA = CONFIG.dataBase.endsWith('/') ? CONFIG.dataBase : `${CONFIG.dataBase}/`;
+
+  /* Grid headers carry absolute links — `/map/tiles/index.json`, and a `url`
+     per regional grid — baked in by the Python writers, and the map used to
+     fetch them exactly as given. On this site that is right by coincidence;
+     anywhere else it reaches back into the host's own origin for the tile
+     index and every detail grid, and the layer silently stays coarse. Found
+     by writing the contract down: schema.ts had to say what those strings
+     were relative to, and there was no answer. */
+  const fromData = (url: string) => url.replace(/^\/map\//, DATA);
   const status = find<HTMLElement>('[data-map-status]');
 
   /* The map's current view as a plain box, for the renderer-independent
@@ -505,7 +514,9 @@ export async function createOceanMap(
         });
       };
 
-      const indexUrl = coarse?.[0]?.header?.tileIndex;
+      const indexUrl = coarse?.[0]?.header?.tileIndex
+        ? fromData(coarse[0].header.tileIndex)
+        : undefined;
       /* Tiles live beside their index, so the directory comes from the
          link this depth's own grid gave us. Hardcoding /map/tiles/ here
          had the 60 m layer quietly drawing surface tiles: the right
@@ -548,7 +559,9 @@ export async function createOceanMap(
           if (url && !grids.has(url)) {
             if (fetching !== url) {
               fetching = url;
-              const sources = keys ? keys.map((k) => `${tileBase}${k}.json`) : [url];
+              // Resolved here rather than where the key is formed: `url` doubles as
+              // the cache key, and rewriting it would churn the cache on every view.
+              const sources = keys ? keys.map((k) => `${tileBase}${k}.json`) : [fromData(url)];
               Promise.all(sources.map((u) => fetch(u).then((r) => r.json())))
                 .then((loaded) => {
                   grids.set(url, keys ? assemble(loaded) : loaded[0]);
@@ -909,7 +922,9 @@ export async function createOceanMap(
         let showing: string | null = null;
         let tiles: any = null;
 
-        const indexUrl = coarse.header?.tileIndex;
+        const indexUrl = coarse.header?.tileIndex
+          ? fromData(coarse.header.tileIndex)
+          : undefined;
         const tileBase = (indexUrl ?? '').replace(/index\.json$/, '');
         if (indexUrl) {
           fetch(indexUrl)
@@ -989,7 +1004,7 @@ export async function createOceanMap(
           if (want && !grids.has(want)) {
             if (fetching === want) return;
             fetching = want;
-            const sources = keys ? keys.map((k) => `${tileBase}${k}.json`) : [want];
+            const sources = keys ? keys.map((k) => `${tileBase}${k}.json`) : [fromData(want)];
             Promise.all(sources.map((u) => fetch(u).then((r) => r.json())))
               .then((loaded: Scalar[]) => {
                 grids.set(want, keys ? assemble(loaded) : loaded[0]!);

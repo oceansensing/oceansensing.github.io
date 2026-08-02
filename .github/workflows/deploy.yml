@@ -56,6 +56,16 @@ jobs:
         continue-on-error: true
         run: python3 scripts/fetch-ocean-fields.py
 
+      # Every refresh above is continue-on-error, so an outage degrades to the
+      # committed snapshot rather than blocking a deploy. What must not pass
+      # silently is data that arrived in the wrong *shape* — that is how the
+      # ERDDAP empty-field drift produced grids shifted west, and how a stale
+      # model run was served for two days while the build reported success.
+      # `verify` runs before these steps and only ever sees the snapshot, so
+      # this is the one place fresh upstream drift can be caught.
+      - name: Check the refreshed data against the published contract
+        run: npm run test:schema
+
       # The full-resolution tiles are ~92 MB per depth and only change when
       # the model does, which is once a day at 12Z. Keying the cache on the
       # run id means the hourly builds restore them instead of pulling them

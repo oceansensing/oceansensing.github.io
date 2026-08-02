@@ -1177,16 +1177,22 @@ const builtCss = fs
   .join('\n');
 /* Every fetch has to go through the configured dataBase. Two did not — the
    isobath tile request and the hourly refresh poll — because both are
-   template literals and the sweep that rewrote the quoted paths did not match
-   them. A second deployment pointing dataBase at another host would have
-   silently fetched those two from its own origin. Read from the source rather
-   than the bundle: the bundle inlines the default, so '/map/' legitimately
-   appears there. */
+   template literals and the sweep that rewrote the quoted paths never matched
+   them. A second deployment pointing dataBase at another host would silently
+   have fetched those two from its own origin.
+
+   Read from the source rather than the bundle, which inlines the default and
+   so contains '/map/' legitimately. Comments are stripped first: prose about
+   the old paths is not a path, and the first version of this failed on its own
+   explanatory comment. */
 const moduleSource = fs.readFileSync('src/lib/ocean-map/index.ts', 'utf8');
-const hardcodedPaths = [...moduleSource.matchAll(/['"`]\/map\/[^'"`]*/g)]
-  .map((m) => m[0])
-  // The default value of the option itself is the one place it belongs.
-  .filter((hit) => !moduleSource.includes(`dataBase: options.dataBase ?? host.dataset.mapData ?? ${hit}'`));
+const withoutComments = moduleSource
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+const hardcodedPaths = [...withoutComments.matchAll(/['"`]\/map\/[^'"`]*/g)].map((m) => m[0]);
+/* One is expected: the default value of the dataBase option itself, which is
+   where the path belongs. Anything else is a fetch that ignores the option. */
+const strayPaths = hardcodedPaths.filter((hit) => hit !== "'/map/");
 
 const paneSvgUnclamped =
   /\.leaflet-pane>svg\{[^}]*max-width:none/.test(builtCss.replace(/\s+/g, '')) ||
@@ -1323,7 +1329,7 @@ const checks = [
   ['vectors in a custom pane are not clamped to 0x0 by the site reset',
     paneSvgUnclamped],
   ['every data fetch goes through the configured dataBase',
-    hardcodedPaths.length === 0],
+    strayPaths.length === 0 && hardcodedPaths.length === 1],
   /* The shoreline replaced a Natural Earth polyline whose vertices were 16
      px apart at zoom 7 — as coarse as the isobaths were before they were
      fixed, and drawn a few pixels off the basemap's own coast. It is a

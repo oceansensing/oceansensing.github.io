@@ -53,7 +53,9 @@ The module supplies behaviour only. The host page provides:
   legible map.
 - **Data** — the generated grids under `dataBase`. There are ~150 MB of them,
   so they are not shipped here. Point `dataBase` at a host that already serves
-  them, or build your own with the scripts in `scripts/`.
+  them, or build your own with the scripts in `scripts/`. `schema.ts` says
+  exactly what each file must contain, and `npm run test:schema` checks a
+  directory against it — which is also the definition a native port mirrors.
 
 Leaflet and `leaflet-velocity` are imported directly; the module brings
 Leaflet's own CSS with it.

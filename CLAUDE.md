@@ -19,6 +19,7 @@ npm run data:basemaps # re-sample basemap ocean colours (needs Pillow; slow, GEB
 npm run data:bathymetry # contour GEBCO into the isobath layer (needs a local grid; once)
 npm run data:bathy-tiles # just the 20-100 m tiles of that
 npm run test:units   # the map's renderer-independent modules, directly
+npm run test:schema  # every published file against the contract in schema.ts
 npm run test:multimap # two maps on one page stay out of each other's way
 npm run test:contrast # map colours stay visible on both bathymetries
 npm run test:map     # headless test of the built map bundle
@@ -351,6 +352,53 @@ three decisions:
 
 Note the canvas renderer culls to the viewport, so a test that counts draw
 calls counts what is on screen, not the fleet.
+
+### The published data contract
+
+`src/lib/ocean-map/schema.ts` is what every file under `public/map/` is
+supposed to look like, and `npm run test:schema` checks that it does.
+
+The contract used to be agreed on by nothing: four Python writers, a
+TypeScript reader that cast most of it to `any` — 29 casts against one
+interface — and no statement anywhere of which was right. **Both of the worst
+data bugs in this project lived in that gap**, and neither raised an error:
+ERDDAP's empty field where THREDDS writes `NaN`, which made rows ragged and
+shifted Antarctica 81 cells wide against 360 in open water; and
+`time[0:1:128]` going out of range when the FMRC aggregation shortened, so the
+fallback served a two-day-old run while the build reported success.
+
+The checks bite. Mutation-tested: a truncated grid, a timestamp missing its
+`Z`, a string where a number belongs, storm intensity turned into a number, an
+unknown platform kind, a latitude of 200, a missing required field — all
+caught.
+
+**It runs twice in CI, and that is not redundancy.** `npm run verify` runs
+*before* the data-refresh steps, so inside `verify` it only ever sees the
+committed snapshot. A second invocation after the refresh is the only place
+fresh upstream drift can be caught. Both matter: the first catches the
+module's expectations drifting from the data, the second catches the data
+drifting from everything.
+
+Three details in it are contract, not accident. Storm `intensityKt` and
+`pressureMb` are **strings** — the NHC publishes them with qualifiers and a
+blank is a real answer, so parsing them to numbers would turn "no report" into
+zero. Timestamps must carry a trailing `Z`, since one without parses as local
+time and shows up as a track drawn in the wrong place rather than as an error.
+And `null` in a grid means land or no data, never `0`, which is a legitimate
+value.
+
+Writing it down is also what an iOS port needs: these declarations are what a
+Swift `Codable` mirrors, and they are why a native app can read this data
+without reverse-engineering the Python.
+
+**It immediately found a portability bug.** Grid headers carry *absolute*
+links — `/map/tiles/index.json`, and a `url` per regional grid — baked in by
+the writers, and the map fetched them exactly as given. On this site that is
+right by coincidence; anywhere else the tile index and every detail grid
+resolve against the host's own origin and the layer silently stays coarse.
+`fromData()` resolves them against the configured base now. The question that
+surfaced it was simply having to write down what those strings were relative
+to, and finding there was no answer.
 
 ### Data pipeline (`scripts/fetch-ocean-assets.py`)
 
