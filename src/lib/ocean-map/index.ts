@@ -1,5 +1,10 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+/* The renderer-independent half. Nothing imported here touches Leaflet or the
+   DOM, which is deliberate: these are the parts a native port keeps. */
+import { coordText, ddm, elapsed, initialBearing, spanText, stamp } from './geo';
+import { rampColour, rampStops } from './ramp';
+import { tileKeysFor } from './tiles';
 
 /* Everything a second site would have to change, in one place.
    
@@ -104,6 +109,15 @@ export async function createOceanMap(
   const BASIN = CONFIG.home;
   const DATA = CONFIG.dataBase.endsWith('/') ? CONFIG.dataBase : `${CONFIG.dataBase}/`;
   const status = find<HTMLElement>('[data-map-status]');
+
+  /* The map's current view as a plain box, for the renderer-independent
+     helpers in tiles.ts — they take numbers so a native port can share them.
+     Unwrapped longitudes are fine and deliberate: tileKeysFor folds them
+     itself, and the centre legitimately wanders past ±180. */
+  const viewBox = () => {
+    const b = map.getBounds();
+    return { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() };
+  };
 
   /* The storm status line comes from a sibling component, so it may sit
      inside this map's figure or outside it — this site renders it just
@@ -426,21 +440,7 @@ export async function createOceanMap(
          regional grid as you pan. So take every tile the view overlaps —
          at most four — and join them. */
       const tileKeys = () => {
-        if (!tiles || map.getZoom() < tiles.minZoom) return null;
-        const { size, south: s0, west: w0 } = tiles;
-        const view = map.getBounds();
-        const floorTo = (v: number, origin: number) =>
-          Math.floor((v - origin) / size) * size + origin;
-
-        const keys: string[] = [];
-        for (let s = floorTo(view.getSouth(), s0); s <= view.getNorth(); s += size) {
-          for (let w = floorTo(view.getWest(), w0); w <= view.getEast(); w += size) {
-            // Longitude wraps; latitude does not.
-            const wrapped = ((((w - w0) % 360) + 360) % 360) + w0;
-            const key = `${s}_${wrapped}`;
-            if (tiles.available.includes(key)) keys.push(key);
-          }
-        }
+        const keys = tileKeysFor(tiles, map.getZoom(), viewBox());
         return keys.length ? keys : null;
       };
 
@@ -585,13 +585,6 @@ export async function createOceanMap(
      also means the readout can report a temperature from the grid already
      loaded, with no request. */
 
-  const rampStops = (hexes: string[]) =>
-    hexes.map((hex) => [
-      parseInt(hex.slice(1, 3), 16),
-      parseInt(hex.slice(3, 5), 16),
-      parseInt(hex.slice(5, 7), 16),
-    ]);
-
   const COLORMAPS: Record<string, number[][]> = Object.fromEntries(
     Object.entries((palette as any).colormaps ?? {}).map(([name, hexes]) => [
       name,
@@ -641,19 +634,6 @@ export async function createOceanMap(
 
   /* Interpolated between stops rather than stepped: a field of flat bands
      reads as contours the data does not have. */
-  const rampColour = (stops: number[][], t: number, lo: number, hi: number) => {
-    const span = hi - lo || 1;
-    const x = Math.min(1, Math.max(0, (t - lo) / span)) * (stops.length - 1);
-    const i = Math.min(stops.length - 2, Math.floor(x));
-    const f = x - i;
-    const a = stops[i]!;
-    const b = stops[i + 1]!;
-    return [
-      a[0]! + (b[0]! - a[0]!) * f,
-      a[1]! + (b[1]! - a[1]!) * f,
-      a[2]! + (b[2]! - a[2]!) * f,
-    ];
-  };
 
   type Scalar = { header: any; data: (number | null)[] };
 
@@ -923,19 +903,7 @@ export async function createOceanMap(
         }
 
         const tileKeys = () => {
-          if (!tiles || map.getZoom() < tiles.minZoom) return null;
-          const { size, south: s0, west: w0 } = tiles;
-          const view = map.getBounds();
-          const floorTo = (v: number, origin: number) =>
-            Math.floor((v - origin) / size) * size + origin;
-          const keys: string[] = [];
-          for (let sy = floorTo(view.getSouth(), s0); sy <= view.getNorth(); sy += size) {
-            for (let wx = floorTo(view.getWest(), w0); wx <= view.getEast(); wx += size) {
-              const wrapped = ((((wx - w0) % 360) + 360) % 360) + w0;
-              const key = `${sy}_${wrapped}`;
-              if (tiles.available.includes(key)) keys.push(key);
-            }
-          }
+          const keys = tileKeysFor(tiles, map.getZoom(), viewBox());
           return keys.length ? keys : null;
         };
 
@@ -1358,22 +1326,8 @@ export async function createOceanMap(
      for the same reason the current tiles use overlap: a viewport narrower
      than a tile still straddles seams, and requiring containment drops the
      whole tier as you pan. */
-  const bathyTileKeys = (): string[] => {
-    if (!bathyTiles || map.getZoom() < bathyTiles.minZoom) return [];
-    const { size, south: s0, west: w0 } = bathyTiles;
-    const view = map.getBounds();
-    const floorTo = (v: number, origin: number) =>
-      Math.floor((v - origin) / size) * size + origin;
-    const keys: string[] = [];
-    for (let sy = floorTo(view.getSouth(), s0); sy <= view.getNorth(); sy += size) {
-      for (let wx = floorTo(view.getWest(), w0); wx <= view.getEast(); wx += size) {
-        const wrapped = ((((wx - w0) % 360) + 360) % 360) + w0;
-        const key = `${sy}_${wrapped}`;
-        if (bathyTiles.available.includes(key) && !keys.includes(key)) keys.push(key);
-      }
-    }
-    return keys;
-  };
+  const bathyTileKeys = (): string[] =>
+    tileKeysFor(bathyTiles, map.getZoom(), viewBox());
 
   /* Finest that fits, the same rule the current and field grids follow.
      A tile carries *every* level at 0.004 deg — a 2 px vertex spacing at
@@ -1993,7 +1947,7 @@ export async function createOceanMap(
           i === 0
             ? `Start · ${coordText(point)}`
             : `Leg ${i}: ${spanText(points[i - 1]!.distanceTo(point))} · ` +
-              `${bearingFrom(points[i - 1]!, point).toFixed(0)}°T<br>${coordText(point)}`,
+              `${initialBearing(points[i - 1]!, point).toFixed(0)}°T<br>${coordText(point)}`,
           { direction: 'top' }
         );
     });
@@ -2008,7 +1962,7 @@ export async function createOceanMap(
         legs < 1
           ? 'Click a second point'
           : `${spanText(total)}${legs > 1 ? ` over ${legs} legs` : ''} · ` +
-            `${bearingFrom(points[0]!, points[points.length - 1]!).toFixed(0)}°T direct`;
+            `${initialBearing(points[0]!, points[points.length - 1]!).toFixed(0)}°T direct`;
     }
   };
 
@@ -2447,51 +2401,9 @@ export async function createOceanMap(
   /* Great-circle initial bearing. A rhumb line would be the one to steer,
      but the distance beside it is great-circle, and quoting the two from
      different geometries invites the reader to combine them. */
-  const bearingFrom = (a: L.LatLng, b: L.LatLng) => {
-    const φ1 = a.lat * rad;
-    const φ2 = b.lat * rad;
-    const dλ = (b.lng - a.lng) * rad;
-    const y = Math.sin(dλ) * Math.cos(φ2);
-    const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(dλ);
-    return (Math.atan2(y, x) / rad + 360) % 360;
-  };
 
-  // Kilometres and nautical miles: the chart unit belongs on an ocean map.
-  const spanText = (metres: number) => {
-    const km = metres / 1000;
-    const nm = metres / 1852;
-    const round = (v: number) => (v < 10 ? v.toFixed(2) : v < 100 ? v.toFixed(1) : Math.round(v));
-    return `${round(km)} km · ${round(nm)} nm`;
-  };
 
-  /* Degrees and decimal minutes, which is what a chart, a GPS and a float's
-     own position report all speak — the readouts here are meant to be
-     compared against those without arithmetic in between.
 
-     Two details that are easy to get wrong and look almost right:
-     minutes are rounded before the degrees are taken, or 59.999' becomes
-     60.00' and the degree beside it never carries; and longitude is padded
-     to three digits, because 067° and 67° sort and scan differently in a
-     column of positions. */
-  const ddm = (value: number, positive: string, negative: string, width: number) => {
-    const hemisphere = value >= 0 ? positive : negative;
-    let degrees = Math.floor(Math.abs(value));
-    let minutes = (Math.abs(value) - degrees) * 60;
-    if (Number(minutes.toFixed(2)) >= 60) {
-      minutes = 0;
-      degrees += 1;
-    }
-    return `${String(degrees).padStart(width, '0')}° ${minutes.toFixed(2).padStart(5, '0')}′ ${hemisphere}`;
-  };
-
-  const coordText = (lat: number | L.LatLng, lng?: number) => {
-    const y = typeof lat === 'number' ? lat : lat.lat;
-    const x = typeof lat === 'number' ? (lng as number) : lat.lng;
-    // Fold into -180..180 first, so a track that has wrapped past the
-    // antimeridian does not report 293°E.
-    const lon = ((((x + 180) % 360) + 360) % 360) - 180;
-    return `${ddm(y, 'N', 'S', 2)}, ${ddm(lon, 'E', 'W', 3)}`;
-  };
 
   /* The surface current under a point, read out of whichever grid is
      loaded — no request, and it is the same field the particles follow. */
@@ -2534,13 +2446,6 @@ export async function createOceanMap(
     };
   };
 
-  const stamp = (t?: string) => (t ? `${t.slice(0, 16).replace('T', ' ')}Z` : 'unknown');
-  // "· 11 days" — how long the platform has been out at its last fix.
-  const elapsed = (from?: string, to?: string) => {
-    if (!from || !to) return '';
-    const days = Math.floor((Date.parse(to) - Date.parse(from)) / 86400000);
-    return Number.isFinite(days) && days >= 0 ? ` · day ${days + 1}` : '';
-  };
 
   // ---- storms and assets ----
   try {

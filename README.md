@@ -58,6 +58,7 @@ The individual pieces, if you want one on its own:
 ```sh
 npm run check         # type-check
 npm run check:docs    # docs reference real scripts, real paths, the right URL
+npm run test:units      # the map's renderer-independent modules
 npm run test:contrast # map colours stay visible on both bathymetries
 npm run test:map      # asset map, against the built bundle
 npm run test:clock    # UTC clock, against the built bundle

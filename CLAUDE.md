@@ -18,10 +18,18 @@ npm run data:field-tiles # the Navy field tiles (OISST needs none — see below)
 npm run data:basemaps # re-sample basemap ocean colours (needs Pillow; slow, GEBCO's WMS)
 npm run data:bathymetry # contour GEBCO into the isobath layer (needs a local grid; once)
 npm run data:bathy-tiles # just the 20-100 m tiles of that
+npm run test:units   # the map's renderer-independent modules, directly
 npm run test:contrast # map colours stay visible on both bathymetries
 npm run test:map     # headless test of the built map bundle
 npm run test:clock   # headless test of the built UTC clock
 ```
+
+`test:units` is the odd one out: it needs no build, no jsdom and no fixtures,
+because `geo.ts`, `ramp.ts` and `tiles.ts` import neither Leaflet nor the DOM.
+It imports the TypeScript through Node's own type stripping and calls the
+functions. Every case in it is one a source comment claims to handle — a
+comment saying "minutes carry into the degrees" is a promise, and that file is
+where it is kept.
 
 **`npm run verify` is the gate.** CI runs exactly this and the deploy job will
 not run unless it passes, so a change that fails it does not reach the site.
@@ -125,6 +133,27 @@ line range left a stray `</script>` before `<style>`, which Astro swallowed
 along with the entire stylesheet — the map came up unstyled and the only thing
 that noticed was `test:map`'s guard on the pane-SVG rule. The build did not
 complain.
+
+**The renderer-independent half is now its own set of modules**, which is the
+seam an iOS port turns on: `geo.ts` (bearings, degrees-and-decimal-minutes,
+spans, timestamps), `ramp.ts` (colour ramps) and `tiles.ts` (which tiles a view
+needs). None imports Leaflet or the DOM — they typecheck standalone — so a
+native port reimplements only the drawing. `Point` is a plain `{lat, lng}`,
+which `L.LatLng` satisfies structurally, so callers needed no conversion.
+
+`tiles.ts` also collapsed **three copies** of the tile-selection arithmetic —
+one each for currents, fields and isobaths — that were identical but for
+whether they returned `null` or `[]`, and only one of which deduplicated its
+keys.
+
+Those modules are **mutation-tested**, and it was worth it: of nine deliberate
+faults, three survived the first pass. Two were the harness miscounting a
+thrown exception as a pass. The third was real — the antimeridian test only
+panned *east*, where a bare remainder agrees with a floored modulo, so
+replacing the fold with `%` broke nothing. Panning west is what distinguishes
+them, and there is now a case for it. A fourth gap turned up the same way: the
+latitude loop's `<=` could become `<` unnoticed, because no view in the suite
+ended exactly on a lattice line.
 
 The remaining seams, in order of what they unlock:
 
