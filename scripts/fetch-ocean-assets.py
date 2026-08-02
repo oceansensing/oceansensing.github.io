@@ -54,11 +54,18 @@ HISTORY_DAYS = 5
 # against Ifremer on 2026-08-02: 1,992 floats in 5 days, 3,881 in 10, 4,138
 # in 15, 4,293 in 30. The fleet is about 4,200; five days showed half of it.
 #
-# So Argo gets at least one full cycle, and follows HISTORY_DAYS whenever
+# So Argo gets a full cycle plus slack, and follows HISTORY_DAYS whenever
 # that is longer — the one-variable-moves-everything property still holds
 # upward, it just cannot be dragged below a cycle without hiding floats that
 # are perfectly active.
-ARGO_CYCLE_DAYS = 10
+#
+# Twelve rather than ten: a cycle is nominally ten days but floats drift late
+# — ice avoidance, a missed satellite pass, a park depth that took longer to
+# leave — and a window set exactly to the nominal cycle clips whichever tail
+# of the fleet happens to be running behind. The measured curve pays for the
+# extra two days: 3,881 floats at 10 days against 4,138 at 15, so most of
+# what a longer window recovers arrives soon after the cycle, not much later.
+ARGO_CYCLE_DAYS = 12
 ARGO_DAYS = max(HISTORY_DAYS, ARGO_CYCLE_DAYS)
 UA = {'User-Agent': 'oceansensing.org asset map (github.com/oceansensing)'}
 NOW = datetime.now(timezone.utc)
