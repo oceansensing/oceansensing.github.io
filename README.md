@@ -8,8 +8,8 @@ Built with [Astro](https://astro.build). Static output, and close to zero
 client-side JavaScript — the exceptions are the theme toggle, the photo
 shuffle and lightbox on observation pages, the asset map, and the UTC clock.
 The map is the one heavyweight: gliders from four national data centres,
-NOAA saildrones, the Argo array, animated currents at two depths and
-sea-surface temperature from two models.
+NOAA saildrones, the Argo array, animated currents at two depths, and
+sea-surface temperature and salinity.
 Every push to `main` deploys automatically via GitHub Actions, and a scheduled
 run rebuilds hourly to refresh the map data; the hurricane page picks that up
 on its own without losing your place on the map.
@@ -70,8 +70,8 @@ need it locally when working on the map:
 npm run data           # storms, gliders (four regional ERDDAPs), USVs, Argo floats
 npm run data:currents  # global + regional current grids, surface and 60 m
 npm run data:tiles     # the 1/12° current tiles (~92 MB per depth, a few minutes)
-npm run data:sst       # global + regional sea-surface temperature grids
-npm run data:sst-tiles # the Navy SST tiles (OISST needs none — its regions are already native)
+npm run data:fields      # global + regional sea-surface temperature and salinity grids
+npm run data:field-tiles # the Navy field tiles (OISST needs none — its regions are already native)
 npm run data:basemaps  # re-sample basemap ocean colours (slow; GEBCO's WMS)
 ```
 
@@ -86,7 +86,8 @@ to refresh the map data; that run commits nothing, so the repository does not
 grow.
 
 The full-resolution tiles are the exception to "refresh everything hourly":
-the current tiles are ~92 MB per depth and the Navy SST tiles another ~39 MB,
+the current tiles are ~92 MB per depth and the Navy temperature and salinity
+tiles another ~43 MB each,
 and none of them change until the ocean model runs, once a day at 12Z. CI
 caches them keyed on that model run and rebuilds only when it advances.
 

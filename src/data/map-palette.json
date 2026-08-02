@@ -33,6 +33,19 @@
     "#1bf3c7",
     "#2af48f"
   ],
+  "_sss": "The salinity ramp, fresh to salty: green through cyan to blue. Chosen by the same search as the SST ramp and under the same hard constraint — it becomes the water under every marker, so it must clear each of them by CIEDE2000 22, which rules out the warm half of the wheel where the storms, USVs and Argo dots live. It clears by 28.6. The extra constraint here is that it must not read as the temperature ramp: the search maximised distance from SST stop for stop, giving ΔE 66 apart on average against a travel of 101. Only one raster is ever shown at a time and the legend names the field and its unit, but two ocean scalars that look alike would still invite the wrong reading. Green for fresh and blue for salty follows how a river plume actually looks against open ocean.",
+  "sss": [
+    "#2dd50b",
+    "#0bd917",
+    "#0cde46",
+    "#0ce277",
+    "#0ce6aa",
+    "#0cebde",
+    "#0dc9ef",
+    "#0e99f2",
+    "#1269f3",
+    "#163bf3"
+  ],
   "_separation": "Argo dots are gold, which sits about ΔE 18 from the current particles — under the bar the gate applies elsewhere. No yellow clears them: the particles are pale amber because that is the one hue reading on both bathymetries, and paling the ramp far enough to make room drops its own water contrast to 79%. The dots are therefore given a dark outline, which separates a discrete dot from a drifting trail whatever the fill does. Recorded as a named exemption rather than by lowering the threshold, so the compromise stays visible.",
   "separationExempt": [
     "argo"

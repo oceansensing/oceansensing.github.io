@@ -52,9 +52,9 @@ jobs:
         continue-on-error: true
         run: python3 scripts/fetch-currents.py
 
-      - name: Refresh sea surface temperature
+      - name: Refresh sea surface temperature and salinity
         continue-on-error: true
-        run: python3 scripts/fetch-sst.py
+        run: python3 scripts/fetch-ocean-fields.py
 
       # The full-resolution tiles are ~92 MB per depth and only change when
       # the model does, which is once a day at 12Z. Keying the cache on the
@@ -84,20 +84,24 @@ jobs:
       # Navy SST tiles, keyed on the same model run — they come from the same
       # forecast, so they go stale together. OISST has no tile tier: its
       # regional grids are already at its native 1/4 degree.
-      - name: Restore Navy SST tiles
+      - name: Restore Navy field tiles
         id: ssttiles
         if: steps.model.outputs.run != ''
         uses: actions/cache@v4
         with:
-          path: public/map/tiles-sst-navy
+          path: |
+            public/map/tiles-sst-navy
+            public/map/tiles-sss-navy
           # v2: the tile geometry is unchanged but the index's minZoom is not,
           # and a cache hit would keep publishing the old threshold.
-          key: sst-tiles-v2-${{ steps.model.outputs.run }}
+          # v3: salinity tiles join the set, so a v2 hit would restore an
+          # incomplete one and skip building the new half.
+          key: field-tiles-v3-${{ steps.model.outputs.run }}
 
-      - name: Build Navy SST tiles
+      - name: Build Navy field tiles
         if: steps.model.outputs.run != '' && steps.ssttiles.outputs.cache-hit != 'true'
         continue-on-error: true
-        run: python3 scripts/fetch-sst.py --tiles --only=navy
+        run: python3 scripts/fetch-ocean-fields.py --tiles
 
       - uses: withastro/action@v3
         with:

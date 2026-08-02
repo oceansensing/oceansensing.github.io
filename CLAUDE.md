@@ -13,8 +13,8 @@ npm run check:docs   # docs reference real scripts, real paths, the right URL
 npm run data         # storms, gliders (4 regional ERDDAPs), USVs, Argo floats
 npm run data:currents # the global + regional current grids, both depths
 npm run data:tiles   # the 1/12° current tiles (~92 MB per depth, several minutes)
-npm run data:sst     # the global + regional SST grids, both products
-npm run data:sst-tiles # the Navy SST tiles (OISST needs none — see below)
+npm run data:fields  # global + regional SST and salinity grids, all products
+npm run data:field-tiles # the Navy field tiles (OISST needs none — see below)
 npm run data:basemaps # re-sample basemap ocean colours (needs Pillow; slow, GEBCO's WMS)
 npm run test:contrast # map colours stay visible on both bathymetries
 npm run test:map     # headless test of the built map bundle
@@ -490,9 +490,9 @@ decay from a fine even texture into a few long bright ropes with bare water
 between them, within a minute of opening the page. Respawning reseeds the
 slow water. It was 5 s, which showed that decay clearly on a phone.
 
-### Sea-surface temperature
+### Sea-surface temperature and salinity
 
-Two fields, `npm run data:sst`, built by `scripts/fetch-sst.py`:
+Three fields, `npm run data:fields`, built by `scripts/fetch-ocean-fields.py`:
 
 - **OISST** (NOAA/NCEI, 1/4°, daily) — an *analysis*: observations blended
   onto a grid, so it is what happened. Uses the **preliminary** product, not
@@ -500,6 +500,25 @@ Two fields, `npm run data:sst`, built by `scripts/fetch-sst.py`:
   preliminary, and a fortnight-old field has no business beside a live storm.
 - **Navy ESPC-D-V02** (1/12°, hourly) — a *forecast*, and the same model the
   currents come from, so temperature and flow are one ocean rather than two.
+- **Navy ESPC-D-V02 salinity** — the same variable file, so temperature and
+  salinity are the same ocean at the same hour.
+
+A field is just an entry in `PRODUCTS`: a variable name, a grid, strides per
+tier, a plausible-value range and a file prefix. `FIELDS` in the component is
+the matching half — a ramp, a unit and a rounding step. Adding another scalar
+means one entry in each, not another layer.
+
+**Salinity rounds the colour bar to half a unit where temperature rounds to
+whole ones.** Both bound the water in view, but open ocean spans a few psu
+against ten degrees or more, so whole-unit rounding would leave a typical
+salinity view sitting in a corner of its ramp. Its ramp is green through cyan
+to blue, chosen by the same search under one extra constraint — maximise
+distance from the SST ramp, so two ocean scalars never read alike. ΔE 66 per
+stop apart, clearing the markers by 28.6.
+
+Every raster is mutually exclusive with every other, not just the two SSTs:
+they share a pane, so the upper one hides the lower and the map would name
+two fields while showing one.
 
 Both are numeric grids drawn by a canvas layer in the `sst` pane (z-index
 240, under the currents and under every track). Only one at a time —

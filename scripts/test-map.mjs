@@ -113,6 +113,7 @@ const files = {
   'currents-atlantic-60m': JSON.parse(fs.readFileSync('public/map/currents-atlantic-60m.json', 'utf8')),
   'currents-arctic-60m': JSON.parse(fs.readFileSync('public/map/currents-arctic-60m.json', 'utf8')),
   argo: JSON.parse(fs.readFileSync('public/map/argo.json', 'utf8')),
+  'sss-navy': JSON.parse(fs.readFileSync('public/map/sss-navy.json', 'utf8')),
   'sst-oisst': JSON.parse(fs.readFileSync('public/map/sst-oisst.json', 'utf8')),
   'sst-oisst-atlantic': JSON.parse(fs.readFileSync('public/map/sst-oisst-atlantic.json', 'utf8')),
   'sst-oisst-arctic': JSON.parse(fs.readFileSync('public/map/sst-oisst-arctic.json', 'utf8')),
@@ -846,6 +847,38 @@ const nativeSst = await (async () => {
   return out;
 })();
 
+/* Salinity is the same machinery as temperature with a different ramp, unit
+   and rounding step — so what is worth checking is that it is genuinely a
+   different field and not a relabelled copy: its own ramp on the bar, psu in
+   the readout, and a half-unit range where temperature rounds to whole ones.
+   Open ocean spans only a few psu, so whole-unit rounding would leave a
+   typical view in a corner of the ramp. */
+const salinity = await (async () => {
+  const toggle = overlayLabelled(/Salinity/);
+  toggle?.querySelector('input')?.click();
+  await new Promise((r) => setTimeout(r, 1200));
+  host._map.setView([25, -55], 4, { animate: false });
+  await new Promise((r) => setTimeout(r, 1200));
+  host._map.closePopup();
+  host._map.fire('contextmenu', { latlng: window.L.latLng(25, -55) });
+  await new Promise((r) => setTimeout(r, 250));
+  const layer = Object.values(host._map._layers).find(
+    (l) => typeof l.getRange === 'function' && host._map.hasLayer(l)
+  );
+  const out = {
+    offered: !!toggle,
+    readout: host.querySelector('.point-readout .leaflet-popup-content')?.textContent ?? '',
+    range: layer?.getRange?.() ?? null,
+    step: layer?.options?.field?.step ?? null,
+    legend: sstLegend?.textContent ?? '',
+    sstStillOn: overlayLabelled(/OISST/)?.querySelector('input')?.checked,
+  };
+  const back = overlayLabelled(/OISST/)?.querySelector('input');
+  if (back && !back.checked) back.click();
+  await new Promise((r) => setTimeout(r, 900));
+  return out;
+})();
+
 const seamGaps = await seamGap();
 
 const tropics = await rangeAt(12, -50, 4);
@@ -1077,6 +1110,23 @@ const checks = [
     /Current at 60 m/.test(deepRead) && /0\.10 m\/s/.test(deepRead) &&
     /11° 00\.00′ N/.test(deepRead)],
   ['the 60 m grid is published at 60 m', files['currents-60m'][0].header.depth === 60],
+  ['a salinity layer is offered', salinity.offered],
+  ['turning salinity on turns the temperature raster off', salinity.sstStillOn === false],
+  ['the readout reports salinity in psu, not degrees',
+    /Salinity/.test(salinity.readout) && /psu/.test(salinity.readout) &&
+      !/Salinity[^]*°C/.test(salinity.readout)],
+  ['the salinity key carries psu and its own ramp',
+    /psu/.test(salinity.legend)],
+  /* Tests the mechanism, not the water: assert the step the layer is using
+     and that the bounds are multiples of it. An earlier version asserted a
+     narrow span, which failed the moment the view included the Amazon plume
+     at 20.5 psu — that was the data being right, not the code being wrong. */
+  ['salinity rounds to half a unit, where temperature rounds to whole ones',
+    salinity.step === 0.5 &&
+      !!salinity.range &&
+      Number.isInteger(salinity.range[0] / 0.5) &&
+      Number.isInteger(salinity.range[1] / 0.5) &&
+      Number.isInteger(tropics.range?.[0]) && Number.isInteger(polar.range?.[1])],
   ['SST reaches native 1/12° resolution, not a regional subsample',
     nativeSst.dx === 0.08 && nativeSst.value === 21.5],
   ['an SST layer is offered for each source', !!sstOisstToggle && !!sstNavyToggle],
@@ -1084,7 +1134,8 @@ const checks = [
      while every check stayed green, and the only thing that gave it away was
      the run printed in the attribution. */
   ['the SST layer credits its source on screen',
-    /SST: .*ESPC|SST: .*OISST/.test(host.querySelector('.leaflet-control-attribution')?.textContent ?? '')],
+    /Sea surface temp: .*(ESPC|OISST)/.test(
+      host.querySelector('.leaflet-control-attribution')?.textContent ?? '')],
   ['the Navy SST file records which run it came from',
     typeof files['sst-navy'].header.modelRun === 'string' ||
       typeof JSON.parse(fs.readFileSync('public/map/sst-navy.json', 'utf8')).header.modelRun === 'string'],

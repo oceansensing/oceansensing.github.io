@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build sea-surface temperature grids for the map.
+"""Build surface scalar-field grids for the map — temperature and salinity.
 
-    python3 scripts/fetch-sst.py            # global + regional grids
-    python3 scripts/fetch-sst.py --tiles    # the finest tier (large, slow)
-    python3 scripts/fetch-sst.py --run      # the model run id, for CI caching
+    python3 scripts/fetch-ocean-fields.py           # global + regional grids
+    python3 scripts/fetch-ocean-fields.py --tiles   # the finest tier (slow)
+    python3 scripts/fetch-ocean-fields.py --only=sss-navy
 
 Two products, because they answer different questions and disagree in
 interesting places:
@@ -129,6 +129,11 @@ TILES = {
 PRODUCTS = [
     {
         'key': 'oisst',
+        'prefix': 'sst',
+        # What counts as a plausible value. Per product because these are
+        # different quantities: a salinity of 40 is the Red Sea, a
+        # temperature of 40 is a fill value.
+        'valid': (-5.0, 45.0),
         'label': 'SST (OISST analysis)',
         'source': 'NOAA/NCEI OISST v2.1 preliminary',
         # Preliminary rather than final: final runs about a fortnight behind,
@@ -151,6 +156,8 @@ PRODUCTS = [
     },
     {
         'key': 'navy',
+        'prefix': 'sst',
+        'valid': (-5.0, 45.0),
         'label': 'SST (Navy ESPC forecast)',
         'source': 'US Navy ESPC-D-V02',
         'base': ('https://tds.hycom.org/thredds/dodsC/'
@@ -174,6 +181,28 @@ PRODUCTS = [
         'strides': {'global': (12, 24), 'region': (2, 4), 'tile': (1, 2)},
         'tiles': True,
     },
+    {
+        # Salinity off the same model and the same variable file as the Navy
+        # temperature, so the two are the same ocean at the same hour.
+        'key': 'navy',
+        'prefix': 'sss',
+        # Measured globally at the surface on 2026-08-02: p1 26.9, median
+        # 34.3, p99 37.3, with 3 in river plumes and 43.5 in the Red Sea.
+        # The floor is 0 rather than negative — fresh water is a real
+        # reading, a negative salinity is a fill value.
+        'valid': (0.0, 45.0),
+        'label': 'SSS (Navy ESPC forecast)',
+        'source': 'US Navy ESPC-D-V02',
+        'base': ('https://tds.hycom.org/thredds/dodsC/'
+                 'FMRC_ESPC-D-V02_ts3z/FMRC_ESPC-D-V02_ts3z_best.ncd'),
+        'kind': 'dods',
+        'var': 'salinity',
+        'unit': 'psu',
+        'lat0': -80.0, 'dlat': 0.04, 'nlat': 4251,
+        'lon0': 0.0, 'dlon': 0.08, 'nlon': 4500,
+        'strides': {'global': (12, 24), 'region': (2, 4), 'tile': (1, 2)},
+        'tiles': True,
+    },
 ]
 
 
@@ -193,7 +222,7 @@ def get(url: str, timeout: int = 180) -> str:
         return r.read().decode('utf-8', 'replace')
 
 
-def rows(body: str, width: int) -> list[list[float | None]]:
+def rows(body: str, width: int, low: float = -5.0, high: float = 45.0) -> list[list[float | None]]:
     """Pull the numbers out of a DODS ASCII response.
 
     ERDDAP's .asc and THREDDS' .ascii agree on the shape — each data line
@@ -231,7 +260,7 @@ def rows(body: str, width: int) -> list[list[float | None]]:
             # A tenth of a degree is finer than the colour ramp can show and
             # keeps the payload small. The range check also catches fill
             # values that arrive as large negatives rather than NaN.
-            row.append(None if math.isnan(v) or v < -5 or v > 45 else round(v, 1))
+            row.append(None if math.isnan(v) or v < low or v > high else round(v, 1))
         # A trailing comma looks like one extra missing cell; only ever drop
         # one, and only when it is the difference.
         if len(row) == width + 1 and row[-1] is None:
@@ -356,7 +385,8 @@ def fetch(product: dict, when: str, y0: int, y1: int, x0: int, x1: int,
     else:
         url = f"{product['base']}.ascii?{var}[{when}][0]{span}"
     width = (x1 - x0) // stride_lon + 1
-    grid = rows(get(encode(url)), width)
+    low, high = product.get('valid', (-5.0, 45.0))
+    grid = rows(get(encode(url)), width, low, high)
     if not grid:
         raise RuntimeError(f'{product["key"]}: no rows returned')
     return grid
@@ -413,7 +443,7 @@ def build(product: dict, when: str, valid: str, out: pathlib.Path,
         # fresh the field is rather than leaving a reader to assume.
         **({'modelRun': run} if run else {}),
         'source': product['source'],
-        'units': 'degC',
+        'units': product.get('unit', 'degC'),
         **(extra or {}),
     }
     payload = {'header': header, 'data': [v for row in reversed(grid) for v in row]}
@@ -447,7 +477,7 @@ def build_tile(product: dict, when: str, valid: str, run: str,
     north = min(south + TILES['size'], TILES['north'])
     east = west + TILES['size']
     key = f'{south:g}_{west:g}'
-    out = MAP_DIR / f"tiles-sst-{product['key']}" / f'{key}.json'
+    out = MAP_DIR / f"tiles-{product['prefix']}-{product['key']}" / f'{key}.json'
 
     last = None
     backoff = [0, 3, 8, 20]
@@ -490,7 +520,7 @@ def build_tiles(product: dict, when: str, valid: str, run: str = '') -> None:
     available = sorted(k for k, _ in results if k)
     failed = sum(1 for _, why in results if why == 'failed')
     empty = sum(1 for _, why in results if why == 'empty')
-    tile_dir = MAP_DIR / f"tiles-sst-{product['key']}"
+    tile_dir = MAP_DIR / f"tiles-{product['prefix']}-{product['key']}"
     tile_dir.mkdir(parents=True, exist_ok=True)
     (tile_dir / 'index.json').write_text(json.dumps({
         'size': TILES['size'], 'west': TILES['west'],
@@ -548,7 +578,7 @@ def build_product(product: dict, tiles_only: bool) -> None:
         build_tiles(product, when, valid)
         return
 
-    name = f"sst-{product['key']}"
+    name = f"{product['prefix']}-{product['key']}"
     details = []
     for region in REGIONS:
         details.append({
@@ -570,7 +600,7 @@ def build_product(product: dict, tiles_only: bool) -> None:
               'details': details,
               # Only advertised where a tile tier exists; the map follows this
               # link, so a product without one must not offer it.
-              **({'tileIndex': f'/map/tiles-sst-{product["key"]}/index.json'}
+              **({'tileIndex': f'/map/tiles-{product["prefix"]}-{product["key"]}/index.json'}
                  if product.get('tiles') else {}),
           })
 
@@ -587,7 +617,7 @@ def main() -> int:
 
     failed = []
     for product in PRODUCTS:
-        if only and product['key'] != only:
+        if only and f"{product['prefix']}-{product['key']}" != only and product['key'] != only:
             continue
         try:
             build_product(product, tiles_only)
