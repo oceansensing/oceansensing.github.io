@@ -40,6 +40,32 @@ PMEL = 'https://data.pmel.noaa.gov/pmel/erddap'
 IOOS = 'https://gliders.ioos.us/erddap'
 IFREMER = 'https://erddap.ifremer.fr/erddap'
 
+# Gliders are national, so one server does not see the fleet. These are the
+# regional OceanGliders data endpoints that expose an ERDDAP — taken from the
+# European Glider Community's data-management page, then checked one by one
+# for a working allDatasets listing and a fetchable position.
+#
+# The match pattern is per server because they name things differently. IOOS
+# is a glider-only assembly centre, so everything on it counts. OTN and BODC
+# carry other kinds of data and say "glider"/"slocum"/"seaglider" in the
+# title. VOTO is glider-only in practice but titles its datasets with the
+# glider's *name* — "CarsonSHW003-20260731T0901" — so the naming convention
+# for a near-real-time mission is what identifies one there.
+#
+# Not included, and why: Coriolis (Europe) publishes through a selection
+# portal rather than an ERDDAP, and erddap.aodn.org.au (Australia) does not
+# resolve — IMOS routes its glider data through the AODN portal instead.
+GLIDERISH = re.compile(r'glider|slocum|seaglider|seaexplorer|spray', re.I)
+GLIDER_SOURCES = [
+    {'base': IOOS, 'where': 'US IOOS Glider DAC', 'match': None},
+    {'base': 'https://linkedsystems.uk/erddap',
+     'where': 'NOC / BODC, UK', 'match': GLIDERISH},
+    {'base': 'https://erddap.oceantrack.org/erddap',
+     'where': 'Ocean Tracking Network, Canada', 'match': GLIDERISH},
+    {'base': 'https://erddap.observations.voiceoftheocean.org/erddap',
+     'where': 'Voice of the Ocean, Sweden', 'match': re.compile(r'^nrt_')},
+]
+
 # The trailing window, and the single knob for it. Governs every asset the
 # map draws: how much glider and USV track is fetched, how far back a storm's
 # observed path is drawn, and how recently a dataset must have reported to
@@ -394,7 +420,21 @@ def main() -> int:
     argo = collect_argo()
     print('assets:')
     usvs = collect_erddap(PMEL, 'usv', re.compile(r'saildrone|usv|uncrewed|unmanned', re.I))
-    gliders = collect_erddap(IOOS, 'glider')
+
+    # One server per region, and a dead one costs only its own gliders:
+    # collect_erddap already returns [] rather than raising.
+    gliders = []
+    seen: set[str] = set()
+    for source in GLIDER_SOURCES:
+        found = collect_erddap(source['base'], 'glider', source['match'])
+        for g in found:
+            # Dataset ids are unique per server, not across them.
+            key = f"{source['base']}|{g['id']}"
+            if key in seen:
+                continue
+            seen.add(key)
+            gliders.append({**g, 'where': source['where']})
+        print(f"    via {source['where']}: {len(found)}")
 
     if not storms and not usvs and not gliders and previous.get('assets'):
         print('! every source failed; keeping the previous file', file=sys.stderr)

@@ -954,9 +954,12 @@ const checks = [
     ) && stormBox.querySelectorAll('a[href]').length > 0],
   ['build-time advisory link matches it', (() => {
     const page = fs.readFileSync('dist/observations/hurricanes/index.html', 'utf8');
-    const links = [...page.matchAll(/<a\b[^>]*class="[^"]*"[^>]*>|<a\b[^>]*>/g)]
-      .map((m) => m[0])
-      .filter((tag) => /nhc\.noaa\.gov|storm/i.test(tag));
+    /* Scoped to the status line. Matching every anchor that mentions NHC
+       swept in the ordinary prose link in the page's source list, which is
+       body copy and rightly navigates in place — the check failed on content,
+       not on a regression. */
+    const block = /<div[^>]*class="storm-status"[\s\S]*?<\/div>/.exec(page)?.[0] ?? '';
+    const links = [...block.matchAll(/<a\b[^>]*>/g)].map((m) => m[0]);
     return links.length > 0 &&
       links.every((tag) => /target="_blank"/.test(tag) && /\bnoopener\b/.test(tag));
   })()],

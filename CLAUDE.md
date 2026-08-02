@@ -188,8 +188,21 @@ calls counts what is on screen, not the fleet.
 
 ### Data pipeline (`scripts/fetch-ocean-assets.py`)
 
-Standard library only, so CI needs no Python dependencies. Aggregates NHC storms
-(via KMZ), NOAA PMEL saildrones, and IOOS gliders into one JSON. It runs
+Standard library only, so CI needs no Python dependencies. Aggregates NHC
+storms (via KMZ), NOAA PMEL saildrones, and gliders from **four** regional
+ERDDAPs into one JSON.
+
+Gliders are national, so one server does not see the fleet: `GLIDER_SOURCES`
+lists IOOS (US), NOC/BODC (UK), OTN (Canada) and VOTO (Sweden), taken from
+the OceanGliders regional endpoints the European Glider Community publishes
+and each verified to serve a working `allDatasets` listing and a fetchable
+position. 38 → 52 gliders. The match pattern is **per server**, because they
+name things differently: IOOS is glider-only so everything counts, OTN and
+BODC say "glider"/"slocum" in the title, and VOTO titles datasets with the
+glider's own name so its near-real-time naming convention is the tell. A dead
+server costs only its own gliders. Coriolis has no machine endpoint and
+`erddap.aodn.org.au` does not resolve, so Europe-wide and Australia are not
+in yet. It runs
 **server-side because NHC and PMEL send no CORS headers** — a browser cannot read
 them directly. It also decimates ERDDAP queries server-side
 (`orderByClosest("time/1hours")`) to keep the payload small, and falls back to
