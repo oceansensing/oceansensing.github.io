@@ -5,9 +5,16 @@ import 'leaflet/dist/leaflet.css';
 import './ocean-map.css';
 /* The renderer-independent half. Nothing imported here touches Leaflet or the
    DOM, which is deliberate: these are the parts a native port keeps. */
-import { coordText, ddm, elapsed, initialBearing, spanText, stamp } from './geo';
+import { coordText, elapsed, initialBearing, spanText, stamp } from './geo';
 import { rampColour, rampStops } from './ramp';
 import { tileKeysFor } from './tiles';
+import type {
+  IsobathFile,
+  RegionLink,
+  ScalarGrid,
+  TileIndexFile,
+  VectorGrid,
+} from './schema';
 
 /* Everything a second site would have to change, in one place.
    
@@ -51,7 +58,7 @@ export interface OceanMapOptions {
    Magenta for gliders rather than teal: teal vanishes into GEBCO's
    blue-green, and magenta stays separable from the orange USVs and the red
    storms under the common forms of colour blindness. */
-import palette from '../../data/map-palette.json';
+import { palette } from './palette';
 import { stormLines, stormLabel, NO_STORMS } from '../stormStatus';
 const {
   storm: STORM, usv: USV, glider: GLIDER,
@@ -308,7 +315,7 @@ export async function createOceanMap(
   const sstOisst = L.layerGroup();
   const sstNavy = L.layerGroup();
   const sssNavy = L.layerGroup();
-  const ssts: { group: L.LayerGroup; layer: any }[] = [];
+  const ssts: { group: L.LayerGroup; layer: ScalarLayer }[] = [];
   /* Both animated fields, so the point readout can sample whichever one
      the reader has on rather than a fixed depth. */
   const flows: { group: L.LayerGroup; layer: L.Layer | null }[] = [];
@@ -477,7 +484,7 @@ export async function createOceanMap(
       /* Join tiles into one grid. They share a spacing and sit on a common
          lattice, so this is a copy into the right offsets rather than any
          resampling. Cells no tile covers stay null, which reads as land. */
-      const assemble = (loaded: { header: any; data: (number | null)[] }[][]) => {
+      const assemble = (loaded: VectorGrid[]) => {
         const h0 = loaded[0][0].header;
         const dx = h0.dx;
         const dy = h0.dy;
@@ -620,7 +627,7 @@ export async function createOceanMap(
      loaded, with no request. */
 
   const COLORMAPS: Record<string, number[][]> = Object.fromEntries(
-    Object.entries((palette as any).colormaps ?? {}).map(([name, hexes]) => [
+    Object.entries(palette.colormaps ?? {}).map(([name, hexes]) => [
       name,
       rampStops(hexes as string[]),
     ])
@@ -630,7 +637,7 @@ export async function createOceanMap(
      are the same kind of thing — a value per cell, drawn as a raster — so
      they share the layer, the tier machinery and the readout, and differ
      only in what is listed here. */
-  const FIELDS = {
+  const FIELDS: Record<string, FieldDescriptor> = {
     // "Sea surface" alone stopped being unambiguous the moment a second
     // surface field existed.
     sst: { key: 'sst', unit: '°C', step: 1, label: 'Sea surface temp' },
@@ -659,45 +666,77 @@ export async function createOceanMap(
      */
   type FieldChoice = { map: string; range: [number, number] | null };
   const choices: Record<string, FieldChoice> = {
-    sst: { map: (palette.defaultColormap as any)?.sst ?? 'thermal', range: null },
-    sss: { map: (palette.defaultColormap as any)?.sss ?? 'haline', range: null },
+    sst: { map: palette.defaultColormap?.sst ?? 'thermal', range: null },
+    sss: { map: palette.defaultColormap?.sss ?? 'haline', range: null },
   };
-  const choiceFor = (field: any) => choices[field?.key ?? 'sst']!;
-  const stopsFor = (field: any) =>
+  /* What a scalar layer needs to know about the quantity it is painting.
+     `FIELDS` below is the whole set; a new scalar is an entry there and one in
+     the pipeline's PRODUCTS, not another layer. */
+  interface FieldDescriptor {
+    key: string;
+    unit: string;
+    /** The colour bar rounds outward to this. */
+    step: number;
+    label: string;
+    /** Bounds the *automatic* range, where the extremes are not ocean — see
+        the salinity note in FIELDS. A pinned range ignores it. */
+    autoClamp?: [number, number];
+  }
+
+  const choiceFor = (field?: FieldDescriptor) => choices[field?.key ?? 'sst']!;
+  const stopsFor = (field?: FieldDescriptor) =>
     COLORMAPS[choiceFor(field).map] ?? Object.values(COLORMAPS)[0]!;
 
   /* Interpolated between stops rather than stepped: a field of flat bands
      reads as contours the data does not have. */
 
-  type Scalar = { header: any; data: (number | null)[] };
+  /* The published shape, from schema.ts — the same declaration
+     scripts/test-schema.mjs holds the files to. */
+  type Scalar = ScalarGrid;
+
+  /* What L.Layer.extend gives back. Leaflet's typings stop at the base class,
+     so the members added below have to be declared for callers to see them —
+     without this every use site reached for `any` and the layer's own API was
+     invisible. */
+  interface ScalarLayer extends L.Layer {
+    options: L.LayerOptions & { field: FieldDescriptor };
+    _grid: Scalar | null;
+    _canvas: HTMLCanvasElement | null;
+    _range: [number, number] | null;
+    setGrid(grid: Scalar): ScalarLayer;
+    getGrid(): Scalar | null;
+    getRange(): [number, number] | null;
+    _rangeFor(sampled: number[]): [number, number] | null;
+    _render(): void;
+  }
 
   const SstLayer = L.Layer.extend({
     /* Leaflet's Class only passes constructor arguments through when the
        class defines initialize — without this the field descriptor is
        silently dropped and the layer paints with no ramp. */
-    initialize(this: any, options: { field: any }) {
+    initialize(this: ScalarLayer, options: { field: FieldDescriptor }) {
       L.setOptions(this, options);
     },
-    onAdd(this: any, map: L.Map) {
+    onAdd(this: ScalarLayer, map: L.Map) {
       this._canvas = L.DomUtil.create('canvas', 'leaflet-layer map-sst');
       map.getPane('sst')!.appendChild(this._canvas);
       map.on('moveend zoomend resize viewreset', this._render, this);
       this._render();
     },
-    onRemove(this: any, map: L.Map) {
+    onRemove(this: ScalarLayer, map: L.Map) {
       map.off('moveend zoomend resize viewreset', this._render, this);
       this._canvas?.remove();
       this._canvas = null;
     },
-    setGrid(this: any, grid: Scalar) {
+    setGrid(this: ScalarLayer, grid: Scalar) {
       this._grid = grid;
       this._render();
       return this;
     },
-    getGrid(this: any) {
+    getGrid(this: ScalarLayer) {
       return this._grid ?? null;
     },
-    getRange(this: any) {
+    getRange(this: ScalarLayer) {
       return this._range ?? null;
     },
     /* The range the ramp is stretched over: the whole-degree bounds of the
@@ -710,7 +749,7 @@ export async function createOceanMap(
        is what makes a front visible. The cost is that colour no longer
        means the same temperature between two views, which is why the
        legend prints the bounds rather than a fixed key. */
-    _rangeFor(this: any, sampled: number[]) {
+    _rangeFor(this: ScalarLayer, sampled: number[]) {
       if (!sampled.length) return null;
       let lo = Infinity;
       let hi = -Infinity;
@@ -740,7 +779,7 @@ export async function createOceanMap(
       if (hi <= lo) hi = lo + step;
       return [lo, hi] as [number, number];
     },
-    _render(this: any) {
+    _render(this: ScalarLayer) {
       const map: L.Map = this._map;
       const cv: HTMLCanvasElement | null = this._canvas;
       if (!map || !cv) return;
@@ -891,9 +930,9 @@ export async function createOceanMap(
      differ — velocity grids are a pair of components, this is one — and
      unifying them is the obvious next step; noted here rather than left
      for someone to discover. */
-  const buildField = (url: string, group: L.LayerGroup, field: any) => {
-    const layer = new (SstLayer as any)({ field });
-    const entry: { group: L.LayerGroup; layer: any } = { group, layer };
+  const buildField = (url: string, group: L.LayerGroup, field: FieldDescriptor) => {
+    const layer = new (SstLayer as unknown as new (o: { field: FieldDescriptor }) => ScalarLayer)({ field });
+    const entry: { group: L.LayerGroup; layer: ScalarLayer } = { group, layer };
     ssts.push(entry);
 
     fetch(url)
@@ -915,12 +954,12 @@ export async function createOceanMap(
         layer.setGrid(coarse);
 
         const details = [...(coarse.header?.details ?? [])].sort(
-          (a: any, b: any) => a.deg - b.deg
+          (a: RegionLink, b: RegionLink) => a.deg - b.deg
         );
         const grids = new Map<string, Scalar>();
         let fetching: string | null = null;
         let showing: string | null = null;
-        let tiles: any = null;
+        let tiles: TileIndexFile | null = null;
 
         const indexUrl = coarse.header?.tileIndex
           ? fromData(coarse.header.tileIndex)
@@ -984,7 +1023,7 @@ export async function createOceanMap(
           return { header: { ...h0, nx, ny, lo1: base, la1: north }, data };
         };
 
-        const covers = (d: any) => {
+        const covers = (d: RegionLink) => {
           if (map.getZoom() < d.minZoom) return false;
           const view = map.getBounds();
           return (
@@ -1057,7 +1096,7 @@ export async function createOceanMap(
       if (!on) return;
       // The bar shows the ramp of whichever field is on, and its own unit —
       // two scalars sharing one key would otherwise mislabel one of them.
-      const hexes = ((palette as any).colormaps ?? {})[choiceFor(field).map] ?? [];
+      const hexes = (palette.colormaps ?? {})[choiceFor(field).map] ?? [];
       sstKey.style.setProperty('--sst-ramp', `linear-gradient(to right, ${hexes.join(', ')})`);
       sstKey.textContent = range
         ? `${range[0]} to ${range[1]} ${field?.unit ?? ''}`.trim()
@@ -1090,7 +1129,7 @@ export async function createOceanMap(
        along it, necessarily. They are offered regardless. They are not the
        default, the markers keep their dark outlines, and which scale to
        read the ocean with is the reader's call, not the gate's. */
-    const safe = new Set<string>(((palette as any).markerSafe ?? []) as string[]);
+    const safe = new Set<string>(palette.markerSafe ?? []);
     const groups: [string, string[]][] = [
       ['High contrast', Object.keys(COLORMAPS).filter((n) => safe.has(n))],
       ['Standard', Object.keys(COLORMAPS).filter((n) => !safe.has(n))],
@@ -1228,7 +1267,7 @@ export async function createOceanMap(
      free and it being the most expensive thing on the map. It is also what
      lets the contours stay SVG, and so stay themed in CSS like the other
      linework, instead of needing the canvas renderer Argo uses. */
-  const drawContours = (geo: any, target: L.LayerGroup): L.Polyline[] => {
+  const drawContours = (geo: IsobathFile | null, target: L.LayerGroup): L.Polyline[] => {
     const byDepth = new Map<number, [number, number][][]>();
     for (const feature of geo?.features ?? []) {
       const depth = feature?.properties?.d;
@@ -1301,8 +1340,10 @@ export async function createOceanMap(
     const east = view.getEast();
     const middle = (west + east) / 2;
     for (const group of [bathyDeep, bathyShallow]) {
-      group.eachLayer((layer: any) => {
-        if (typeof layer.getLatLngs !== 'function') return;
+      group.eachLayer((layer: L.Layer) => {
+        // Only the multi-line polylines this layer draws; a group may hold
+        // anything, and a sub-line is what can safely be moved a world over.
+        if (!(layer instanceof L.Polyline)) return;
         const lines = layer.getLatLngs() as L.LatLng[][];
         let spans = bathySpans.get(layer);
         if (!spans || spans.length !== lines.length) {
@@ -1340,7 +1381,7 @@ export async function createOceanMap(
       });
   };
 
-  let bathyTiles: any = null;
+  let bathyTiles: TileIndexFile | null = null;
   let bathyIndexAsked = false;
   const bathyLoaded = new Map<string, L.Polyline[]>();
 
@@ -2241,7 +2282,7 @@ export async function createOceanMap(
      is the sort of thing that reads as the button not working. */
   const resetEverything = () => {
     for (const [key, choice] of Object.entries(choices)) {
-      choice.map = (palette.defaultColormap as any)?.[key] ?? Object.keys(COLORMAPS)[0]!;
+      choice.map = palette.defaultColormap?.[key] ?? Object.keys(COLORMAPS)[0]!;
       choice.range = null;
     }
 
@@ -2464,7 +2505,7 @@ export async function createOceanMap(
 
   const currentAt = (ll: L.LatLng) => {
     const shown = flows.find((f) => map.hasLayer(f.group))?.layer;
-    const grid = (shown as unknown as { options?: { data?: any } })?.options?.data;
+    const grid = (shown as unknown as { options?: { data?: VectorGrid } })?.options?.data;
     const head = grid?.[0]?.header;
     if (!head) return null;
     const i = Math.round(((((ll.lng - head.lo1) % 360) + 360) % 360) / head.dx);

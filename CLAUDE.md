@@ -391,6 +391,20 @@ Writing it down is also what an iOS port needs: these declarations are what a
 Swift `Codable` mirrors, and they are why a native app can read this data
 without reverse-engineering the Python.
 
+**The module consumes those types — there are no `any` casts left in it**,
+down from 29. The palette is typed once in `src/lib/ocean-map/palette.ts`
+rather than cast at six use sites, the scalar layer's own API is declared
+(`ScalarLayer`) because Leaflet's typings stop at the base class, and
+`FieldDescriptor` says what a paintable quantity is.
+
+`FIELDS` needs its type annotation and not just its values: without it
+`autoClamp: [29, 39]` widens to `number[]` and the tuple is lost. Checked
+that the types earn their place rather than merely satisfying the compiler —
+passing a grid's `data` where the grid belongs, reading `.header` off a range
+tuple, `field.units` for `field.unit`, `h.nX` for `h.nx`, and `geo.contours`
+for `geo.features` are all now compile errors, and every one of them passed
+silently before.
+
 **It immediately found a portability bug.** Grid headers carry *absolute*
 links — `/map/tiles/index.json`, and a `url` per regional grid — baked in by
 the writers, and the map fetched them exactly as given. On this site that is
