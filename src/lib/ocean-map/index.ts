@@ -123,13 +123,27 @@ export async function createOceanMap(
      inside this map's figure or outside it — this site renders it just
      above. Prefer one inside the figure, since that is the arrangement a
      second instance on the same page would need to disambiguate. */
+  let claimedBoxes: HTMLElement[] | null = null;
   const stormStatusBoxes = (): HTMLElement[] => {
     const inside = root.querySelectorAll<HTMLElement>('[data-storm-status]');
-    return [
-      ...(inside.length
-        ? inside
-        : document.querySelectorAll<HTMLElement>('[data-storm-status]')),
-    ];
+    if (inside.length) return [...inside];
+    /* A status line outside the figure — which is this site's arrangement,
+       the line being a sibling rendered just above it — is adopted by the
+       first map to ask for it, and then marked so no other map takes it too.
+
+       Refusing to adopt whenever a page has several maps was the first
+       attempt and went too far: with two maps *nobody* claimed the line and
+       it stopped rebuilding altogether. Claiming is what is wanted, not
+       abstaining. Found by putting a second map in the harness, which had the
+       two of them wiring the same zoom buttons and fighting over where a
+       click sent the view. */
+    if (claimedBoxes) return claimedBoxes;
+    const free = [...document.querySelectorAll<HTMLElement>('[data-storm-status]')].filter(
+      (b) => b.dataset.oceanMapClaimed === undefined
+    );
+    for (const b of free) b.dataset.oceanMapClaimed = host.id || '';
+    claimedBoxes = free;
+    return claimedBoxes;
   };
 
   const map = L.map(host, {

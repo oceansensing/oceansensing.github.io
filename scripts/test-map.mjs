@@ -1292,6 +1292,7 @@ await new Promise((r) => setTimeout(r, 300));
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
 
+
   // ---- isobaths
   ['isobaths fetch nothing until the layer is switched on',
     bathyRequestsBeforeSwitchOn === 0],

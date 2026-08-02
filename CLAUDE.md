@@ -19,6 +19,7 @@ npm run data:basemaps # re-sample basemap ocean colours (needs Pillow; slow, GEB
 npm run data:bathymetry # contour GEBCO into the isobath layer (needs a local grid; once)
 npm run data:bathy-tiles # just the 20-100 m tiles of that
 npm run test:units   # the map's renderer-independent modules, directly
+npm run test:multimap # two maps on one page stay out of each other's way
 npm run test:contrast # map colours stay visible on both bathymetries
 npm run test:map     # headless test of the built map bundle
 npm run test:clock   # headless test of the built UTC clock
@@ -171,6 +172,22 @@ The remaining seams, in order of what they unlock:
   `getElementById` would hand each of them the first. Every container matching
   `[data-ocean-map-canvas]` is now initialised separately and scopes its
   lookups to the nearest `[data-ocean-map]` ancestor.
+  `test:multimap` is what makes that claim real rather than argued — two
+  containers, their own homes, their own storage keys, their own controls. It
+  found a bug the moment it existed: **both maps adopted the page-level storm
+  status line**, wired the same zoom buttons and fought over where a click
+  sent the view. Refusing to adopt whenever a page has several maps was the
+  first fix and was worse — with two maps *nobody* claimed the line and it
+  stopped updating at all. The line is now claimed by the first map to ask and
+  marked with its id, which is also the only thing that distinguishes one
+  claimant from two: with a single box on the page, counting marked boxes
+  gives 1 either way, and the check caught nothing until it asserted *which*
+  map holds it.
+
+  It has its own harness rather than a case in `test:map`, for a measured
+  reason: a second map animates too, and both particle fields land in the same
+  recorded canvas, which skewed that file's per-frame displacement statistics.
+
 - **Still to do**: the CSS lives in the component and would go global if moved
   as-is (bare `.legend`, `.status`, `.field-controls` selectors need
   prefixing); the module is one 2,700-line file; and the platform layers

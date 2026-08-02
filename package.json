@@ -14,7 +14,7 @@
     "test:map": "node scripts/test-map.mjs",
     "test:clock": "node scripts/test-clock.mjs",
     "check:docs": "node scripts/check-docs.mjs",
-    "verify": "npm run build && npm run check && npm run check:docs && npm run test:units && npm run test:contrast && npm run test:map && npm run test:clock",
+    "verify": "npm run build && npm run check && npm run check:docs && npm run test:units && npm run test:contrast && npm run test:map && npm run test:multimap && npm run test:clock",
     "data:currents": "python3 scripts/fetch-currents.py",
     "data:fields": "python3 scripts/fetch-ocean-fields.py",
     "data:field-tiles": "python3 scripts/fetch-ocean-fields.py --tiles",
@@ -23,7 +23,8 @@
     "data:tiles": "python3 scripts/fetch-currents.py --tiles",
     "data:bathymetry": "python3 scripts/fetch-bathymetry.py",
     "data:bathy-tiles": "python3 scripts/fetch-bathymetry.py --tiles",
-    "test:units": "node scripts/test-units.mjs"
+    "test:units": "node scripts/test-units.mjs",
+    "test:multimap": "node scripts/test-multimap.mjs"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",
