@@ -1,10 +1,11 @@
 /* How an active storm is described in the status line above the map.
  *
- * Shared deliberately: StormStatus.astro renders this at build time so the
- * line is right with JavaScript off, and AssetMap re-renders it in the
- * browser from the freshly fetched data so it stays right between builds.
- * Two copies of this formatting would drift, and the drift would show as the
- * line disagreeing with itself after a refresh.
+ * Shared deliberately, and it lives with the map rather than with the site
+ * because the map is the thing that cannot do without it: the component
+ * renders this at build time so the line is right with JavaScript off, and
+ * the map re-renders it in the browser from freshly fetched data so it stays
+ * right between builds. Two copies of the formatting would drift, and the
+ * drift would show as the line disagreeing with itself after a refresh.
  */
 
 export interface Storm {

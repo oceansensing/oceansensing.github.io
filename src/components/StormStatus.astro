@@ -1,14 +1,14 @@
 ---
 import fs from 'node:fs';
 import path from 'node:path';
-import { stormLines, stormLabel, NO_STORMS, type Storm } from '../lib/stormStatus';
+import { stormLines, stormLabel, NO_STORMS, type Storm } from '@c4po/ocean-map/storm-status';
 
 /* One line per active tropical cyclone, rendered at build time so the line
    is right with JavaScript off. AssetMap re-renders it in the browser from
    the data it fetches, which is what keeps it current between builds — the
    deploy only rebuilds hourly, and the auto-reload deliberately waits for
    the reader to be idle, so this markup alone could sit stale for a while.
-   Both paths format through src/lib/stormStatus.ts. */
+   Both paths format through packages/ocean-map/storm-status.ts. */
 
 let storms: Storm[] = [];
 try {

@@ -305,7 +305,7 @@ globalThis.fetch = async (u) => {
 const assets = files['ocean-assets'];
 // Read here rather than beside the particle checks: the hit-target and
 // Argo checks above them need it too.
-const palette = JSON.parse(fs.readFileSync('src/data/map-palette.json', 'utf8'));
+const palette = JSON.parse(fs.readFileSync('packages/ocean-map/data/map-palette.json', 'utf8'));
 
 /* Stand in for the StormStatus component: one hidden zoom button per storm,
    plus one naming a storm that is not in the data — that one must stay
@@ -1185,7 +1185,7 @@ const builtCss = fs
    so contains '/map/' legitimately. Comments are stripped first: prose about
    the old paths is not a path, and the first version of this failed on its own
    explanatory comment. */
-const moduleSource = fs.readFileSync('src/lib/ocean-map/index.ts', 'utf8');
+const moduleSource = fs.readFileSync('packages/ocean-map/index.ts', 'utf8');
 const withoutComments = moduleSource
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/(^|[^:])\/\/[^\n]*/g, '$1');

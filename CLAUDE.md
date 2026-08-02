@@ -117,12 +117,29 @@ into `dist/_astro/*.js`. `AssetMap` is large enough to be bundled; `UtcClock` is
 inlined. The two test harnesses locate their code accordingly — if a component
 crosses that threshold, its harness needs updating.
 
-### The map (`src/lib/ocean-map/`, placed by `src/components/AssetMap.astro`)
+### The map (`packages/ocean-map/`, placed by `src/components/AssetMap.astro`)
 
-**The map is a plain module now; the component is its placement on this
-site.** `src/lib/ocean-map/index.ts` exports `createOceanMap(host, options)`
+**The map is an npm workspace package now; the component is its placement on
+this site.** `packages/ocean-map` is `@c4po/ocean-map`, imported by name, with
+Leaflet and `leaflet-velocity` as peer dependencies. Its `exports` point
+straight at the TypeScript — there is no build step for the package, because
+the only consumers are in this repo and Vite compiles it as source.
+
+What lives inside it is everything the map cannot do without: the module, its
+stylesheet, the schema, the palette and the sampled basemap colours, and
+`storm-status.ts`. That last one moved because a package cannot reach back
+into the app consuming it — `StormStatus.astro` imports it from the package
+now, which is the right direction anyway, the formatting being the map's and
+the component being a consumer.
+
+**`check:docs` had to learn about `packages/`.** Its path check only matched
+`src|public|scripts|.github`, so every doc reference under the new directory
+would have gone unvalidated — the guard would have kept saying `ok` while
+pointing at nothing.
+
+**The module is a plain module; the component is its placement.** `packages/ocean-map/index.ts` exports `createOceanMap(host, options)`
 and `mountOceanMaps(scope)`, with no Astro in it, so another project imports
-it directly — see `src/lib/ocean-map/README.md`. `AssetMap.astro` is down to
+it directly — see `packages/ocean-map/README.md`. `AssetMap.astro` is down to
 markup, styling and a two-line call.
 
 That split moved two gates. `check:docs` reads the particle lifetime from the
@@ -189,7 +206,7 @@ The remaining seams, in order of what they unlock:
   reason: a second map animates too, and both particle fields land in the same
   recorded canvas, which skewed that file's per-frame displacement statistics.
 
-- **Styling travels with it.** `src/lib/ocean-map/ocean-map.css` is imported
+- **Styling travels with it.** `packages/ocean-map/ocean-map.css` is imported
   by the module. Two changes made that possible and both matter: every rule
   keyed off `#asset-map`, an id, which matches at most one map per page — they
   key off an `ocean-map` class the module applies instead; and Astro's
@@ -355,7 +372,7 @@ calls counts what is on screen, not the fleet.
 
 ### The published data contract
 
-`src/lib/ocean-map/schema.ts` is what every file under `public/map/` is
+`packages/ocean-map/schema.ts` is what every file under `public/map/` is
 supposed to look like, and `npm run test:schema` checks that it does.
 
 The contract used to be agreed on by nothing: four Python writers, a
@@ -392,7 +409,7 @@ Swift `Codable` mirrors, and they are why a native app can read this data
 without reverse-engineering the Python.
 
 **The module consumes those types — there are no `any` casts left in it**,
-down from 29. The palette is typed once in `src/lib/ocean-map/palette.ts`
+down from 29. The palette is typed once in `packages/ocean-map/palette.ts`
 rather than cast at six use sites, the scalar layer's own API is declared
 (`ScalarLayer`) because Leaflet's typings stop at the base class, and
 `FieldDescriptor` says what a paintable quantity is.
@@ -459,7 +476,7 @@ counts as dark unless you list it in `LIGHT_BASEMAPS`.
 ### Map colour, and the contrast gate
 
 **Never inline a colour in `AssetMap.astro`.** They live in
-`src/data/map-palette.json`, which the component imports and
+`packages/ocean-map/data/map-palette.json`, which the component imports and
 `npm run test:contrast` checks — a hardcoded colour is invisible to the gate.
 `test:map` catches it too, by comparing what actually reaches the canvas
 against the palette file.
@@ -486,7 +503,7 @@ backgrounds occupy. It also judges by **prevalence-weighted coverage** rather
 than worst case, so one uncommon water tone cannot veto a colour that is
 clear over the rest of the ocean.
 
-Water palettes are sampled offline into `src/data/basemap-ocean.json`, so the
+Water palettes are sampled offline into `packages/ocean-map/data/basemap-ocean.json`, so the
 gate needs no network. Re-run `npm run data:basemaps` if a basemap changes.
 
 ### Currents

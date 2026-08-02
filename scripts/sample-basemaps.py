@@ -3,7 +3,7 @@
 
     python3 scripts/sample-basemaps.py
 
-Writes src/data/basemap-ocean.json, which scripts/test-contrast.mjs then
+Writes packages/ocean-map/data/basemap-ocean.json, which scripts/test-contrast.mjs then
 checks every map feature colour against. Committed rather than fetched, so
 the contrast gate needs no network in CI.
 
@@ -24,7 +24,7 @@ import pathlib
 import urllib.parse
 import urllib.request
 
-OUT = pathlib.Path(__file__).resolve().parent.parent / 'src' / 'data' / 'basemap-ocean.json'
+OUT = pathlib.Path(__file__).resolve().parent.parent / 'packages' / 'ocean-map' / 'data' / 'basemap-ocean.json'
 UA = {'User-Agent': 'oceansensing.org basemap sampler (github.com/oceansensing)'}
 
 ESRI = ('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/'

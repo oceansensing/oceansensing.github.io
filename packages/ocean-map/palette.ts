@@ -11,7 +11,7 @@
  * Never inline a colour anywhere else: a hardcoded one is invisible to the
  * contrast gate.
  */
-import raw from '../../data/map-palette.json';
+import raw from './data/map-palette.json';
 
 export interface Palette {
   /** Marker and line colours, keyed by feature. */

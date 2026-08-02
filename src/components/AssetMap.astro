@@ -1,7 +1,8 @@
 ---
 /* This site's placement of the ocean map: the markup, the styling, and the
-   configuration this page wants. The map itself is src/lib/ocean-map, a
-   plain module with no Astro in it — see its README for the options.
+   configuration this page wants. The map itself is @c4po/ocean-map in
+   packages/ocean-map — a plain module with no Astro in it. See its README
+   for the options.
 
    Data comes from /map/*.json, refreshed on every deploy by the scripts in
    scripts/ (see .github/workflows/deploy.yml). Leaflet is bundled from npm
@@ -66,18 +67,18 @@
 </figure>
 
 <script>
-  /* The map itself lives in src/lib/ocean-map — a plain module with no Astro
+  /* The map itself lives in packages/ocean-map — a plain module with no Astro
      in it, so another project can import it directly. This component is the
      markup and the styling; mountOceanMaps finds every container on the page
      and builds one. */
-  import { mountOceanMaps } from '../lib/ocean-map';
+  import { mountOceanMaps } from '@c4po/ocean-map';
 
   mountOceanMaps();
 </script>
 
 <style>
   /* Placement only. Everything about how the map itself looks now lives in
-     src/lib/ocean-map/ocean-map.css, which the module imports, so another
+     packages/ocean-map/ocean-map.css, which the module imports, so another
      site gets the styling with the behaviour instead of copying it. */
   .map-figure {
     margin: 0 0 var(--space-lg, 1.5rem);

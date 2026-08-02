@@ -1,0 +1,19 @@
+{
+  "name": "@c4po/ocean-map",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Interactive map of ocean observing platforms and the water they work in",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./storm-status": "./storm-status.ts",
+    "./ocean-map.css": "./ocean-map.css",
+    "./schema": "./schema.ts",
+    "./data/map-palette.json": "./data/map-palette.json",
+    "./data/basemap-ocean.json": "./data/basemap-ocean.json"
+  },
+  "peerDependencies": {
+    "leaflet": "^1.9.4",
+    "leaflet-velocity": "^2.1.4"
+  }
+}

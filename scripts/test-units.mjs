@@ -25,9 +25,9 @@ import {
   spanText,
   stamp,
   wrapLongitude,
-} from '../src/lib/ocean-map/geo.ts';
-import { rampColour, rampStops } from '../src/lib/ocean-map/ramp.ts';
-import { tileKeysFor } from '../src/lib/ocean-map/tiles.ts';
+} from '../packages/ocean-map/geo.ts';
+import { rampColour, rampStops } from '../packages/ocean-map/ramp.ts';
+import { tileKeysFor } from '../packages/ocean-map/tiles.ts';
 
 let failures = 0;
 const check = (what, got, want) => {

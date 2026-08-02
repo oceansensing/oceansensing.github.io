@@ -3,6 +3,9 @@
   "type": "module",
   "version": "1.0.0",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "description": "C4PO \u2014 Collaboratory for Physical Oceanography lab website",
   "scripts": {
     "dev": "astro dev",

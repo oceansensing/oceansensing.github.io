@@ -12,7 +12,7 @@ that site so it can be dropped somewhere else.
 ## Using it
 
 ```js
-import { createOceanMap, mountOceanMaps } from './lib/ocean-map';
+import { createOceanMap, mountOceanMaps } from '@c4po/ocean-map';
 
 // Explicit:
 createOceanMap(document.querySelector('#my-map'), {
@@ -75,3 +75,21 @@ Leaflet's own CSS with it.
   as their own modules, and not only for tidiness: an iOS port would reuse
   every one of them and reimplement only the drawing. Keep new logic that does
   not touch `L.` out of the Leaflet path.
+
+## Layout
+
+```
+packages/ocean-map/
+  index.ts            createOceanMap / mountOceanMaps — the Leaflet map
+  ocean-map.css       its styling; imported by index.ts
+  schema.ts           what every file under dataBase must contain
+  geo.ts  ramp.ts  tiles.ts   no Leaflet, no DOM — see below
+  palette.ts          map-palette.json, typed
+  storm-status.ts     shared with the host's build-time status line
+  data/               the palette, and the sampled basemap water it is gated against
+```
+
+`geo.ts`, `ramp.ts`, `tiles.ts` and `schema.ts` import neither Leaflet nor the
+DOM and typecheck standalone. That is deliberate and worth preserving: they
+are what a native port keeps, reimplementing only the drawing. Keep new logic
+that does not touch `L.` out of the Leaflet path.

@@ -17,7 +17,7 @@
  * understate differences in exactly the blue region every one of these
  * backgrounds occupies, so it would wave through colours that disappear.
  *
- * Palettes come from src/data/basemap-ocean.json, sampled offline by
+ * Palettes come from packages/ocean-map/data/basemap-ocean.json, sampled offline by
  * scripts/sample-basemaps.py, so this needs no network.
  */
 import fs from 'node:fs';
@@ -33,11 +33,11 @@ import { hex, deltaE } from './lib/colour.mjs';
 /* Two files, because behaviour and styling now live apart: the module names
    the pane, the component styles it. The check spans both on purpose — a
    blend mode reappearing in either place is what it exists to catch. */
-const behaviour = fs.readFileSync('src/lib/ocean-map/index.ts', 'utf8');
+const behaviour = fs.readFileSync('packages/ocean-map/index.ts', 'utf8');
 const styling = fs.readFileSync('src/components/AssetMap.astro', 'utf8');
 const particlePane = /paneName:\s*'([^']+)'/.exec(behaviour)?.[1];
 if (!particlePane) {
-  console.error('FAIL  cannot find the particle pane name in src/lib/ocean-map/index.ts');
+  console.error('FAIL  cannot find the particle pane name in packages/ocean-map/index.ts');
   process.exit(1);
 }
 const blended = new RegExp(
@@ -53,8 +53,8 @@ if (blended) {
   process.exit(1);
 }
 
-const palette = JSON.parse(fs.readFileSync('src/data/map-palette.json', 'utf8'));
-const basemaps = JSON.parse(fs.readFileSync('src/data/basemap-ocean.json', 'utf8')).basemaps;
+const palette = JSON.parse(fs.readFileSync('packages/ocean-map/data/map-palette.json', 'utf8'));
+const basemaps = JSON.parse(fs.readFileSync('packages/ocean-map/data/basemap-ocean.json', 'utf8')).basemaps;
 
 /* Fail with something readable if the palette is the wrong shape — an older
    sampler emitted bare colour strings instead of {colour, share} pairs, and

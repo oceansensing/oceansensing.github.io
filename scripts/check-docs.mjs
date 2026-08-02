@@ -22,7 +22,7 @@ const note = (doc, msg) => problems.push(`${doc}: ${msg}`);
    only place worth looking — prose sentences are full of slashes that are
    not paths. Placeholders (<person-id>) and globs are skipped: they are
    patterns, not files. dist/ is build output and may not exist. */
-const REPO_PATH = /^(src|public|scripts|\.github)\/[A-Za-z0-9._/-]+$/;
+const REPO_PATH = /^(src|public|scripts|packages|\.github)\/[A-Za-z0-9._/-]+$/;
 
 /* The docs also name files without their directory — `fetch-currents.py`,
    `AssetMap.astro` — and renaming a script leaves those pointing at nothing
@@ -106,7 +106,7 @@ const claims = [
      which is the argument for checking them rather than trusting a habit. */
   {
     what: 'particle lifetime',
-    file: 'src/lib/ocean-map/index.ts',
+    file: 'packages/ocean-map/index.ts',
     from: /const PARTICLE_SECONDS = (\d+)/,
     doc: (v) => new RegExp(`${v} s at \\d+ fps`),
   },

@@ -59,7 +59,7 @@ export interface OceanMapOptions {
    blue-green, and magenta stays separable from the orange USVs and the red
    storms under the common forms of colour blindness. */
 import { palette } from './palette';
-import { stormLines, stormLabel, NO_STORMS } from '../stormStatus';
+import { stormLines, stormLabel, NO_STORMS } from './storm-status';
 const {
   storm: STORM, usv: USV, glider: GLIDER,
   argo: ARGO, argoEdge: ARGO_EDGE, measure: MEASURE,
