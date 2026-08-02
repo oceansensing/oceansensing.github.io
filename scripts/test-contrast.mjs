@@ -138,10 +138,12 @@ const sstWater = Object.entries(palette.colormaps ?? {})
    marker-safe really does not. Without the second half the list would rot
    into a warning nobody needs — a map that quietly became safe would still
    be labelled a risk, and the label would stop meaning anything. */
+const worstForMap = {};
 for (const [name, stops] of Object.entries(palette.colormaps ?? {})) {
   const worst = Math.min(
     ...stops.flatMap((c) => Object.values(palette.features).map((f) => deltaE(hex(c), hex(f))))
   );
+  worstForMap[name] = worst;
   const declaredSafe = safeMaps.has(name);
   results.push({
     what: `${name} is ${declaredSafe ? 'marker-safe' : 'flagged as risky'}`,
@@ -151,13 +153,28 @@ for (const [name, stops] of Object.entries(palette.colormaps ?? {})) {
   });
 }
 
+/* A default is normally required to be marker-safe: it is what a reader who
+   never touches the picker looks at. Where one is not, it has to be named in
+   defaultExempt with the reasoning, and the clearance it actually gives is
+   reported — the same bargain separationExempt strikes. Recording it beats
+   dropping the check, which would let a default drift onto a scale that
+   hides the fleet with nothing to say so. */
+const defaultExempt = new Set(palette.defaultExempt ?? []);
 for (const field of Object.keys(palette.defaultColormap ?? {})) {
   const name = palette.defaultColormap[field];
+  const safe = safeMaps.has(name);
+  if (!safe && defaultExempt.has(field)) {
+    notes.push(
+      `${field} defaults to ${name}, which is not marker-safe ` +
+        `(worst ΔE ${worstForMap[name]?.toFixed(1)}) — deliberate, see _defaultColormap`
+    );
+    continue;
+  }
   results.push({
     what: `${field} defaults to ${name}, which is marker-safe`,
     on: 'defaults',
-    coverage: safeMaps.has(name) ? 1 : 0,
-    worst: Infinity,
+    coverage: safe ? 1 : 0,
+    worst: safe ? Infinity : (worstForMap[name] ?? Infinity),
   });
 }
 if (sstWater.length) {

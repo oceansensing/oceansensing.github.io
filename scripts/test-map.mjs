@@ -932,6 +932,38 @@ const salinity = await (async () => {
     legend: sstLegend?.textContent ?? '',
     sstStillOn: overlayLabelled(/OISST/)?.querySelector('input')?.checked,
   };
+  /* The automatic range is held to seawater. This grid runs 3.0 to 43.5 psu
+     — Chesapeake and the Baltic at one end, the Red Sea at the other — and
+     without the clamp one estuary in the corner of a view spends most of the
+     ramp on water nobody is looking at. A range the reader pins by hand is
+     deliberately not clamped, so both halves are checked. */
+  host._map.setView([20, -60], 2, { animate: false });
+  await new Promise((r) => setTimeout(r, 900));
+  const wide = Object.values(host._map._layers).find(
+    (l) => typeof l.getRange === 'function' && host._map.hasLayer(l)
+  );
+  out.globalAuto = wide?.getRange?.() ?? null;
+  out.freshInView = (() => {
+    const g = wide?._grid;
+    return g ? g.data.some((v) => typeof v === 'number' && v < 29) : false;
+  })();
+
+  const minIn2 = document.querySelector('[data-field-min]');
+  const maxIn2 = document.querySelector('[data-field-max]');
+  if (minIn2 && maxIn2) {
+    minIn2.value = '10';
+    maxIn2.value = '40';
+    minIn2.dispatchEvent(new window.Event('change', { bubbles: true }));
+    maxIn2.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 600));
+    const pinnedLayer = Object.values(host._map._layers).find(
+      (l) => typeof l.getRange === 'function' && host._map.hasLayer(l)
+    );
+    out.pinnedOutsideWindow = pinnedLayer?.getRange?.() ?? null;
+    document.querySelector('[data-field-auto]')?.click();
+    await new Promise((r) => setTimeout(r, 600));
+  }
+
   const back = overlayLabelled(/OISST/)?.querySelector('input');
   if (back && !back.checked) back.click();
   await new Promise((r) => setTimeout(r, 900));
@@ -1443,10 +1475,13 @@ const checks = [
     /11° 00\.00′ N/.test(deepRead)],
   ['the 60 m grid is published at 60 m', files['currents-60m'][0].header.depth === 60],
   ['the full set of colour scales is offered', scaleControls.options.length >= 20],
+  /* The trailing "and the default is marker-safe" clause that used to hang
+     off this one has moved to its own check below, where it belongs: the
+     defaults are now deliberately outside the safe set and the rule that
+     matters is that each such default is named in defaultExempt. */
   ['the standard maps are offered alongside the marker-safe ones',
     scaleControls.options.includes('jet') && scaleControls.options.includes('viridis') &&
-      scaleControls.options.includes('cmo.thermal') &&
-      palette.markerSafe.includes(palette.defaultColormap.sst)],
+      scaleControls.options.includes('cmo.thermal')],
   ['choosing a colour scale changes what is painted',
     !!scaleControls.before && !!scaleControls.afterMap &&
       scaleControls.before.join() !== scaleControls.afterMap.join()],
@@ -1477,6 +1512,25 @@ const checks = [
      and that the bounds are multiples of it. An earlier version asserted a
      narrow span, which failed the moment the view included the Amazon plume
      at 20.5 psu — that was the data being right, not the code being wrong. */
+  ['the salinity auto range is held to seawater, 29-39 psu',
+    !!salinity.globalAuto && salinity.freshInView &&
+      salinity.globalAuto[0] >= 29 && salinity.globalAuto[1] <= 39],
+  ['but a range the reader pins by hand is not clamped',
+    !!salinity.pinnedOutsideWindow &&
+      salinity.pinnedOutsideWindow[0] === 10 && salinity.pinnedOutsideWindow[1] === 40],
+  /* Both defaults are scales oceanography reads these fields with, and
+     neither clears the markers — recorded in defaultExempt rather than
+     reclassified, and test:contrast prints what each costs. Asserted here so
+     the pair cannot drift apart: a default that is not marker-safe and not
+     named is a default nothing is reporting on. */
+  ['the fields open on jet and cmo.haline',
+    palette.defaultColormap.sst === 'jet' &&
+      palette.defaultColormap.sss === 'cmo.haline'],
+  ['and every default outside the safe set is named in defaultExempt',
+    Object.entries(palette.defaultColormap).every(
+      ([field, map]) =>
+        palette.markerSafe.includes(map) || (palette.defaultExempt ?? []).includes(field)
+    )],
   ['salinity rounds to half a unit, where temperature rounds to whole ones',
     salinity.step === 0.5 &&
       !!salinity.range &&

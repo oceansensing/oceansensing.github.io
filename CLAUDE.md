@@ -523,11 +523,11 @@ contours are almost all of the bytes and none of the use at basin scale:
 
 | tier | levels | spacing | size | fetched |
 | --- | --- | --- | --- | --- |
-| `bathy-deep.json` | 200–10000 m | stride 8 (0.033°) | 1.2 MB gz | on switch-on |
+| `bathy-deep.json` | 200–10000 m | stride 8 (0.033°) | 2.9 MB gz | on switch-on |
 | `bathy-tiles/<s>_<w>.json` | 20–100 m | stride 2 (0.008°) | 16 KB gz median | per view, zoom ≥ 6 |
 
 144 tiles of 162 have shelf water; the rest are pure ocean or land and are
-absent from the index. Whole layer: 41 MB raw, ~7 MB compressed in git.
+absent from the index. Whole layer: 47 MB raw, ~9 MB compressed in git.
 Neither tier is fetched with the page — the layer is **off by default** and a
 reader who never asks for the seafloor never pays for it.
 
@@ -543,11 +543,24 @@ shoal or a reef, which is what someone reads this layer for. Measured, that
 keeps 2,648 lines at 200 m against 1,480 under a flat 0.2° filter while
 cutting 4000 m to 6,000.
 
-The deep tolerances look coarse and are not. The deep tier is sampled at
-stride 8, so its grid is already 0.033° and a 0.08° tolerance removes about
-two cells of wiggle — dropping from 0.05/0.02 to 0.08/0.04 took the global
-file from 1.9 MB gzipped to 1.25 with nothing visible to show for it,
-because the line's real resolution is the sampling either way.
+**A tolerance argued from grid fidelity is not an argument about how the
+line looks, and that mistake shipped.** The deep tolerances were first set
+to 0.04/0.08 on the reasoning that the tier is sampled at stride 8, so its
+grid is already 0.033° and 0.08° only discards about two cells of wiggle.
+True, and irrelevant: Douglas-Peucker keeps a vertex only where the chord
+strays past the tolerance, so a tolerance well above the sampling leaves
+long straight runs with corners between them. Measured on the published
+file, deep contours had a **median segment of 16 screen pixels at zoom 7 and
+a p90 over 25** — visibly polygonal, which is how it looked and how it was
+reported.
+
+0.015/0.018 gives a 6.9 px median and a 16 px p90, for 2.9 MB gzipped
+against 1.25. Sampling finer does *not* help and was measured: stride 4 at
+the same tolerance moves the median only from 8.2 px to 7.6, because the
+tolerance and not the grid is binding. Note the deep levels ended up needing
+a **tighter** tolerance than the 200–1000 m ones despite being the smoother
+features — they are drawn over abyssal plain, where a chord can run a long
+way before it strays far enough to force a vertex.
 
 The **0 m line is `coastline.json`**, not a contour thresholded out of the
 DEM: already simplified, already committed, and cartographically cleaner.

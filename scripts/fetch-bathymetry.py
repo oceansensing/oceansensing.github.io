@@ -24,8 +24,8 @@ a windowed read is a seek, and no tile needs the whole grid in memory.
 
 Two tiers, because the shallow contours are almost all of the bytes and none
 of the use at basin scale. Measured over five contrasting regions and
-projected across the world ocean: 200 m and below comes to ~1.2 MB gzipped,
-while 20-100 m comes to ~4.6 MB — a 20 m isobath threads every sandbar, and
+projected across the world ocean: 200 m and below comes to ~2.9 MB gzipped,
+while 20-100 m comes to ~6 MB — a 20 m isobath threads every sandbar, and
 at zoom 4 that is a smear. So the deep set is one global file fetched when
 the layer is switched on, and the shallow set is tiled on the same 20 deg
 lattice the current and field tiles already use, fetched per view at zoom 6
@@ -75,17 +75,30 @@ def epsilon(depth: int) -> float:
     0.01 deg is ~1.1 km, about two cells of the shallow grid, and half a
     pixel at the zoom the tiles start at.
 
-    The deep tolerances look coarse and are not: the deep tier is sampled at
-    stride 8, so its grid is already 0.033 deg and 0.08 removes about two
-    cells of wiggle. Measured, dropping from 0.05/0.02 to 0.08/0.04 takes
-    the global file from 1.9 MB gzipped to 1.25 with nothing visible to show
-    for it, because the line's real resolution is the sampling either way.
+    The deep tolerances were once 0.04/0.08, on the argument that the deep
+    tier is sampled at stride 8 so its grid is already 0.033 deg and 0.08
+    only removes about two cells of wiggle. That argument is about fidelity
+    to the grid and says nothing about how the line *looks*: Douglas-Peucker
+    keeps a vertex only where the chord strays past the tolerance, so a
+    tolerance well above the sampling leaves long straight runs with corners
+    between them. Measured on the published file, deep contours came out
+    with a median segment of 16 screen pixels at zoom 7 and a p90 over 25 —
+    visibly polygonal, which is exactly how it looked.
+
+    0.015/0.018 brings that to a 6.9 px median and a 16 px p90, for 2.9 MB
+    gzipped against 1.25 — the deep levels alone go from 10-11 px to 7.4.
+    Sampling finer does not help here and was measured too: stride 4 at the
+    same tolerance only moves the median from 8.2 px to 7.6, because the
+    tolerance and not the grid is what is binding. Which is also why the
+    deep levels needed a tighter tolerance than the 200-1000 m ones rather
+    than a looser one, despite being the smoother features: they are drawn
+    over abyssal plain where a chord can run a long way before it strays.
     """
     if depth <= 100:
         return 0.01
     if depth <= 1000:
-        return 0.04
-    return 0.08
+        return 0.015
+    return 0.018
 
 
 def min_extent(depth: int) -> float:

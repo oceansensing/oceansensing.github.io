@@ -574,7 +574,17 @@ import 'leaflet/dist/leaflet.css';
          maybe 34–37 psu against 10 °C or more of temperature — rounding
          salinity to whole units would leave a typical view occupying a
          quarter of the ramp and looking flat. */
-      sss: { key: 'sss', unit: 'psu', step: 0.5, label: 'Salinity' },
+      /* And its automatic range is held to oceanic values. Salinity is the
+         one field here whose extremes are not ocean at all: river plumes and
+         estuaries run to single figures — this model reaches 3 psu in
+         Chesapeake Bay — so one bay in the corner of a view stretched the
+         ramp across water nobody was looking at and flattened the 34-37 psu
+         where the fronts actually are. Clamping the *automatic* bounds to
+         29-39 spends the ramp on seawater; fresher water simply pins to the
+         bottom stop, which is the honest thing for it to do on a scale
+         labelled in psu. A range the reader pins by hand is untouched — this
+         bounds what "Auto" chooses, not what they are allowed to ask for. */
+      sss: { key: 'sss', unit: 'psu', step: 0.5, label: 'Salinity', autoClamp: [29, 39] },
     };
 
     /* What the reader has chosen, per field rather than per layer: the two
@@ -659,6 +669,20 @@ import 'leaflet/dist/leaflet.css';
         const step = this.options.field?.step ?? 1;
         lo = Math.floor(lo / step) * step;
         hi = Math.ceil(hi / step) * step;
+        /* Some fields have automatic bounds worth holding to a sensible
+           window — see the salinity note in FIELDS. Applied after rounding
+           so the clamp lands exactly on the stated numbers. */
+        const clamp = this.options.field?.autoClamp;
+        if (clamp) {
+          lo = Math.max(lo, clamp[0]);
+          hi = Math.min(hi, clamp[1]);
+          // A view entirely outside the window (an estuary, say) would leave
+          // an inverted range; collapse it to the nearest edge instead.
+          if (hi <= lo) {
+            lo = Math.min(Math.max(lo, clamp[0]), clamp[1] - step);
+            hi = lo + step;
+          }
+        }
         // A view of uniform water would otherwise divide by zero and paint
         // one flat colour; one step of headroom keeps it a gradient.
         if (hi <= lo) hi = lo + step;
