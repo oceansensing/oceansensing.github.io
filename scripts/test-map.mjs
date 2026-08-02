@@ -755,7 +755,7 @@ const measureCleared = (measureReadout?.textContent ?? '') === '' &&
    the loaded grid, without waiting on the network. */
 host._map.fire('contextmenu', { latlng: window.L.latLng(36.5, -74.5) });
 await new Promise((r) => setTimeout(r, 300));
-const readoutHtml = host.querySelector('.point-readout .leaflet-popup-content')?.innerHTML ?? '';
+const readoutHtml = host.querySelector('.om-point-readout .leaflet-popup-content')?.innerHTML ?? '';
 const identifyAtReadout = identifyUrl;
 
 /* Depth. Two animated fields, mutually exclusive, and the readout has to
@@ -771,7 +771,7 @@ await new Promise((r) => setTimeout(r, 600));
 host._map.closePopup();
 host._map.fire('contextmenu', { latlng: window.L.latLng(10, -50) });
 await new Promise((r) => setTimeout(r, 200));
-const surfaceRead = host.querySelector('.point-readout .leaflet-popup-content')?.textContent ?? '';
+const surfaceRead = host.querySelector('.om-point-readout .leaflet-popup-content')?.textContent ?? '';
 
 const overlayLabels = [...host.querySelectorAll('.leaflet-control-layers-overlays label')];
 const deepToggle = overlayLabels.find((l) => /60 m/.test(l.textContent));
@@ -785,7 +785,7 @@ const surfaceOffWithDeepOn = labelled(/Surface currents/)?.querySelector('input'
 host._map.closePopup();
 host._map.fire('contextmenu', { latlng: window.L.latLng(11, -51) });
 await new Promise((r) => setTimeout(r, 200));
-const deepRead = host.querySelector('.point-readout .leaflet-popup-content')?.textContent ?? '';
+const deepRead = host.querySelector('.om-point-readout .leaflet-popup-content')?.textContent ?? '';
 
 /* ---- sea surface temperature ---------------------------------------------
 
@@ -844,7 +844,7 @@ if (painted) {
 host._map.closePopup();
 host._map.fire('contextmenu', { latlng: window.L.latLng(10, -50) });
 await new Promise((r) => setTimeout(r, 200));
-const oisstRead = host.querySelector('.point-readout .leaflet-popup-content')?.textContent ?? '';
+const oisstRead = host.querySelector('.om-point-readout .leaflet-popup-content')?.textContent ?? '';
 
 // The synthetic Navy field is a constant 7.5 C everywhere, so if the readout
 // still reports the OISST value the two layers are not really exclusive.
@@ -855,7 +855,7 @@ const oisstOffWithNavyOn =
 host._map.closePopup();
 host._map.fire('contextmenu', { latlng: window.L.latLng(11, -51) });
 await new Promise((r) => setTimeout(r, 200));
-const navyRead = host.querySelector('.point-readout .leaflet-popup-content')?.textContent ?? '';
+const navyRead = host.querySelector('.om-point-readout .leaflet-popup-content')?.textContent ?? '';
 
 const sstLegend = document.querySelector('[data-sst-key]');
 const legendShown = sstLegend && !sstLegend.hidden;
@@ -960,7 +960,7 @@ const salinity = await (async () => {
   );
   const out = {
     offered: !!toggle,
-    readout: host.querySelector('.point-readout .leaflet-popup-content')?.textContent ?? '',
+    readout: host.querySelector('.om-point-readout .leaflet-popup-content')?.textContent ?? '',
     range: layer?.getRange?.() ?? null,
     step: layer?.options?.field?.step ?? null,
     legend: sstLegend?.textContent ?? '',
@@ -1087,11 +1087,11 @@ const eezLayer = await (async () => {
   host._map.closePopup();
   host._map.fire('contextmenu', { latlng: window.L.latLng(36.5, -74.5) });
   await new Promise((r) => setTimeout(r, 400));
-  const jurisdictionOn = host.querySelector('.point-readout [data-eez]')?.textContent ?? '';
+  const jurisdictionOn = host.querySelector('.om-point-readout [data-eez]')?.textContent ?? '';
   host._map.closePopup();
   host._map.fire('contextmenu', { latlng: window.L.latLng(30.0, -45.0) });
   await new Promise((r) => setTimeout(r, 400));
-  const openOcean = host.querySelector('.point-readout [data-eez]')?.textContent ?? '';
+  const openOcean = host.querySelector('.om-point-readout [data-eez]')?.textContent ?? '';
   host._map.closePopup();
 
   const out = {
@@ -1136,7 +1136,7 @@ const globalReset = await (async () => {
   maxIn.dispatchEvent(new window.Event('change', { bubbles: true }));
   await new Promise((r) => setTimeout(r, 500));
 
-  const reset = [...host.querySelectorAll('.view-toggle a')].find((a) => a.textContent === 'Reset');
+  const reset = [...host.querySelectorAll('.om-view-toggle a')].find((a) => a.textContent === 'Reset');
   reset?.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
   await new Promise((r) => setTimeout(r, 1200));
 
@@ -1175,6 +1175,19 @@ const builtCss = fs
   .filter((f) => f.endsWith('.css'))
   .map((f) => fs.readFileSync(path.join('dist', '_astro', f), 'utf8'))
   .join('\n');
+/* Every fetch has to go through the configured dataBase. Two did not — the
+   isobath tile request and the hourly refresh poll — because both are
+   template literals and the sweep that rewrote the quoted paths did not match
+   them. A second deployment pointing dataBase at another host would have
+   silently fetched those two from its own origin. Read from the source rather
+   than the bundle: the bundle inlines the default, so '/map/' legitimately
+   appears there. */
+const moduleSource = fs.readFileSync('src/lib/ocean-map/index.ts', 'utf8');
+const hardcodedPaths = [...moduleSource.matchAll(/['"`]\/map\/[^'"`]*/g)]
+  .map((m) => m[0])
+  // The default value of the option itself is the one place it belongs.
+  .filter((hit) => !moduleSource.includes(`dataBase: options.dataBase ?? host.dataset.mapData ?? ${hit}'`));
+
 const paneSvgUnclamped =
   /\.leaflet-pane>svg\{[^}]*max-width:none/.test(builtCss.replace(/\s+/g, '')) ||
   /\.leaflet-pane>svg\{[^}]*max-width:none/.test(builtCss);
@@ -1309,6 +1322,8 @@ const checks = [
       bathyLayersAt7.every((l) => /map-bathy/.test(l.options.className))],
   ['vectors in a custom pane are not clamped to 0x0 by the site reset',
     paneSvgUnclamped],
+  ['every data fetch goes through the configured dataBase',
+    hardcodedPaths.length === 0],
   /* The shoreline replaced a Natural Earth polyline whose vertices were 16
      px apart at zoom 7 — as coarse as the isobaths were before they were
      fixed, and drawn a few pixels off the basemap's own coast. It is a
@@ -1334,7 +1349,7 @@ const checks = [
   ['borders + markers drawn', host.querySelectorAll('path').length > 200],
   ['layer switcher', host.querySelectorAll('.leaflet-control-layers-selector').length >= 10],
   ['bathymetry is the default base', !!host.querySelector('.leaflet-tile-pane .leaflet-layer')],
-  ['view toggle', host.querySelectorAll('.view-toggle a').length === 3],
+  ['view toggle', host.querySelectorAll('.om-view-toggle a').length === 3],
   /* The global reset. Checked by setting the map as far from default as the
      controls allow — a different basemap, a layer switched on, a pinned
      scale, a non-default colormap — and asserting every one of them comes

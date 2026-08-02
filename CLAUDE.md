@@ -188,10 +188,26 @@ The remaining seams, in order of what they unlock:
   reason: a second map animates too, and both particle fields land in the same
   recorded canvas, which skewed that file's per-frame displacement statistics.
 
-- **Still to do**: the CSS lives in the component and would go global if moved
-  as-is (bare `.legend`, `.status`, `.field-controls` selectors need
-  prefixing); the module is one 2,700-line file; and the platform layers
-  assume this fleet.
+- **Styling travels with it.** `src/lib/ocean-map/ocean-map.css` is imported
+  by the module. Two changes made that possible and both matter: every rule
+  keyed off `#asset-map`, an id, which matches at most one map per page — they
+  key off an `ocean-map` class the module applies instead; and Astro's
+  automatic scoping is gone, so the six shared class names (`legend`, `key`,
+  `status`, `field-controls`, `bathy-controls`, `fallback`) carry an `om-`
+  prefix rather than leaking into the host page. `.om-vh` is duplicated from
+  the site's own utility deliberately — leaning on a host to define it is the
+  kind of invisible dependency whose failure is silent.
+- **Still to do**: the chrome markup is the host's, so a second site
+  reproduces the legend and controls; the module is one 2,700-line file; and
+  the fleet is assumed — the legend names hurricanes, USVs, IOOS gliders and
+  Argo, and the layer switcher matches.
+
+Moving the stylesheet turned up **two fetches that ignored `dataBase`** — the
+isobath tiles and the hourly refresh poll. Both are template literals, and the
+sweep that rewrote the quoted paths never matched them, so a deployment
+pointing `dataBase` at another host would have fetched those two from its own
+origin. `test:map` now reads the module source and fails on any `/map/`
+outside the option's own default.
 
 **Keep logic that does not touch `L.` out of the Leaflet path.** An iOS port
 would reuse the pipelines, the JSON schemas and tile lattice, the palette and

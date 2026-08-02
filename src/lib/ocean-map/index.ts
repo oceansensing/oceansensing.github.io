@@ -1,5 +1,8 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+/* The map's own styling travels with it. Every rule keys off the `ocean-map`
+   class applied below rather than an id, so a page can carry more than one. */
+import './ocean-map.css';
 /* The renderer-independent half. Nothing imported here touches Leaflet or the
    DOM, which is deliberate: these are the parts a native port keeps. */
 import { coordText, ddm, elapsed, initialBearing, spanText, stamp } from './geo';
@@ -78,6 +81,10 @@ export async function createOceanMap(
   /* The figure wrapping this map: its legend, controls and status line all
      live here. Falls back to the container itself so a host that renders
      only the map div still works. */
+  /* What the stylesheet keys off. Applied here rather than expected of the
+     markup, so a host only has to supply a container. */
+  host.classList.add('ocean-map');
+
   const root: ParentNode =
     host.closest('[data-ocean-map]') ?? host.parentElement ?? host;
   const find = <T extends Element>(selector: string): T | null =>
@@ -1376,7 +1383,7 @@ export async function createOceanMap(
     for (const key of wanted) {
       if (bathyLoaded.has(key)) continue;
       bathyLoaded.set(key, []); // claim it now, so one pan is one request
-      fetch(`/map/bathy-tiles/${key}.json`)
+      fetch(`${DATA}bathy-tiles/${key}.json`)
         .then((r) => r.json())
         .then((geo) => {
           // Panned off it while the request was in flight; drop the answer.
@@ -2141,7 +2148,7 @@ export async function createOceanMap(
   };
 
   const describePoint = (ll: L.LatLng) => {
-    const popup = L.popup({ className: 'point-readout' })
+    const popup = L.popup({ className: 'om-point-readout' })
       .setLatLng(ll)
       .setContent(`<strong>${coordText(ll)}</strong>` + oceanRows(ll))
       .openOn(map);
@@ -2190,7 +2197,7 @@ export async function createOceanMap(
   const Views = L.Control.extend({
     options: { position: 'topleft' },
     onAdd() {
-      const bar = L.DomUtil.create('div', 'leaflet-bar view-toggle');
+      const bar = L.DomUtil.create('div', 'leaflet-bar om-view-toggle');
       for (const [label, title] of [
         ['Basin', 'Zoom to the Atlantic and Gulf'],
         ['Global', 'Zoom to every reporting asset'],
@@ -2310,7 +2317,7 @@ export async function createOceanMap(
 
     const lookForNewer = async () => {
       try {
-        const url = `/map/ocean-assets.json?_=${Date.now()}`;
+        const url = `${DATA}ocean-assets.json?_=${Date.now()}`;
         const fresh = await (await fetch(url, { cache: 'no-store' })).json();
         if (fresh?.updated && fresh.updated !== loadedStamp) {
           newerAvailable = true;

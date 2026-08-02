@@ -44,8 +44,13 @@ The module supplies behaviour only. The host page provides:
 - **Markup** — a container, and optionally a legend, colour-scale controls, an
   isobath opacity slider and a status line, found by `data-*` hooks. See
   `src/components/AssetMap.astro` for the full set.
-- **Styling** — `src/components/AssetMap.astro`'s `<style>` block. Not yet part
-  of this module; see below.
+- **Styling** — none. `ocean-map.css` ships with the module and the module
+  imports it. Rules key off the `ocean-map` class it puts on each container,
+  not an id, so a page can carry several; shared class names carry an `om-`
+  prefix, since a plain stylesheet has none of Astro's automatic scoping.
+  Colours read CSS variables with fallbacks, so a host defining the site's
+  design tokens gets its own palette and one that does not still gets a
+  legible map.
 - **Data** — the generated grids under `dataBase`. There are ~150 MB of them,
   so they are not shipped here. Point `dataBase` at a host that already serves
   them, or build your own with the scripts in `scripts/`.
@@ -55,16 +60,16 @@ Leaflet's own CSS with it.
 
 ## Not done yet
 
-- **The CSS still lives in the Astro component.** Moving it here means losing
-  Astro's automatic scoping, and the block has bare class selectors
-  (`.legend`, `.status`, `.field-controls`) that would then be global. They
-  need prefixing first.
+- **The chrome markup is still the host's.** The legend, colour-scale controls,
+  isobath slider and status line are found by `data-*` hooks, so a second site
+  has to reproduce that markup — see `AssetMap.astro`. The module should build
+  it, which would reduce a deployment to one `<div>`.
+- **The fleet is assumed**, and the legend is where it shows: the entries name
+  hurricanes, NOAA USVs, IOOS gliders and Argo floats, and the layer switcher
+  matches. Fine for another deployment reading the same `dataBase`; a
+  blocker for one with different platforms.
 - **It is one 2,700-line file.** The Leaflet-independent parts — colour ramps,
   coordinate formatting, grid sampling, tile selection — are worth pulling out
   as their own modules, and not only for tidiness: an iOS port would reuse
   every one of them and reimplement only the drawing. Keep new logic that does
   not touch `L.` out of the Leaflet path.
-- **The fleet is assumed.** Layer names, popups and the status line know about
-  storms, gliders, saildrones and Argo. Another deployment with different
-  platforms needs those made pluggable, which is a larger job than
-  configuration.
