@@ -89,6 +89,12 @@ import 'leaflet/dist/leaflet.css';
        It gets its own pane between the basemap and the vectors: whichever
        basemap the reader picks, the currents sit above it and below every
        track and marker, so the platforms are never obscured. */
+    /* Switched off. The scaffolding stays — the pane, the tile definition,
+       the CSS that blends it — so turning it back on is one flag, but with
+       this false nothing is requested from Copernicus and the layer is not
+       offered in the switcher. */
+    const MERCATOR_RASTER = false;
+
     const CMEMS = 'https://wmts.marine.copernicus.eu/teroWmts';
     const CURRENTS =
       'GLOBAL_ANALYSISFORECAST_PHY_001_024/' +
@@ -487,10 +493,12 @@ import 'leaflet/dist/leaflet.css';
     map.on('baselayerchange', (e: L.LayersControlEvent) => markBasemapTone(e.name));
 
     /* Animation is the default, but a continuously moving field is exactly
-       what prefers-reduced-motion is about; those readers get the static
-       speed raster instead, which depicts the same currents without motion. */
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) currents.addTo(map);
-    else flow.addTo(map);
+       what prefers-reduced-motion is about. Those readers used to get the
+       static Mercator raster in its place; with that switched off there is
+       no still depiction of the current to offer, so they get no current
+       layer rather than an animated one they did not ask for. Both animated
+       fields remain in the switcher for them to turn on deliberately. */
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) flow.addTo(map);
 
 
     // Lat/lon grid, every 10°.
@@ -646,7 +654,7 @@ import 'leaflet/dist/leaflet.css';
     const overlays: Record<string, L.Layer> = {
       'Surface currents (animated)': flow,
       'Currents at 60 m (animated)': flowDeep,
-      'Current speed (Mercator)': currents,
+      ...(MERCATOR_RASTER ? { 'Current speed (Mercator)': currents } : {}),
       'Hurricanes': storms,
       'NOAA USVs': usvs,
       'IOOS gliders': gliders,

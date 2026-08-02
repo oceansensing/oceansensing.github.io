@@ -211,8 +211,15 @@ because they are not the same data:
   credentials, and its WMTS serves only pictures.
 - **Animated 60 m particles** (off by default) — the same product one depth
   down, below the wind-driven layer and about where a glider flies.
-- **Mercator speed raster** (off by default) — the Copernicus WMTS tiles.
-  Also what `prefers-reduced-motion` readers get instead of the animation.
+- **Mercator speed raster** — **switched off**. `MERCATOR_RASTER = false` in
+  `AssetMap.astro`: nothing is requested from Copernicus and the layer is not
+  offered. The scaffolding stays — the `currents-raster` pane, the tile
+  definition, the blend-mode CSS — so it is one flag to restore.
+
+  It was also what `prefers-reduced-motion` readers got instead of the
+  animation. With no still depiction left to offer, those readers now get
+  **no** current layer rather than an animated one they did not ask for;
+  both animated fields stay in the switcher to be turned on deliberately.
 
 #### Depth is a dimension, not a second copy
 
