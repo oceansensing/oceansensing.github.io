@@ -670,6 +670,67 @@ const navyRead = host.querySelector('.point-readout .leaflet-popup-content')?.te
 const sstLegend = document.querySelector('[data-sst-key]');
 const legendShown = sstLegend && !sstLegend.hidden;
 
+/* The ramp is stretched over the water in view, so the range has to follow
+   the view — and the legend has to follow the range, or the numbers on the
+   bar describe some other piece of ocean. Two very different views: tropics
+   against high latitude. */
+const sstLayerOn = () => Object.values(host._map._layers).find((l) => typeof l.getRange === 'function' && host._map.hasLayer(l));
+
+/* The seam. These grids start at the prime meridian and span exactly 360°,
+   so the column after the last one is the first — and clamping there left an
+   unpainted stripe down the map with the basemap showing through. Counted by
+   column rather than by eye: over open water every column should be painted,
+   so a column that is entirely empty between two full ones is the bug. */
+const seamGap = async () => {
+  // South Atlantic: the meridian crosses open water here. At 20N it crosses
+  // the Sahara, where the seam column is unpainted either way — which made
+  // the first version of this check pass against the bug it was written for.
+  host._map.setView([-30, 0], 3, { animate: false });
+  await new Promise((r) => setTimeout(r, 900));
+  drawn.images.length = 0;
+  sstLayerOn()?._render?.();
+  await new Promise((r) => setTimeout(r, 200));
+  const img = drawn.images[drawn.images.length - 1];
+  if (!img) return null;
+  const filled = [];
+  for (let x = 0; x < img.width; x++) {
+    let n = 0;
+    for (let y = 0; y < img.height; y++) if (img.data[(y * img.width + x) * 4 + 3] > 0) n += 1;
+    filled.push(n);
+  }
+  // An empty column flanked by well-covered ones on both sides.
+  /* Count *runs* of empty columns flanked by painted ones, not single
+     columns. The gap is as wide as one grid cell — six pixels at zoom 3 —
+     so every column in it has an empty neighbour, and a single-column test
+     finds nothing. That version passed against the very bug it was written
+     for, which is why this one was checked against it both ways. */
+  let gaps = 0;
+  const solid = (x) => x >= 0 && x < filled.length && filled[x] > img.height / 4;
+  for (let x = 0; x < filled.length; x++) {
+    if (filled[x] !== 0) continue;
+    const start = x;
+    while (x < filled.length && filled[x] === 0) x += 1;
+    if (solid(start - 1) && solid(x)) gaps += 1;
+  }
+  return gaps;
+};
+const rangeAt = async (lat, lng, zoom) => {
+  host._map.setView([lat, lng], zoom, { animate: false });
+  await new Promise((r) => setTimeout(r, 700));
+  return { range: sstLayerOn()?.getRange?.() ?? null, label: sstLegend?.textContent ?? '' };
+};
+/* Back to OISST first: the check above left the synthetic Navy field on, and
+   that one is a constant everywhere by construction, so its range is the same
+   in every view — it would pass a fixed-range bug straight through. */
+overlayLabelled(/OISST/)?.querySelector('input')?.click();
+await new Promise((r) => setTimeout(r, 900));
+
+const seamGaps = await seamGap();
+
+const tropics = await rangeAt(12, -50, 4);
+const polar = await rangeAt(70, -10, 4);
+const wholeDegrees = (r) => !!r && Number.isInteger(r[0]) && Number.isInteger(r[1]) && r[1] > r[0];
+
 const status = document.getElementById('map-status').textContent;
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
@@ -868,6 +929,16 @@ const checks = [
   ['and the readout follows the field that is on',
     /7\.5 °C/.test(navyRead) && !/7\.5 °C/.test(oisstRead)],
   ['the temperature key appears with the layer', legendShown],
+  ['no unpainted column at the 0/360 seam', seamGaps === 0],
+  ['the range is whole degrees bounding the view',
+    wholeDegrees(tropics.range) && wholeDegrees(polar.range)],
+  ['and it follows the view rather than being fixed',
+    !!tropics.range && !!polar.range &&
+      (tropics.range[0] !== polar.range[0] || tropics.range[1] !== polar.range[1]) &&
+      tropics.range[0] > polar.range[0]],
+  ['the legend prints the range it is drawing',
+    polar.label.includes(String(polar.range?.[0])) &&
+      polar.label.includes(String(polar.range?.[1]))],
   ['the 60 m grid points only at 60 m products',
     files['currents-60m'][0].header.tileIndex.includes('-60m') &&
     files['currents-60m'][0].header.details.every((d) => d.url.includes('-60m'))],

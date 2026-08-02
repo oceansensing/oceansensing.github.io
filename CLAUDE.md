@@ -465,19 +465,45 @@ Three things about this cost real time, all silent:
 - **`www.ncei.noaa.gov` advertises an AAAA record that refuses connections.**
   urllib has no Happy Eyeballs, so every request waited out the full TCP
   timeout: 120 s each against 0.9 with curl. `fetch-sst.py` prefers IPv4.
-- **The ramp is cool-only** — deep blue to light teal, not blue-to-red — and
-  that is forced. `test:contrast` treats every ramp stop as another water
-  colour the markers must clear, and a conventional warm end fails it: orange
-  USVs sat ΔE 9.3 from a warm-amber stop, the storm red 16.3 from a brick
-  one, against a bar of 22. The warm end of an SST ramp is the tropics, which
-  is where the storms are. The cold end is floored above black because the
-  charcoal measuring line lives there, and the warm end stops short of pale
-  because the current particles are near-white.
+- **The ramp stays out of the warm half of the wheel**, and that is forced.
+  `test:contrast` treats every ramp stop as another water colour the markers
+  must clear, and a conventional blue-to-red end fails it: orange USVs sat
+  ΔE 9.3 from a warm-amber stop, the storm red 16.3 from a brick one, against
+  a bar of 22. The warm end of an SST ramp is the tropics, which is where the
+  storms are. The cold end stays off black because the charcoal measuring
+  line lives there, and the warm end short of pale because the particles are
+  near-white cream.
+
+  Within what is left, the ramp is **chosen by search, not by eye**:
+  `scripts/lib/colour.mjs` scores a candidate on how far it travels
+  perceptually end to end, and the winner is the most-travelled ramp still
+  clearing every feature by ΔE 22. The current magenta-violet-blue-cyan-green
+  covers ΔE 122 against 44 for the muted band it replaced.
 
 The raster is painted **fully opaque**, and that is load-bearing: the gate
 checks the markers against these exact ramp colours, so blending with the
 bathymetry underneath would put a different colour on screen than the one
 that was checked.
+
+**The range is per view, not fixed**: the whole-degree bounds of the water on
+screen, recomputed on every move, with the legend printing them. A fixed
+global scale wastes almost all of the ramp, since a basin spans maybe ten
+degrees of the thirty-odd the ocean covers, and everything came out within a
+couple of shades of itself. The cost is that a colour no longer means the
+same temperature between two views — which is exactly why the bar carries
+numbers rather than being a fixed key. The extremes are found on a coarse
+stride; sampling every sixteenth pixel finds them as well as sampling all
+650,000.
+
+**Longitude wraps, and forgetting it leaves a stripe.** These grids start at
+the prime meridian and span exactly 360°, so the column after the last is the
+first. Clamping there instead left a one-cell band nothing painted, with the
+dark basemap showing through as a line down the map at 0°E. `test:map` checks
+it over the **South Atlantic** — at 20°N the meridian crosses the Sahara,
+where that column is unpainted either way, and the first version of the check
+passed against the very bug it was written for. It counts *runs* of empty
+columns for the same reason: the gap is a whole cell wide, so a
+single-column test finds nothing.
 
 Sampling is bilinear in two steps. The nearest cell decides whether a pixel
 is water at all, which keeps the shoreline where the data's mask puts it;
