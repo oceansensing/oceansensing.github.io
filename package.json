@@ -16,6 +16,8 @@
     "check:docs": "node scripts/check-docs.mjs",
     "verify": "npm run build && npm run check && npm run check:docs && npm run test:contrast && npm run test:map && npm run test:clock",
     "data:currents": "python3 scripts/fetch-currents.py",
+    "data:sst": "python3 scripts/fetch-sst.py",
+    "data:sst-tiles": "python3 scripts/fetch-sst.py --tiles",
     "test:contrast": "node scripts/test-contrast.mjs",
     "data:basemaps": "python3 scripts/sample-basemaps.py",
     "data:tiles": "python3 scripts/fetch-currents.py --tiles"
