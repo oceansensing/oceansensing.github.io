@@ -555,6 +555,14 @@ Three things about this cost real time, all silent:
   clearing every feature by ΔE 22. The current magenta-violet-blue-cyan-green
   covers ΔE 122 against 44 for the muted band it replaced.
 
+**The Navy field records its model run; OISST does not, and should not.** A
+forecast step valid an hour from now is worthless if it came from a run three
+days old, and without the run written on the file there is nothing to tell
+the two apart — which is exactly how the currents sat two days stale while
+looking current. An analysis has no run; its own date is the answer. The
+layer's attribution says whichever it has, so staleness is visible on screen
+rather than only in a header.
+
 The raster is painted **fully opaque**, and that is load-bearing: the gate
 checks the markers against these exact ramp colours, so blending with the
 bathymetry underneath would put a different colour on screen than the one

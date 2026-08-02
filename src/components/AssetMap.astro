@@ -731,6 +731,18 @@ import 'leaflet/dist/leaflet.css';
       fetch(url)
         .then((r) => r.json())
         .then((coarse: Scalar) => {
+          /* Credit the source, and name the run where there is one. A
+             forecast step valid an hour from now is worthless if it came
+             from a run three days old, and without the run on screen there
+             is nothing to tell the two apart — which is how the currents sat
+             two days stale while looking current. An analysis has no run;
+             its own date is the answer, so that is what it shows. */
+          const run = coarse.header?.modelRun?.slice(0, 16).replace('T', ' ');
+          const at = coarse.header?.refTime?.slice(0, 10);
+          layer.options.attribution =
+            `SST: ${coarse.header?.source ?? 'unknown source'}` +
+            (run ? ` — ${run}Z run` : at ? ` — ${at}` : '');
+
           group.addLayer(layer);
           layer.setGrid(coarse);
 

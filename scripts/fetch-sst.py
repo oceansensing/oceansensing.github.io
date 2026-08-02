@@ -252,8 +252,13 @@ def time_axis(base: str) -> int:
     return int(found.group(1))
 
 
-def newest(product: dict) -> list[tuple[str, str]]:
-    """Candidate time steps to fetch, nearest to now first.
+def newest(product: dict) -> list[tuple[str, str, str]]:
+    """Candidate time steps: (index, valid time, model run), nearest first.
+
+    The run matters as much as the valid time. A forecast step an hour from
+    now is worthless if it came from a run three days old, and without the
+    run on the file there is no way to tell the two apart — which is exactly
+    how the current grids sat two days stale while looking current.
 
     A list rather than one step, because HYCOM's aggregation is unreliable
     per step rather than as a whole: measured on 2026-08-02, index 70 served
@@ -280,9 +285,10 @@ def newest(product: dict) -> list[tuple[str, str]]:
         stamp = datetime.fromtimestamp(seconds, timezone.utc)
         # ERDDAP indexes from the end, so one step back is the only sensible
         # alternative and its stamp is a day earlier for a daily product.
+        # An analysis has no model run; its date is its date.
         return [
-            ('last', stamp.strftime('%Y-%m-%dT%H:%M:%SZ')),
-            ('last-1', (stamp - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')),
+            ('last', stamp.strftime('%Y-%m-%dT%H:%M:%SZ'), ''),
+            ('last-1', (stamp - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ'), ''),
         ]
 
     das = get(f"{product['base']}.das", timeout=60)
@@ -298,10 +304,23 @@ def newest(product: dict) -> list[tuple[str, str]]:
     hours = [float(t) for t in tail.split(',') if t.strip()]
     if not hours:
         raise RuntimeError('no time axis')
+    # Which daily run each step came from. Optional: a dataset without a
+    # time_run axis still works, it just cannot say.
+    runs: list[float] = []
+    try:
+        body = get(encode(f"{product['base']}.ascii?time_run[0:1:{last}]"), timeout=90)
+        tail = [line for line in body.splitlines() if line.strip()][-1]
+        runs = [float(t) for t in tail.split(',') if t.strip()]
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+        pass
+
+    def stamp(h: float) -> str:
+        return (epoch + timedelta(hours=h)).strftime('%Y-%m-%dT%H:%M:%SZ')
+
     target = (datetime.now(timezone.utc) - epoch).total_seconds() / 3600
     order = sorted(range(len(hours)), key=lambda i: abs(hours[i] - target))
     return [
-        (str(i), (epoch + timedelta(hours=hours[i])).strftime('%Y-%m-%dT%H:%M:%SZ'))
+        (str(i), stamp(hours[i]), stamp(runs[i]) if i < len(runs) else '')
         for i in order[:8]
     ]
 
@@ -347,7 +366,8 @@ def slabs_for(product: dict, west: float, east: float, stride_lon: int,
 
 def build(product: dict, when: str, valid: str, out: pathlib.Path,
           south: float, north: float, west: float, east: float,
-          stride: tuple[int, int], wrap: bool, extra: dict | None = None) -> dict:
+          stride: tuple[int, int], wrap: bool, extra: dict | None = None,
+          run: str = '') -> dict:
     """Fetch one rectangle at one stride and write it as a scalar grid."""
     stride_lon, stride_lat = stride
     y0 = axis_index(south, product['lat0'], product['dlat'], product['nlat'])
@@ -370,6 +390,9 @@ def build(product: dict, when: str, valid: str, out: pathlib.Path,
         'lo1': round(lo1, 4), 'la1': round(la1, 4),
         'dx': round(dx, 4), 'dy': round(dy, 4),
         'refTime': valid,
+        # Only a forecast has one. Written when present so the map can say how
+        # fresh the field is rather than leaving a reader to assume.
+        **({'modelRun': run} if run else {}),
         'source': product['source'],
         'units': 'degC',
         **(extra or {}),
@@ -386,7 +409,7 @@ def build(product: dict, when: str, valid: str, out: pathlib.Path,
     return header
 
 
-def build_tile(product: dict, when: str, valid: str,
+def build_tile(product: dict, when: str, valid: str, run: str,
                south: float, west: float) -> tuple[str | None, str]:
     """One native-resolution tile.
 
@@ -414,7 +437,7 @@ def build_tile(product: dict, when: str, valid: str,
             time.sleep(wait)
         try:
             header = build(product, when, valid, out, south, north, west, east,
-                           product['strides']['tile'], wrap=False)
+                           product['strides']['tile'], wrap=False, run=run)
             break
         except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:
             last = exc
@@ -433,7 +456,7 @@ def build_tile(product: dict, when: str, valid: str,
     return key, 'written' 
 
 
-def build_tiles(product: dict, when: str, valid: str) -> None:
+def build_tiles(product: dict, when: str, valid: str, run: str = '') -> None:
     from concurrent.futures import ThreadPoolExecutor
 
     corners = [
@@ -443,7 +466,7 @@ def build_tiles(product: dict, when: str, valid: str) -> None:
     ]
     print(f"  {len(corners)} tiles, {product['label']}")
     with ThreadPoolExecutor(max_workers=TILES['workers']) as pool:
-        results = list(pool.map(lambda c: build_tile(product, when, valid, *c), corners))
+        results = list(pool.map(lambda c: build_tile(product, when, valid, run, *c), corners))
 
     available = sorted(k for k, _ in results if k)
     failed = sum(1 for _, why in results if why == 'failed')
@@ -457,6 +480,7 @@ def build_tiles(product: dict, when: str, valid: str) -> None:
         'deg': round(min(product['dlon'] * product['strides']['tile'][0],
                          product['dlat'] * product['strides']['tile'][1]), 4),
         'refTime': valid,
+        **({'modelRun': run} if run else {}),
         'available': available,
     }, separators=(',', ':')) + '\n')
     total = sum((tile_dir / f'{k}.json').stat().st_size for k in available)
@@ -470,26 +494,33 @@ def build_tiles(product: dict, when: str, valid: str) -> None:
         raise RuntimeError(f'{failed} of {len(corners)} tiles failed')
 
 
-def usable_step(product: dict) -> tuple[str, str]:
+def usable_step(product: dict) -> tuple[str, str, str]:
     """The first candidate step that actually serves data.
 
     Probed with a deliberately tiny read rather than the real one: a step
     that is broken fails on any read, so a few cells are enough to tell, and
     it costs a fraction of a second against a minute for the global grid.
+
+    The probe indexes off the middle of *this product's* grid. Fixed indices
+    do not work: 2000 sits inside the Navy model's 4251 latitudes and outside
+    OISST's 720, so a hardcoded probe rejected every OISST step as broken
+    when the data was fine.
     """
+    y = product['nlat'] // 2
+    x = product['nlon'] // 2
     candidates = newest(product)
-    for when, valid in candidates:
+    for when, valid, run in candidates:
         try:
-            fetch(product, when, 2000, 2004, 2000, 2004, 2, 2)
-            return when, valid
+            fetch(product, when, y, y + 4, x, x + 4, 2, 2)
+            return when, valid, run
         except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:
             print(f'  step {when} ({valid}) unusable: {exc}', file=sys.stderr)
     raise RuntimeError(f'no usable time step in {len(candidates)} candidates')
 
 
 def build_product(product: dict, tiles_only: bool) -> None:
-    when, valid = usable_step(product)
-    print(f"{product['label']} — valid {valid}")
+    when, valid, run = usable_step(product)
+    print(f"{product['label']} — valid {valid}" + (f", from the {run} run" if run else ''))
 
     if tiles_only:
         if not product.get('tiles'):
@@ -515,7 +546,7 @@ def build_product(product: dict, tiles_only: bool) -> None:
     # the data rather than repeating the bounds in the component.
     build(product, when, valid, MAP_DIR / f'{name}.json',
           south=-80.0, north=85.0, west=-180.0, east=180.0,
-          stride=product['strides']['global'], wrap=True,
+          stride=product['strides']['global'], wrap=True, run=run,
           extra={
               'details': details,
               # Only advertised where a tile tier exists; the map follows this
@@ -528,7 +559,7 @@ def build_product(product: dict, tiles_only: bool) -> None:
         build(product, when, valid, MAP_DIR / f'{name}-{region["name"]}.json',
               south=region['south'], north=region['north'],
               west=region.get('west', -180.0), east=region.get('east', 180.0),
-              stride=product['strides']['region'], wrap=region['wrap'])
+              stride=product['strides']['region'], wrap=region['wrap'], run=run)
 
 
 def main() -> int:

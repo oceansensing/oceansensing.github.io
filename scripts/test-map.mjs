@@ -1020,6 +1020,14 @@ const checks = [
     /11° 00\.00′ N/.test(deepRead)],
   ['the 60 m grid is published at 60 m', files['currents-60m'][0].header.depth === 60],
   ['an SST layer is offered for each source', !!sstOisstToggle && !!sstNavyToggle],
+  /* Staleness has to be visible. The currents served a two-day-old model run
+     while every check stayed green, and the only thing that gave it away was
+     the run printed in the attribution. */
+  ['the SST layer credits its source on screen',
+    /SST: .*ESPC|SST: .*OISST/.test(host.querySelector('.leaflet-control-attribution')?.textContent ?? '')],
+  ['the Navy SST file records which run it came from',
+    typeof files['sst-navy'].header.modelRun === 'string' ||
+      typeof JSON.parse(fs.readFileSync('public/map/sst-navy.json', 'utf8')).header.modelRun === 'string'],
   ['switching SST on paints the raster', opaque > 5000],
   ['every painted pixel comes from the gated ramp', painted && strayColour === 0],
   ['the readout reports a sea surface temperature', /Sea surface/.test(oisstRead)],
