@@ -950,6 +950,33 @@ const attributionBeforeReset = host.querySelector('.leaflet-control-attribution'
    basemap, the layers, the colour scale and the view back to defaults, so
    anything checked after it would be reading the reset state rather than
    what it meant to test. Two earlier checks failed exactly that way. */
+/* EEZ boundaries. Off by default, so the check is that switching it on puts
+   the layer in its own pane below the platforms — a boundary that covered a
+   glider would be the one thing this layer must not do. */
+const eezLayer = await (async () => {
+  const toggle = [...host.querySelectorAll('.leaflet-control-layers-overlays label')]
+    .find((l) => /EEZ/.test(l.textContent));
+  const before = host.querySelectorAll('.leaflet-eez-pane img').length;
+  toggle?.querySelector('input')?.click();
+  await new Promise((r) => setTimeout(r, 900));
+  const pane = host.querySelector('.leaflet-eez-pane');
+  const out = {
+    offered: !!toggle,
+    offByDefault: before === 0,
+    hasPane: !!pane,
+    // Below the markers, above the fields.
+    belowMarkers: pane
+      ? Number(getComputedStyle(pane).zIndex) < 400 && Number(getComputedStyle(pane).zIndex) > 260
+      : false,
+    requested: [...host.querySelectorAll('.leaflet-eez-pane img')].some((i) =>
+      /geo\.vliz\.be/.test(i.src) && /eez_boundaries/.test(i.src)
+    ),
+  };
+  toggle?.querySelector('input')?.click();
+  await new Promise((r) => setTimeout(r, 300));
+  return out;
+})();
+
 const globalReset = await (async () => {
   const controls = document.querySelector('[data-field-controls]');
   const picker = controls.querySelector('[data-field-map]');
@@ -1236,6 +1263,11 @@ const checks = [
     String(scaleControls.pinnedAfterPan) === '5,9'],
   ['Auto hands the scale back to the view',
     !!scaleControls.backToAuto && String(scaleControls.backToAuto) !== '5,9'],
+  ['an EEZ boundary layer is offered, off by default',
+    eezLayer.offered && eezLayer.offByDefault],
+  ['EEZ boundaries sit above the fields and below the platforms',
+    eezLayer.hasPane && eezLayer.belowMarkers],
+  ['EEZ tiles come from Marine Regions', eezLayer.requested],
   ['a salinity layer is offered', salinity.offered],
   ['turning salinity on turns the temperature raster off', salinity.sstStillOn === false],
   ['the readout reports salinity in psu, not degrees',

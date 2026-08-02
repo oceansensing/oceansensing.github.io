@@ -53,6 +53,10 @@ follow whatever water is on screen.
 - [NOAA NCEI OISST v2.1](https://www.ncei.noaa.gov/products/optimum-interpolation-sst) — sea-surface temperature as *observed* rather than forecast: satellite and in-situ measurements blended onto a 1/4° grid. The preliminary product, a few days behind, rather than the final one a fortnight back
 - [NOAA NCEI DEM global mosaic](https://www.ncei.noaa.gov/maps/bathymetry/) — seafloor depth, queried a point at a time when you click
 
+**Boundaries**
+
+- [Marine Regions](https://www.marineregions.org/) (VLIZ) — Exclusive Economic Zone boundaries, drawn as lines rather than filled zones so the ocean field underneath stays readable
+
 **Basemaps**
 
 - [GEBCO](https://www.gebco.net/) — global bathymetry, the default

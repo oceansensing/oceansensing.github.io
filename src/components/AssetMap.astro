@@ -144,6 +144,12 @@ import 'leaflet/dist/leaflet.css';
     sstPane.style.zIndex = '240';
     sstPane.style.pointerEvents = 'none';
 
+    /* Maritime boundaries go above the fields but below every platform: they
+       are context for where a glider is working, not something to hide it. */
+    const eezPane = map.createPane('eez');
+    eezPane.style.zIndex = '270';
+    eezPane.style.pointerEvents = 'none';
+
     const rasterPane = map.createPane('currents-raster');
     rasterPane.style.zIndex = '250';
     rasterPane.style.pointerEvents = 'none';
@@ -1075,6 +1081,23 @@ import 'leaflet/dist/leaflet.css';
       syncControls();
     }
 
+    /* Exclusive Economic Zones, from Marine Regions (VLIZ) — the maintainers
+       of the maritime boundaries database. Boundary lines only rather than
+       filled zones: a filled polygon over every coastal ocean would bury the
+       field underneath it, and the useful question here is where a line
+       falls relative to a glider, not which shade of blue a country's water
+       is. Served as WMS images, so no CORS is involved. */
+    const eez = L.tileLayer.wms('https://geo.vliz.be/geoserver/MarineRegions/wms?', {
+      layers: 'eez_boundaries',
+      format: 'image/png',
+      transparent: true,
+      pane: 'eez',
+      className: 'map-eez',
+      opacity: 0.85,
+      attribution:
+        '<a href="https://www.marineregions.org/">Marine Regions</a> (VLIZ) — EEZ boundaries',
+    });
+
     const coastline = L.layerGroup();
     const gebco = L.tileLayer.wms('https://wms.gebco.net/mapserv?', {
       layers: 'GEBCO_LATEST',
@@ -1382,6 +1405,7 @@ import 'leaflet/dist/leaflet.css';
       'IOOS gliders': gliders,
       'Argo floats': argo,
       'Country & state borders': borders,
+      'EEZ boundaries': eez,
       'Lat/lon grid': graticule,
     };
     /* What "default" means, captured rather than restated. Every layer that
@@ -2261,6 +2285,7 @@ import 'leaflet/dist/leaflet.css';
     --map-asset-edge: #10161d;
     --map-tiles: none;
     --map-currents: saturate(0.6);
+    --map-eez: saturate(0.4) opacity(0.8);
     --map-measure-halo: #ffffff;
     --map-currents-blend: multiply;
 
@@ -2297,6 +2322,7 @@ import 'leaflet/dist/leaflet.css';
       --map-asset-edge: #05080c;
       --map-tiles: brightness(0.62) saturate(0.85) contrast(1.08);
       --map-currents: saturate(0.55) brightness(1.15);
+      --map-eez: saturate(0.5) brightness(1.4);
       --map-currents-blend: multiply;
       --map-measure-halo: #e8eef5;
     }
@@ -2313,6 +2339,7 @@ import 'leaflet/dist/leaflet.css';
     --map-asset-edge: #05080c;
     --map-tiles: brightness(0.62) saturate(0.85) contrast(1.08);
     --map-currents: saturate(0.55) brightness(1.15);
+    --map-eez: saturate(0.5) brightness(1.4);
     --map-currents-blend: multiply;
     --map-measure-halo: #ffffff;
   }
@@ -2414,6 +2441,13 @@ import 'leaflet/dist/leaflet.css';
      a no-op, and it is also the compositing the contrast gate assumes when
      it checks the ramp against the water. scripts/test-contrast.mjs fails if
      a blend mode reappears on the particle pane. */
+  /* The service draws its boundaries in its own colours; these are lines on
+     top of a bathymetry, so they are toned to sit with the rest of the map
+     rather than shout over it. Themed like the other vector work. */
+  #asset-map :global(.map-eez) {
+    filter: var(--map-eez);
+  }
+
   #asset-map :global(.leaflet-currents-raster-pane) {
     mix-blend-mode: var(--map-currents-blend);
   }
