@@ -30,7 +30,24 @@ const active = stormLines(storms);
       <ul>
         {active.map((s) => (
           <li>
-            {s.url ? <a href={s.url}>{s.name}</a> : <strong>{s.name}</strong>}
+            {
+              /* Opens in its own tab, like the map's popup links: the NHC
+                 advisory is another site and a reader following it has not
+                 finished with the map. AssetMap rebuilds this list in the
+                 browser and must match — see the note there. */
+              s.url ? (
+                <a
+                  href={s.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`${s.name} advisory (opens in a new tab)`}
+                >
+                  {s.name}
+                </a>
+              ) : (
+                <strong>{s.name}</strong>
+              )
+            }
             {/* Hidden until AssetMap's script wires it up — without the map
                 there is nothing to zoom, so the control should not appear. */}
             <button

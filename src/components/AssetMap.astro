@@ -1070,6 +1070,14 @@ import 'leaflet/dist/leaflet.css';
         if (line.url) {
           const link = document.createElement('a');
           link.href = line.url;
+          /* Same treatment as the popup links: the advisory is another site,
+             and a reader sent there loses the map. Kept in step with the
+             build-time markup in StormStatus.astro — this line exists twice
+             on purpose, and the two silently diverging is the failure that
+             arrangement is meant to avoid. */
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.setAttribute('aria-label', `${line.name} advisory (opens in a new tab)`);
           name = link;
         } else {
           name = document.createElement('strong');

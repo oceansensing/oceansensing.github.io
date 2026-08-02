@@ -681,6 +681,23 @@ const checks = [
     rebuiltFacts.length === expectedNames.length &&
       rebuiltFacts.every((f) => f && f.includes('·')) &&
       stormBox.querySelectorAll('button.zoom[data-storm-zoom]').length === expectedNames.length],
+  /* The status line is built twice — once by StormStatus.astro at build
+     time, once here from fresh data — and the two drifting apart is the
+     hazard that arrangement carries. Check both ends: the rebuilt link, and
+     the markup Astro actually emitted into dist/. Checking only one would
+     let the advisory open in place until the first refresh, or after it. */
+  ['rebuilt advisory link opens in its own tab',
+    [...stormBox.querySelectorAll('a[href]')].every(
+      (a) => a.target === '_blank' && /\bnoopener\b/.test(a.rel)
+    ) && stormBox.querySelectorAll('a[href]').length > 0],
+  ['build-time advisory link matches it', (() => {
+    const page = fs.readFileSync('dist/observations/hurricanes/index.html', 'utf8');
+    const links = [...page.matchAll(/<a\b[^>]*class="[^"]*"[^>]*>|<a\b[^>]*>/g)]
+      .map((m) => m[0])
+      .filter((tag) => /nhc\.noaa\.gov|storm/i.test(tag));
+    return links.length > 0 &&
+      links.every((tag) => /target="_blank"/.test(tag) && /\bnoopener\b/.test(tag));
+  })()],
   ['argo fleet is loaded', fleet.length > 500],
   ['argo coverage is global', spansHemispheres && spansLongitudes],
   ['every float became a marker', argoMarkers === fleet.length && fleet.length > 500],
