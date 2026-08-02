@@ -508,6 +508,39 @@ tier, a plausible-value range and a file prefix. `FIELDS` in the component is
 the matching half — a ramp, a unit and a rounding step. Adding another scalar
 means one entry in each, not another layer.
 
+#### The reader sets the colour scale
+
+Colormap, range and a way back to automatic, per field, in the legend row
+under the map rather than as a Leaflet control — number inputs and a select
+inside the map are awkward on a touchscreen, and this is where the colour bar
+they act on already is.
+
+**Only the colormaps in `palette.colormaps` are offered, and that is the
+point.** Whichever is chosen becomes the water under every marker, so the set
+is exactly what `test:contrast` has checked — every stop of every map against
+every feature. A free colour picker would let a reader hide the fleet. All
+five were found by the search in `scripts/lib/colour.mjs`, scored on travel,
+distance from the other maps, and clearance from the markers. Margins are not
+equal: `mono` clears by 24.4 and `thermal` by 22.8, while `plasma` and
+`terrain` sit at 22.1–22.2 — over the bar with nothing spare, and the first
+things that will fail if a feature colour changes.
+
+A pinned range **wins over the view and holds for the session**, including
+across the hourly self-reload — the choices ride in the saved view alongside
+the basemap and layers. Without that a pinned scale would silently revert
+when a new build landed, which is the one thing "fixed until reset" must not
+do. `Auto` hands it back to the view.
+
+The **Reset** control beside Basin/Global puts everything back: basemap,
+layers, colormaps, ranges, the measuring tool, and the basin view. It also
+clears the saved view, because leaving it would mean the next reload restored
+exactly what was just reset.
+
+`DEFAULT_OVERLAYS` is **captured, not restated** — the set of layers on the
+map immediately after startup and before `restoreView()`. Writing the list
+out again would be a second source of truth, and it would be wrong for a
+reduced-motion reader, who never gets the animated field.
+
 **Salinity rounds the colour bar to half a unit where temperature rounds to
 whole ones.** Both bound the water in view, but open ocean spans a few psu
 against ten degrees or more, so whole-unit rounding would leave a typical

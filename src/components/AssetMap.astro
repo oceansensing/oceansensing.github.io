@@ -27,6 +27,22 @@ import 'leaflet/dist/leaflet.css';
       <span class="key argo">Argo float</span>
       <span class="key current">Surface current</span>
       <span class="key sst" data-sst-key hidden>Sea surface temp</span>
+      <span class="field-controls" data-field-controls hidden>
+        <label>
+          <span class="vh">Colour scale</span>
+          <select data-field-map aria-label="Colour scale"></select>
+        </label>
+        <label>
+          <span class="vh">Minimum</span>
+          <input type="number" data-field-min step="any" aria-label="Scale minimum" />
+        </label>
+        <span aria-hidden="true">–</span>
+        <label>
+          <span class="vh">Maximum</span>
+          <input type="number" data-field-max step="any" aria-label="Scale maximum" />
+        </label>
+        <button type="button" data-field-auto>Auto</button>
+      </span>
     </span>
     <span class="status" id="map-status">Loading…</span>
   </figcaption>
@@ -509,6 +525,13 @@ import 'leaflet/dist/leaflet.css';
         parseInt(hex.slice(5, 7), 16),
       ]);
 
+    const COLORMAPS: Record<string, number[][]> = Object.fromEntries(
+      Object.entries((palette as any).colormaps ?? {}).map(([name, hexes]) => [
+        name,
+        rampStops(hexes as string[]),
+      ])
+    );
+
     /* One entry per scalar field the map can paint. Temperature and salinity
        are the same kind of thing — a value per cell, drawn as a raster — so
        they share the layer, the tier machinery and the readout, and differ
@@ -516,14 +539,28 @@ import 'leaflet/dist/leaflet.css';
     const FIELDS = {
       // "Sea surface" alone stopped being unambiguous the moment a second
       // surface field existed.
-      sst: { stops: rampStops(palette.sst ?? []), unit: '°C', step: 1, label: 'Sea surface temp' },
+      sst: { key: 'sst', unit: '°C', step: 1, label: 'Sea surface temp' },
       /* Salinity gets a half-unit step where temperature gets a whole one.
          Both round outward to bound the water in view, but open ocean spans
          maybe 34–37 psu against 10 °C or more of temperature — rounding
          salinity to whole units would leave a typical view occupying a
          quarter of the ramp and looking flat. */
-      sss: { stops: rampStops(palette.sss ?? []), unit: 'psu', step: 0.5, label: 'Salinity' },
+      sss: { key: 'sss', unit: 'psu', step: 0.5, label: 'Salinity' },
     };
+
+    /* What the reader has chosen, per field rather than per layer: the two
+       SST layers are the same quantity from different models, so a colour
+       scale set on one should hold when switching to the other. `range: null`
+       means auto — bounded by the water in view and recomputed on every move.
+       */
+    type FieldChoice = { map: string; range: [number, number] | null };
+    const choices: Record<string, FieldChoice> = {
+      sst: { map: (palette.defaultColormap as any)?.sst ?? 'thermal', range: null },
+      sss: { map: (palette.defaultColormap as any)?.sss ?? 'haline', range: null },
+    };
+    const choiceFor = (field: any) => choices[field?.key ?? 'sst']!;
+    const stopsFor = (field: any) =>
+      COLORMAPS[choiceFor(field).map] ?? Object.values(COLORMAPS)[0]!;
 
     /* Interpolated between stops rather than stepped: a field of flat bands
        reads as contours the data does not have. */
@@ -708,7 +745,8 @@ import 'leaflet/dist/leaflet.css';
             if (v !== null) seen.push(v);
           }
         }
-        const range = this._rangeFor(seen);
+        // A range the reader has pinned wins over the view.
+        const range = choiceFor(this.options.field).range ?? this._rangeFor(seen);
         this._range = range;
         this.fire('rangechange');
         if (!range) return;
@@ -724,7 +762,7 @@ import 'leaflet/dist/leaflet.css';
             if (u < 0) continue;
             const v = sample(u, vRow);
             if (v === null) continue;              // land, ice, or no data
-            const rgb = rampColour(this.options.field.stops, v, lo, hi);
+            const rgb = rampColour(stopsFor(this.options.field), v, lo, hi);
             const k = (y * w + x) * 4;
             out[k] = rgb[0]!;
             out[k + 1] = rgb[1]!;
@@ -911,7 +949,7 @@ import 'leaflet/dist/leaflet.css';
        actually on — a colour bar for a layer nobody has switched on is just
        noise. */
     const sstKey = document.querySelector<HTMLElement>('[data-sst-key]');
-    if (sstKey && palette.sst?.length) {
+    if (sstKey && Object.keys(COLORMAPS).length) {
       /* The bar carries its own numbers because the scale is per view: the
          ramp is stretched over whatever water is on screen, so the colours
          alone do not say what they mean. Read from the layer rather than
@@ -924,7 +962,7 @@ import 'leaflet/dist/leaflet.css';
         if (!on) return;
         // The bar shows the ramp of whichever field is on, and its own unit —
         // two scalars sharing one key would otherwise mislabel one of them.
-        const hexes = field === FIELDS.sss ? palette.sss : palette.sst;
+        const hexes = ((palette as any).colormaps ?? {})[choiceFor(field).map] ?? [];
         sstKey.style.setProperty('--sst-ramp', `linear-gradient(to right, ${hexes.join(', ')})`);
         sstKey.textContent = range
           ? `${range[0]} to ${range[1]} ${field?.unit ?? ''}`.trim()
@@ -933,6 +971,90 @@ import 'leaflet/dist/leaflet.css';
       map.on('overlayadd overlayremove moveend zoomend', showKey);
       for (const entry of ssts) entry.layer.on('rangechange', showKey);
       showKey();
+    }
+
+    /* Reader control over the colour scale. Three things, all per field and
+       all live: which colormap, what range it spans, and a way back to
+       automatic.
+
+       Only the colormaps in the palette are offered, and that is the point —
+       whichever is chosen becomes the water under every marker, so the set is
+       the one the contrast gate has checked. A free colour picker would let a
+       reader hide the fleet. */
+    const controls = document.querySelector<HTMLElement>('[data-field-controls]');
+    const mapPicker = controls?.querySelector<HTMLSelectElement>('[data-field-map]');
+    const minInput = controls?.querySelector<HTMLInputElement>('[data-field-min]');
+    const maxInput = controls?.querySelector<HTMLInputElement>('[data-field-max]');
+    const autoButton = controls?.querySelector<HTMLButtonElement>('[data-field-auto]');
+
+    if (controls && mapPicker && minInput && maxInput && autoButton) {
+      for (const name of Object.keys(COLORMAPS)) {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        mapPicker.append(option);
+      }
+
+      const shownField = () => ssts.find((f) => map.hasLayer(f.group))?.layer?.options?.field ?? null;
+
+      const repaint = () => {
+        for (const entry of ssts) if (map.hasLayer(entry.group)) entry.layer._render?.();
+      };
+
+      /* Reflect the live state into the inputs. Skipped while a field is
+         focused, or typing "3" on the way to "35" would be read back as 3 and
+         the caret would jump. */
+      const syncControls = () => {
+        const field = shownField();
+        controls.hidden = !field;
+        if (!field) return;
+        const choice = choiceFor(field);
+        mapPicker.value = choice.map;
+        minInput.step = String(field.step);
+        maxInput.step = String(field.step);
+        autoButton.disabled = choice.range === null;
+        autoButton.textContent = choice.range === null ? 'Auto' : 'Reset';
+        const live = ssts.find((f) => map.hasLayer(f.group))?.layer?.getRange?.();
+        if (live && document.activeElement !== minInput && document.activeElement !== maxInput) {
+          minInput.value = String(live[0]);
+          maxInput.value = String(live[1]);
+        }
+      };
+
+      mapPicker.addEventListener('change', () => {
+        const field = shownField();
+        if (!field) return;
+        choiceFor(field).map = mapPicker.value;
+        repaint();
+        syncControls();
+      });
+
+      const pin = () => {
+        const field = shownField();
+        if (!field) return;
+        const lo = Number(minInput.value);
+        const hi = Number(maxInput.value);
+        // An inverted or empty range would paint one flat colour; leave the
+        // current scale alone until the pair makes sense.
+        if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return;
+        choiceFor(field).range = [lo, hi];
+        repaint();
+        syncControls();
+      };
+      minInput.addEventListener('change', pin);
+      maxInput.addEventListener('change', pin);
+
+      autoButton.addEventListener('click', () => {
+        const field = shownField();
+        if (!field) return;
+        choiceFor(field).range = null;
+        repaint();
+        syncControls();
+      });
+
+      map.on('overlayadd overlayremove moveend zoomend', syncControls);
+      for (const entry of ssts) entry.layer.on('rangechange', syncControls);
+      syncControls();
     }
 
     const coastline = L.layerGroup();
@@ -1244,6 +1366,16 @@ import 'leaflet/dist/leaflet.css';
       'Country & state borders': borders,
       'Lat/lon grid': graticule,
     };
+    /* What "default" means, captured rather than restated. Every layer that
+       is on right now is on because startup put it there, and startup is the
+       only place that decides — writing the list out again here would be a
+       second source of truth that drifts, and it would be wrong for a
+       reduced-motion reader, who never gets the animated field. Taken before
+       restoreView runs, so it is the defaults and not the reader's session. */
+    const DEFAULT_OVERLAYS = new Set(
+      Object.keys(overlays).filter((name) => map.hasLayer(overlays[name]!))
+    );
+
     L.control.layers(bases, overlays).addTo(map);
 
     /* The two animated fields are exclusive. Both at once is two sets of
@@ -1302,6 +1434,11 @@ import 'leaflet/dist/leaflet.css';
                off, and restoring would hide it from anyone holding an older
                view — which is exactly what happened when Argo was added. */
             known: Object.keys(overlays),
+            /* The colour scale a reader has set is part of their view. The
+               page reloads itself when a new build lands, so without this a
+               pinned range would quietly revert to automatic mid-session —
+               the one thing "fixed until reset" must not do. */
+            fields: choices,
           })
         );
       } catch {
@@ -1328,6 +1465,19 @@ import 'leaflet/dist/leaflet.css';
            here too makes the tone independent of that ordering. */
         markBasemapTone(saved.base);
       }
+      if (saved.fields) {
+        for (const [key, choice] of Object.entries(saved.fields as Record<string, any>)) {
+          if (!choices[key] || !choice) continue;
+          // Only a colormap that still exists; the set can change between builds.
+          if (typeof choice.map === 'string' && COLORMAPS[choice.map]) choices[key]!.map = choice.map;
+          const range = choice.range;
+          choices[key]!.range =
+            Array.isArray(range) && range.length === 2 && range.every((v: unknown) => typeof v === 'number')
+              ? [range[0], range[1]]
+              : null;
+        }
+      }
+
       if (Array.isArray(saved.overlays)) {
         /* Anything the saved view never knew about keeps its default.
            When it carries no list at all — every view saved before this was
@@ -1583,6 +1733,7 @@ import 'leaflet/dist/leaflet.css';
         for (const [label, title] of [
           ['Basin', 'Zoom to the Atlantic and Gulf'],
           ['Global', 'Zoom to every reporting asset'],
+          ['Reset', 'Put everything back to defaults'],
         ]) {
           const a = L.DomUtil.create('a', '', bar);
           a.textContent = label;
@@ -1591,13 +1742,48 @@ import 'leaflet/dist/leaflet.css';
           L.DomEvent.on(a, 'click', (e) => {
             L.DomEvent.stop(e);
             if (label === 'Basin') map.fitBounds(BASIN);
-            else fitEverything();
+            else if (label === 'Global') fitEverything();
+            else resetEverything();
           });
         }
         return bar;
       },
     });
     map.addControl(new Views());
+
+    /* Back to how the map arrives for someone who has never touched it:
+       default basemap, default layers, default colour scales, automatic
+       ranges, and the basin. The saved view is cleared as well — leaving it
+       would mean the next reload restored exactly what was just reset, which
+       is the sort of thing that reads as the button not working. */
+    const resetEverything = () => {
+      for (const [key, choice] of Object.entries(choices)) {
+        choice.map = (palette.defaultColormap as any)?.[key] ?? Object.keys(COLORMAPS)[0]!;
+        choice.range = null;
+      }
+
+      const wantedBase = 'Bathymetry (GEBCO)';
+      for (const [name, layer] of Object.entries(bases)) {
+        if (name === wantedBase && !map.hasLayer(layer)) map.addLayer(layer);
+        if (name !== wantedBase && map.hasLayer(layer)) map.removeLayer(layer);
+      }
+      markBasemapTone(wantedBase);
+
+      for (const [name, layer] of Object.entries(overlays)) {
+        const wanted = DEFAULT_OVERLAYS.has(name);
+        if (wanted && !map.hasLayer(layer)) map.addLayer(layer);
+        if (!wanted && map.hasLayer(layer)) map.removeLayer(layer);
+      }
+
+      setMeasuring(false);
+      map.closePopup();
+      try {
+        sessionStorage.removeItem(VIEW_KEY);
+      } catch {
+        // Private browsing refuses storage; nothing was saved to clear.
+      }
+      map.fitBounds(BASIN);
+    };
 
     let allBounds: L.LatLngBounds | null = null;
     const fitEverything = () => {
@@ -2242,6 +2428,63 @@ import 'leaflet/dist/leaflet.css';
 
   .key.sst[hidden] {
     display: none;
+  }
+
+  /* The colour-scale controls sit with the legend rather than on the map:
+     number inputs and a select inside a Leaflet control are awkward on a
+     touchscreen, and this is where the colour bar they act on already is. */
+  .field-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2xs);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  .field-controls[hidden] {
+    display: none;
+  }
+
+  .field-controls select,
+  .field-controls input,
+  .field-controls button {
+    font: inherit;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.1rem 0.3rem;
+  }
+
+  .field-controls input {
+    /* Enough for -12.5 or 38.5, no more — these are two- or three-character
+       numbers and a default-width number input dwarfs the rest of the row. */
+    width: 4.5em;
+  }
+
+  .field-controls button {
+    cursor: pointer;
+  }
+
+  .field-controls button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .field-controls button:not(:disabled):hover,
+  .field-controls button:not(:disabled):focus-visible {
+    background: var(--bg-subtle);
+  }
+
+  /* Labels the controls need but the layout does not. */
+  .field-controls .vh {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .legend {

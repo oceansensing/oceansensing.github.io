@@ -17,6 +17,9 @@ const dom = new JSDOM(
   // The legend key the component fills in and reveals; part of the real page
   // markup, so the harness has to stand it up too.
   '<span class="key sst" data-sst-key hidden></span>' +
+  '<span class="field-controls" data-field-controls hidden>' +
+  '<select data-field-map></select><input type="number" data-field-min />' +
+  '<input type="number" data-field-max /><button type="button" data-field-auto></button></span>' +
     // Deliberately wrong server-rendered content: if the client does not
     // rebuild it, the assertions below will still see "STALE".
     '<div class="storm-status" data-storm-status><span class="label">STALE</span>' +
@@ -703,7 +706,7 @@ const deepRead = host.querySelector('.point-readout .leaflet-popup-content')?.te
 const overlayLabelled = (re) =>
   [...host.querySelectorAll('.leaflet-control-layers-overlays label')].find((l) => re.test(l.textContent));
 
-const rampRgb = palette.sst.map((h) => [
+const rampRgb = palette.colormaps[palette.defaultColormap.sst].map((h) => [
   parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16),
 ]);
 // Distance from a pixel to the nearest point on the ramp, allowing for the
@@ -879,11 +882,113 @@ const salinity = await (async () => {
   return out;
 })();
 
+/* Reader control over the colour scale. Three separable behaviours, so three
+   checks: the colormap actually changes the pixels, a pinned range survives a
+   pan that would otherwise rescale it, and Auto gives the view back. */
+const scaleControls = await (async () => {
+  const picker = document.querySelector('[data-field-map]');
+  const minIn = document.querySelector('[data-field-min]');
+  const maxIn = document.querySelector('[data-field-max]');
+  const auto = document.querySelector('[data-field-auto]');
+  const on = () => Object.values(host._map._layers).find(
+    (l) => typeof l.getRange === 'function' && host._map.hasLayer(l)
+  );
+  const paint = () => {
+    drawn.images.length = 0;
+    on()?._render?.();
+    const img = drawn.images[drawn.images.length - 1];
+    if (!img) return null;
+    for (let k = 0; k < img.data.length; k += 4) {
+      if (img.data[k + 3] !== 0) return [img.data[k], img.data[k + 1], img.data[k + 2]];
+    }
+    return null;
+  };
+
+  host._map.setView([25, -55], 4, { animate: false });
+  await new Promise((r) => setTimeout(r, 900));
+
+  const options = [...picker.options].map((o) => o.value);
+  const before = paint();
+  // Pick a map that is not the current one.
+  picker.value = options.find((o) => o !== picker.value) ?? options[0];
+  picker.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 300));
+  const afterMap = paint();
+
+  // Pin a range, then pan somewhere with different water.
+  minIn.value = '5';
+  maxIn.value = '9';
+  minIn.dispatchEvent(new window.Event('change', { bubbles: true }));
+  maxIn.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 300));
+  const pinned = on()?.getRange?.();
+  host._map.setView([60, -30], 4, { animate: false });
+  await new Promise((r) => setTimeout(r, 900));
+  const pinnedAfterPan = on()?.getRange?.();
+
+  auto.click();
+  await new Promise((r) => setTimeout(r, 400));
+  const backToAuto = on()?.getRange?.();
+
+  return { before, afterMap, pinned, pinnedAfterPan, backToAuto, options };
+})();
+
 const seamGaps = await seamGap();
 
 const tropics = await rangeAt(12, -50, 4);
 const polar = await rangeAt(70, -10, 4);
 const wholeDegrees = (r) => !!r && Number.isInteger(r[0]) && Number.isInteger(r[1]) && r[1] > r[0];
+
+/* Read before the reset runs. Both of these look at live DOM, so once the
+   map is back at defaults they would report the reset state rather than what
+   they were written to check. */
+const toneBeforeReset = host.dataset.basemapTone;
+const attributionBeforeReset = host.querySelector('.leaflet-control-attribution')?.textContent ?? '';
+
+/* Last, and deliberately so: this one is destructive by design. It puts the
+   basemap, the layers, the colour scale and the view back to defaults, so
+   anything checked after it would be reading the reset state rather than
+   what it meant to test. Two earlier checks failed exactly that way. */
+const globalReset = await (async () => {
+  const controls = document.querySelector('[data-field-controls]');
+  const picker = controls.querySelector('[data-field-map]');
+  const minIn = controls.querySelector('[data-field-min]');
+  const maxIn = controls.querySelector('[data-field-max]');
+  const named = (re) => [...host.querySelectorAll('.leaflet-control-layers-overlays label')]
+    .find((l) => re.test(l.textContent));
+  const baseNamed = (re) => [...host.querySelectorAll('.leaflet-control-layers-base label')]
+    .find((l) => re.test(l.textContent));
+
+  // Push everything off its default.
+  baseNamed(/OpenStreetMap/)?.querySelector('input')?.click();
+  named(/Lat\/lon grid/)?.querySelector('input')?.click();
+  await new Promise((r) => setTimeout(r, 400));
+  picker.value = 'terrain';
+  picker.dispatchEvent(new window.Event('change', { bubbles: true }));
+  minIn.value = '1';
+  maxIn.value = '2';
+  minIn.dispatchEvent(new window.Event('change', { bubbles: true }));
+  maxIn.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 500));
+
+  const reset = [...host.querySelectorAll('.view-toggle a')].find((a) => a.textContent === 'Reset');
+  reset?.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+  await new Promise((r) => setTimeout(r, 1200));
+
+  const layer = Object.values(host._map._layers).find(
+    (l) => typeof l.getRange === 'function' && host._map.hasLayer(l)
+  );
+  return {
+    basemapBack: baseNamed(/GEBCO/)?.querySelector('input')?.checked === true,
+    layersBack: named(/Lat\/lon grid/)?.querySelector('input')?.checked === false,
+    scaleBack: picker.value === palette.defaultColormap.sst,
+    // Auto again: the pinned 1–2 must be gone.
+    mapBack: !layer || String(layer.getRange?.()) !== '1,2',
+    storageCleared: window.sessionStorage.getItem('asset-map-view') === null ||
+      !JSON.parse(window.sessionStorage.getItem('asset-map-view')).fields?.sst?.range,
+  };
+})();
+
 
 const status = document.getElementById('map-status').textContent;
 const checks = [
@@ -891,7 +996,15 @@ const checks = [
   ['borders + markers drawn', host.querySelectorAll('path').length > 200],
   ['layer switcher', host.querySelectorAll('.leaflet-control-layers-selector').length >= 10],
   ['bathymetry is the default base', !!host.querySelector('.leaflet-tile-pane .leaflet-layer')],
-  ['view toggle', host.querySelectorAll('.view-toggle a').length === 2],
+  ['view toggle', host.querySelectorAll('.view-toggle a').length === 3],
+  /* The global reset. Checked by setting the map as far from default as the
+     controls allow — a different basemap, a layer switched on, a pinned
+     scale, a non-default colormap — and asserting every one of them comes
+     back, including the stored view that would otherwise restore it all on
+     the next reload. */
+  ['reset puts basemap, layers, colour scale and saved view back',
+    globalReset.basemapBack && globalReset.layersBack && globalReset.scaleBack &&
+      globalReset.mapBack && globalReset.storageCleared],
   ['data pipeline completed', /assets reporting within/.test(status)],
   ['asset tracks drawn', host.querySelectorAll('path[stroke="#e8368f"], path[stroke="#f08c00"]').length >= assets.assets.length],
   ['glider colour is not the old teal', !host.querySelector('path[stroke="#0a7d8c"]')],
@@ -1022,8 +1135,7 @@ const checks = [
      container has to follow the basemap actually showing. Restoring a saved
      basemap goes through map.addLayer, which fires no baselayerchange — the
      tone went stale there until it was set by hand. */
-  ['basemap tone follows the basemap actually showing',
-    host.dataset.basemapTone === 'light'],
+  ['basemap tone follows the basemap actually showing', toneBeforeReset === 'light'],
   ['GEBCO is listed first in the basemap switcher',
     [...host.querySelectorAll('.leaflet-control-layers-base label')][0]
       ?.textContent.trim() === 'Bathymetry (GEBCO)'],
@@ -1110,6 +1222,15 @@ const checks = [
     /Current at 60 m/.test(deepRead) && /0\.10 m\/s/.test(deepRead) &&
     /11° 00\.00′ N/.test(deepRead)],
   ['the 60 m grid is published at 60 m', files['currents-60m'][0].header.depth === 60],
+  ['more than one colour scale is offered', scaleControls.options.length >= 3],
+  ['choosing a colour scale changes what is painted',
+    !!scaleControls.before && !!scaleControls.afterMap &&
+      scaleControls.before.join() !== scaleControls.afterMap.join()],
+  ['a pinned range is honoured', String(scaleControls.pinned) === '5,9'],
+  ['and survives panning to different water',
+    String(scaleControls.pinnedAfterPan) === '5,9'],
+  ['Auto hands the scale back to the view',
+    !!scaleControls.backToAuto && String(scaleControls.backToAuto) !== '5,9'],
   ['a salinity layer is offered', salinity.offered],
   ['turning salinity on turns the temperature raster off', salinity.sstStillOn === false],
   ['the readout reports salinity in psu, not degrees',
@@ -1134,8 +1255,7 @@ const checks = [
      while every check stayed green, and the only thing that gave it away was
      the run printed in the attribution. */
   ['the SST layer credits its source on screen',
-    /Sea surface temp: .*(ESPC|OISST)/.test(
-      host.querySelector('.leaflet-control-attribution')?.textContent ?? '')],
+    /Sea surface temp: .*(ESPC|OISST)/.test(attributionBeforeReset)],
   ['the Navy SST file records which run it came from',
     typeof files['sst-navy'].header.modelRun === 'string' ||
       typeof JSON.parse(fs.readFileSync('public/map/sst-navy.json', 'utf8')).header.modelRun === 'string'],

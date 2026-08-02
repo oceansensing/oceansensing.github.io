@@ -123,12 +123,13 @@ palette.currents.forEach((colour, i) => {
    rather than the conventional rainbow: the usual pale-yellow-to-red warm
    end sits on top of the storm, USV and particle colours, and the warm end
    is the tropics, which is where the storms are. */
-/* Every scalar-field ramp is another set of water colours: whichever one is
-   switched on becomes the background for every marker and particle. */
-const sstWater = [
-  ...(palette.sst ?? []).map((colour, i) => ({ colour, label: `sst[${i}]` })),
-  ...(palette.sss ?? []).map((colour, i) => ({ colour, label: `sss[${i}]` })),
-];
+/* Every colormap a reader can choose is another set of water colours:
+   whichever is switched on becomes the background for every marker and
+   particle. All of them are checked, not just the defaults — an option that
+   hides a platform is not an option. */
+const sstWater = Object.entries(palette.colormaps ?? {}).flatMap(([name, stops]) =>
+  stops.map((colour, i) => ({ colour, label: `${name}[${i}]` }))
+);
 if (sstWater.length) {
   for (const [name, colour] of Object.entries(palette.features)) {
     for (const stop of sstWater) {

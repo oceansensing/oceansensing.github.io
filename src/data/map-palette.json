@@ -16,36 +16,74 @@
     "#f9edd9",
     "#fcf2e3"
   ],
-  "_sst": "The temperature ramp, cold to warm: deep magenta through violet and blue to cyan and spring green. Chosen by search rather than by eye — scripts/lib/colour.mjs scores a candidate on how far it travels perceptually end to end, and the winner is the most travelled ramp that still clears every marker and particle colour by CIEDE2000 22. This one covers ΔE 122 against 44 for the muted band it replaced, at a worst clearance of 22.8. It stays out of the warm half of the wheel for the reason the gate enforces: this layer becomes the water under everything else, and red, orange and yellow are already spoken for by storms, USVs and Argo — a conventional blue-to-red ramp put orange USVs ΔE 9.3 from their own background, in the tropics, which is where the storms are. Cold is magenta rather than dark because the charcoal measuring line lives at the bottom of the lightness range, and the warm end stops short of pale because the current particles are near-white. Read the numbers from the legend, which is per view, not from a red-means-hot instinct.",
-  "sstRange": [
-    -2,
-    34
-  ],
-  "sst": [
-    "#880772",
-    "#840897",
-    "#6309a6",
-    "#390ab5",
-    "#0a0ec4",
-    "#0b4ad3",
-    "#0c8fe2",
-    "#0ddcf1",
-    "#1bf3c7",
-    "#2af48f"
-  ],
-  "_sss": "The salinity ramp, fresh to salty: green through cyan to blue. Chosen by the same search as the SST ramp and under the same hard constraint — it becomes the water under every marker, so it must clear each of them by CIEDE2000 22, which rules out the warm half of the wheel where the storms, USVs and Argo dots live. It clears by 28.6. The extra constraint here is that it must not read as the temperature ramp: the search maximised distance from SST stop for stop, giving ΔE 66 apart on average against a travel of 101. Only one raster is ever shown at a time and the legend names the field and its unit, but two ocean scalars that look alike would still invite the wrong reading. Green for fresh and blue for salty follows how a river plume actually looks against open ocean.",
-  "sss": [
-    "#2dd50b",
-    "#0bd917",
-    "#0cde46",
-    "#0ce277",
-    "#0ce6aa",
-    "#0cebde",
-    "#0dc9ef",
-    "#0e99f2",
-    "#1269f3",
-    "#163bf3"
-  ],
+  "_colormaps": "Every colormap a reader can choose, and the reason they are a fixed set rather than free choice: whichever one is on becomes the water beneath every marker and particle, so scripts/test-contrast.mjs checks each stop of each map against every feature colour at CIEDE2000 22. A map that hides a glider is not offered. All four were found by search rather than taste — the same scoring used for the original ramps: travel from end to end, distance from the other maps, and clearance from the markers. Margins vary: 'mono' clears by 24.4 and 'thermal' by 22.8, while 'plasma' and 'terrain' sit at 22.1-22.2, which is over the bar but with nothing to spare — change a feature colour and those two are what will fail first.",
+  "colormaps": {
+    "thermal": [
+      "#880772",
+      "#840897",
+      "#6309a6",
+      "#390ab5",
+      "#0a0ec4",
+      "#0b4ad3",
+      "#0c8fe2",
+      "#0ddcf1",
+      "#1bf3c7",
+      "#2af48f"
+    ],
+    "haline": [
+      "#2dd50b",
+      "#0bd917",
+      "#0cde46",
+      "#0ce277",
+      "#0ce6aa",
+      "#0cebde",
+      "#0dc9ef",
+      "#0e99f2",
+      "#1269f3",
+      "#163bf3"
+    ],
+    "plasma": [
+      "#0cdfdf",
+      "#0cbbe3",
+      "#0c96e7",
+      "#0c70ec",
+      "#0d48f0",
+      "#0f20f2",
+      "#2c13f3",
+      "#5818f3",
+      "#831cf3",
+      "#ad20f3"
+    ],
+    "terrain": [
+      "#880707",
+      "#8f320f",
+      "#945d18",
+      "#998522",
+      "#909c2e",
+      "#779e3b",
+      "#659e49",
+      "#5d9d59",
+      "#6b9a75",
+      "#7e958a"
+    ],
+    "mono": [
+      "#216363",
+      "#277979",
+      "#2d8e8e",
+      "#32a4a4",
+      "#37baba",
+      "#43c9c9",
+      "#57d1d1",
+      "#6bd8d8",
+      "#80dede",
+      "#95e4e4"
+    ]
+  },
+  "_defaultColormap": "Which map each field starts on. A reader can change it; this is the opening choice.",
+  "defaultColormap": {
+    "sst": "thermal",
+    "sss": "haline"
+  },
   "_separation": "Argo dots are gold, which sits about ΔE 18 from the current particles — under the bar the gate applies elsewhere. No yellow clears them: the particles are pale amber because that is the one hue reading on both bathymetries, and paling the ramp far enough to make room drops its own water contrast to 79%. The dots are therefore given a dark outline, which separates a discrete dot from a drifting trail whatever the fill does. Recorded as a named exemption rather than by lowering the threshold, so the compromise stays visible.",
   "separationExempt": [
     "argo"
