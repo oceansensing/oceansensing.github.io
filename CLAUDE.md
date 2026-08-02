@@ -117,6 +117,24 @@ The Leaflet map instance is hung on the container element as `_map`. Nothing on
 the page reads it; the test harness does, and it makes the map pokeable from the
 console.
 
+### The date line, and why markers vanish past it
+
+Vector markers exist in **one copy of the world**. Basemap tiles repeat
+across copies, so panning east past the antimeridian shows ocean with no
+platforms on it and the fleet looks sliced down the meridian. Measured
+centred on 180°: the view spanned 82°E to 278°E, but only the floats
+numerically inside 82–180 were drawn, because the rest sit at negative
+longitudes one copy west — 983 of them against 1,694 once fixed.
+
+`worldCopyJump` does not fix this. It keeps the *centre* in range; it does
+not move markers. Every point layer is therefore re-homed on move to the copy
+nearest the centre (`rehome()`), one marker each rather than three copies of
+every marker — at four thousand floats that is 4,000 layers against 12,000,
+and no zoom this map offers shows a view wider than one copy.
+
+Point features only. Re-homing a track's vertices independently would tear
+any line that legitimately crosses the seam.
+
 ### Argo floats
 
 About two thousand dots, against forty gliders and saildrones — which drives

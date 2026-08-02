@@ -937,6 +937,33 @@ import 'leaflet/dist/leaflet.css';
       `<a href="${href}" target="_blank" rel="noopener noreferrer" ` +
       `aria-label="${text} (opens in a new tab)">${text}</a>`;
 
+    /* Vector markers exist in exactly one copy of the world. Basemap tiles
+       repeat across copies, so panning east past the antimeridian shows
+       ocean with no platforms on it and the fleet looks sliced down the date
+       line — measured centred on 180°, where the view spans 82°E to 278°E
+       but only the floats numerically inside 82–180 were drawn, because the
+       rest sit at negative longitudes one copy west.
+
+       worldCopyJump keeps the *centre* in range; it does not move markers.
+       So each marker is re-homed to the copy nearest the centre. One marker
+       each rather than three copies of every marker: at four thousand floats
+       that is the difference between 4,000 layers and 12,000, and a view is
+       never wider than a copy at any zoom this map offers.
+
+       Point features only. A track that crosses the meridian would be torn
+       in half by re-homing its vertices independently, and there is no
+       correct answer for a line that legitimately spans the seam. */
+    const rehome = (group: L.LayerGroup) => {
+      const centre = map.getCenter().lng;
+      group.eachLayer((layer) => {
+        const marker = layer as L.CircleMarker;
+        const at = marker.getLatLng?.();
+        if (!at) return;
+        const lng = centre + L.Util.wrapNum(at.lng - centre, [-180, 180], true);
+        if (Math.abs(lng - at.lng) > 1e-9) marker.setLatLng([at.lat, lng]);
+      });
+    };
+
     /* ---- hit targets --------------------------------------------------
 
        How close a tap has to land. The dots are drawn small so a crowded
@@ -1089,6 +1116,9 @@ import 'leaflet/dist/leaflet.css';
           statusParts.argo = `${count} Argo floats`;
           showStatus();
         }
+        // The reader may already have panned away from the primary copy
+        // before this arrived.
+        rehome(argo);
 
         /* Restyle on zoom. setStyle marks each layer and the canvas renderer
            coalesces the redraws into one frame, so this costs one repaint
@@ -1110,6 +1140,14 @@ import 'leaflet/dist/leaflet.css';
     const storms = L.layerGroup().addTo(map);
     const usvs = L.layerGroup().addTo(map);
     const gliders = L.layerGroup().addTo(map);
+
+    /* Keep every point layer in the copy of the world the reader is looking
+       at. Runs on move rather than only on the copy changing, because the
+       right copy for a marker depends on how far it is from the centre, not
+       on which copy the centre is in. */
+    const wrapped = [argo, storms, usvs, gliders];
+    const rehomeAll = () => wrapped.forEach(rehome);
+    map.on('moveend zoomend', rehomeAll);
 
     const overlays: Record<string, L.Layer> = {
       'Surface currents (animated)': flow,

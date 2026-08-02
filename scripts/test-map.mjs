@@ -338,6 +338,40 @@ const argoCoversOffset = argoDot?._point
   ? argoDot._containsPoint(argoDot._point.add(px(OFFSET, 0)))
   : null;
 
+/* The date line. Vector markers exist in one copy of the world, so panning
+   past 180° used to show basemap with no platforms on it — the fleet sliced
+   down the meridian. Counted rather than eyeballed: how many float markers
+   actually fall inside the viewport, against how many floats are really
+   there once longitude is wrapped into the same copy as the centre. */
+const argoInView = () => {
+  const b = host._map.getBounds();
+  let n = 0;
+  host._map.eachLayer((l) => {
+    if (l.options?.fillColor !== palette.features.argo) return;
+    const at = l.getLatLng();
+    if (at.lng >= b.getWest() && at.lng <= b.getEast() && at.lat >= b.getSouth() && at.lat <= b.getNorth()) n += 1;
+  });
+  return n;
+};
+const expectedInView = () => {
+  const b = host._map.getBounds();
+  const c = host._map.getCenter().lng;
+  return (files.argo.floats ?? []).filter((f) => {
+    const lng = c + window.L.Util.wrapNum(f.lon - c, [-180, 180], true);
+    return lng >= b.getWest() && lng <= b.getEast() && f.lat >= b.getSouth() && f.lat <= b.getNorth();
+  }).length;
+};
+const atDateLine = await (async () => {
+  host._map.setView([10, 180], 3, { animate: false });
+  await new Promise((r) => setTimeout(r, 800));
+  return { drawn: argoInView(), expected: expectedInView() };
+})();
+const atGreenwich = await (async () => {
+  host._map.setView([10, 0], 3, { animate: false });
+  await new Promise((r) => setTimeout(r, 800));
+  return { drawn: argoInView(), expected: expectedInView() };
+})();
+
 /* Hovering an asset names it beside the pointer. Fired through Leaflet's own
    event so the tooltip machinery runs, and read out of the DOM rather than
    from the layer, since binding a tooltip and actually showing one are
@@ -942,6 +976,10 @@ const checks = [
      per ten-day cycle, so the five days that suit a glider hid half the
      fleet. It must be at least a full cycle, and must still follow the
      shared window upward if that is ever set longer. */
+  ['floats are drawn on both sides of the date line',
+    atDateLine.expected > 200 && atDateLine.drawn >= atDateLine.expected * 0.98],
+  ['and still all present over the prime meridian',
+    atGreenwich.expected > 200 && atGreenwich.drawn >= atGreenwich.expected * 0.98],
   ['argo window covers at least one float cycle', files.argo.historyDays >= 10],
   ['argo window is never shorter than the shared one',
     files.argo.historyDays >= assets.historyDays],
