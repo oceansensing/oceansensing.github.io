@@ -139,9 +139,37 @@ LEVELS = [
 UA = {'User-Agent': 'oceansensing.org current map (github.com/oceansensing)'}
 
 
+# How far ahead to publish, in hours from now. Each run carries eight days,
+# so the forecast is already paid for upstream; what it costs here is one
+# more pass over the global and regional grids per lead, and one more request
+# to a server that fails per-request.
+#
+# 12-hourly to +48 rather than 3-hourly to +24, which was the other candidate:
+# same five frames either way, and at 0.96 and 0.24 deg the 3-hourly detail
+# is below what the grid resolves, while two days ahead is the horizon
+# somebody planning a deployment actually asks about.
+#
+# **The tiles are deliberately not in this.** 92 MB per depth times five is
+# 460 MB, against 0.55 MB gzipped for five frames of the global grid. So the
+# 1/12 deg tier exists for now and nothing else, and above lead 0 the map
+# falls back to the regional grids — which it must say, or the model looks
+# like it went blurry.
+LEADS = [0, 12, 24, 36, 48]
+
+
 def at_depth(name: str, suffix: str) -> str:
     """currents-atlantic.json -> currents-atlantic-60m.json"""
     return name[:-len('.json')] + suffix + '.json' if suffix else name
+
+
+def at_lead(name: str, lead: int) -> str:
+    """currents-60m.json -> currents-60m-f12h.json. Lead 0 keeps the bare name.
+
+    Lead 0 is the file every existing reader already fetches, so it must not
+    move: a deployment pinned to an older build of the map still asks for
+    currents.json and has to keep getting the field for now.
+    """
+    return name[:-len('.json')] + f'-f{lead}h' + '.json' if lead else name
 
 
 def check_depths() -> None:
@@ -322,6 +350,56 @@ def pick_time() -> tuple[int, str, str]:
     return index, when(hours[index]), run
 
 
+def pick_leads(leads: list[int]) -> list[tuple[int, int, str, str]]:
+    """(lead, index, valid time, model run) for each lead that exists.
+
+    The step nearest `now + lead`, found on the axis rather than by adding
+    `lead / 3` to the index: the spacing is 3 hours today and nothing says it
+    has to stay that way, and a wrong index here would publish the wrong hour
+    under the right filename — the exact failure that made `time_axis()`
+    necessary in the first place.
+
+    A lead past the end of the aggregation is dropped with a note rather than
+    clamped to the last step. Clamping would publish a +48h file holding some
+    other hour, and nothing downstream could tell.
+    """
+    das = get(f'{BASE}.das', timeout=60)
+    marker = 'hours since '
+    at = das.find(marker, das.find('time {'))
+    epoch = datetime.strptime(
+        das[at + len(marker):at + len(marker) + 19], '%Y-%m-%d %H:%M:%S'
+    ).replace(tzinfo=timezone.utc)
+
+    def axis(name: str) -> list[float]:
+        body = get(f'{BASE}.ascii?{name}[0:1:{time_axis(BASE) - 1}]', timeout=90)
+        tail = [line for line in body.splitlines() if line.strip()][-1]
+        return [float(t) for t in tail.split(',') if t.strip()]
+
+    hours = axis('time')
+    if not hours:
+        raise RuntimeError('no time axis')
+    runs = axis('time_run')
+    now = (datetime.now(timezone.utc) - epoch).total_seconds() / 3600
+
+    def when(h: float) -> str:
+        return (epoch + timedelta(hours=h)).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+    out = []
+    for lead in leads:
+        target = now + lead
+        index = min(range(len(hours)), key=lambda i: abs(hours[i] - target))
+        # Half a step of slack: nearest-match silently returns the last step
+        # for anything past the end, so the gap is what catches it.
+        if abs(hours[index] - target) > 2:
+            print(f'  ! +{lead}h is past the end of the aggregation — skipped',
+                  file=sys.stderr)
+            continue
+        out.append((lead, index, when(hours[index]), when(runs[index]) if index < len(runs) else ''))
+    if not out:
+        raise RuntimeError('no usable time step')
+    return out
+
+
 def component(name: str, t: int, z: int, y0: int, y1: int, x0: int, x1: int,
               stride_lat: int, stride_lon: int) -> list[list[float | None]]:
     url = (f'{BASE}.ascii?{name}[{t}][{z}]'
@@ -333,10 +411,10 @@ def component(name: str, t: int, z: int, y0: int, y1: int, x0: int, x1: int,
 
 
 def build(spec: dict, t: int, level: dict, valid: str, run: str,
-          extra: dict | None = None) -> None:
-    """Fetch one grid at one depth and write it in leaflet-velocity's format."""
+          extra: dict | None = None, lead: int = 0) -> None:
+    """Fetch one grid at one depth and lead, in leaflet-velocity's format."""
     stride_lon, stride_lat = spec['stride']
-    out = MAP_DIR / at_depth(spec['name'], level['suffix'])
+    out = MAP_DIR / at_lead(at_depth(spec['name'], level['suffix']), lead)
 
     y0 = axis_index(spec['south'], LAT0, DLAT, NLAT)
     y1 = axis_index(spec['north'], LAT0, DLAT, NLAT)
@@ -401,6 +479,12 @@ def build(spec: dict, t: int, level: dict, valid: str, run: str,
             # The depth this field is for. The map labels its layer from
             # this rather than from the filename it happened to fetch.
             'depth': level['metres'],
+            # Hours ahead of the build. Read from the data rather than the
+            # filename for the same reason depth is: the map says "valid
+            # 2026-08-04 06Z, +24h" from the file it actually got, so a
+            # mislabelled frame shows up as the wrong hour on screen instead
+            # of as the right hour over the wrong water.
+            'lead': lead,
             **(extra or {}),
         }
 
@@ -521,6 +605,31 @@ def frange(start: float, stop: float, step: float) -> list[float]:
     return out
 
 
+def detail_links(level: dict, lead: int) -> list[dict]:
+    """The regional grids a global file advertises, for one depth and lead.
+
+    The lead is threaded through the URLs, not just the filenames: a +24h
+    global file has to point at the +24h regions or zooming in would step
+    back to now, which is the sort of thing nothing on screen would give
+    away.
+    """
+    return [
+        {
+            'url': f'/map/{at_lead(at_depth(d["name"], level["suffix"]), lead)}',
+            'label': d['label'],
+            # A band spanning every longitude advertises the full range, so
+            # the containment test always passes on longitude and turns on
+            # latitude alone.
+            'west': d.get('west', -180.0), 'east': d.get('east', 180.0),
+            'south': d['south'], 'north': d['north'],
+            'minZoom': d['minZoom'],
+            # So the map can prefer the finest region when two overlap.
+            'deg': round(min(DLON * d['stride'][0], DLAT * d['stride'][1]), 4),
+        }
+        for d in DETAILS
+    ]
+
+
 def main() -> int:
     tiles_only = '--tiles' in sys.argv
     try:
@@ -538,6 +647,7 @@ def main() -> int:
         # global file for a depth advertises that depth's regions and tiles,
         # so the map follows one chain of links per layer and cannot end up
         # drawing 60 m particles over a surface grid.
+        frames = pick_leads(LEADS)
         for level in LEVELS:
             print(f"{level['label']}:")
             if tiles_only:
@@ -546,29 +656,35 @@ def main() -> int:
             # The global file advertises the finer grids, so the map learns
             # the regions and their zoom thresholds from the data rather than
             # repeating them in the component where the two could drift apart.
-            build(GLOBAL, t, level, valid, run, extra={
-                # Where the full-resolution tiles live, if a tile run has
-                # happened. They are rebuilt only when the model does, so the
-                # hourly build leaves them alone.
-                'tileIndex': f'/map/{TILES["dir"]}{level["suffix"]}/index.json',
-                'details': [
-                    {
-                        'url': f'/map/{at_depth(d["name"], level["suffix"])}',
-                        'label': d['label'],
-                        # A band spanning every longitude advertises the full
-                        # range, so the containment test below always passes
-                        # on longitude and turns on latitude alone.
-                        'west': d.get('west', -180.0), 'east': d.get('east', 180.0),
-                        'south': d['south'], 'north': d['north'],
-                        'minZoom': d['minZoom'],
-                        # So the map can prefer the finest region when two overlap.
-                        'deg': round(min(DLON * d['stride'][0], DLAT * d['stride'][1]), 4),
-                    }
-                    for d in DETAILS
-                ],
-            })
-            for detail in DETAILS:
-                build(detail, t, level, valid, run)
+            for lead, ti, lead_valid, lead_run in frames:
+                extra: dict = {
+                    'details': detail_links(level, lead),
+                }
+                if lead == 0:
+                    # Where the full-resolution tiles live, if a tile run has
+                    # happened. They are rebuilt only when the model does, so
+                    # the hourly build leaves them alone.
+                    #
+                    # Lead 0 only, and that is the whole shape of this
+                    # feature: five frames of 92 MB tiles is 460 MB per
+                    # depth. Above lead 0 the regional grids are the finest
+                    # there is, and the map has to say so.
+                    extra['tileIndex'] = f'/map/{TILES["dir"]}{level["suffix"]}/index.json'
+                    # What frames exist, so the map learns the lead times from
+                    # the data the way it already learns the regions and the
+                    # tile index — not from a list repeated in the component,
+                    # where the two would drift.
+                    extra['forecast'] = [
+                        {
+                            'lead': l,
+                            'valid': v,
+                            'url': f'/map/{at_lead(at_depth(GLOBAL["name"], level["suffix"]), l)}',
+                        }
+                        for l, _, v, _ in frames
+                    ]
+                build(GLOBAL, ti, level, lead_valid, lead_run, extra=extra, lead=lead)
+                for detail in DETAILS:
+                    build(detail, ti, level, lead_valid, lead_run, lead=lead)
     except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:
         print(f'! currents unavailable: {exc}', file=sys.stderr)
         kept = MAP_DIR / GLOBAL['name']

@@ -27,3 +27,10 @@ public/map/tiles-60m/
 public/map/tiles-sst-oisst/
 public/map/tiles-sst-navy/
 public/map/tiles-sss-navy/
+
+# Forecast frames. Built in CI beside the tiles and for the same reason: the
+# committed snapshot exists so a local or offline build works, and lead 0 is
+# all that needs. Five leads x two depths x three tiers is ~30 MB of JSON
+# that would be rewritten by every local pipeline run.
+public/map/*-f[0-9]h.json
+public/map/*-f[0-9][0-9]h.json
