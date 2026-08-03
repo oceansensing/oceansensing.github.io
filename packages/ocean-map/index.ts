@@ -52,6 +52,14 @@ export interface OceanMapOptions {
   home?: Bounds;
   /** sessionStorage key for the reader's saved view. `data-map-storage-key`. */
   storageKey?: string;
+  /** Which overlays to switch on, by the names the layer switcher shows.
+      `data-map-layers`, as a JSON array. Absent means "whatever the map turns
+      on by itself", which is what every deployment did before presets existed.
+
+      This is what makes one engine serve several pages: a general-purpose map
+      and a hurricane map differ in their preset and their home bounds, not in
+      their code. Reset returns to the preset, not to the built-in defaults. */
+  layers?: string[];
 }
 
 
@@ -121,6 +129,10 @@ export async function createOceanMap(
       options.storageKey ??
       host.dataset.mapStorageKey ??
       `ocean-map:${host.id || 'default'}`,
+    /* Which overlays this page opens with. Absent means the map's own
+       opening state, which is what every deployment had before presets. */
+    layers:
+      options.layers ?? readJson<string[] | undefined>(host.dataset.mapLayers, undefined),
   };
 
   const BASIN = CONFIG.home;
@@ -609,13 +621,33 @@ export async function createOceanMap(
           return;
         }
 
-        // Rescale on zoom so the drift stays put as the viewport changes.
-        if (zoomChanged) layer.setOptions?.({ velocityScale: scaleForView() });
+        /* Rescale on every settled view, not only when the zoom changed.
+           The scale divides out the viewport area as well as the projection's
+           Jacobian, and both move with any pan across latitude — but the real
+           reason is the first one: the layer is built before the page has
+           finished laying the map out, so the scale it is born with was
+           measured against whatever bounds existed at that instant.
+
+           On a page opening at globe zoom that came out **259 against 0.436**
+           — some six hundred times too fast. Particles crossed the whole map
+           between frames, landed off the grid and were respawned where they
+           started: 120,000 strokes of exactly zero length, a globe covered in
+           long straight streaks, and no error anywhere. It survived until the
+           reader happened to zoom, which is what had been refreshing it.
+
+           Same failure as the rounded-Jacobian bug this file already carries
+           a note about, reached by a different route: there the measurement
+           was wrong, here it was taken too early. */
+        layer.setOptions?.({ velocityScale: scaleForView() });
       };
 
       map.on('zoomend', () => applyView(true));
       map.on('moveend', () => applyView(false));
       applyView(false);
+      /* Once more after the view settles. fitBounds runs after this layer is
+         built, so the first measurement above is taken against bounds the
+         reader never sees. */
+      map.whenReady(() => setTimeout(() => applyView(true), 0));
     })
     .catch(() => {
       // No field: the switcher still lists the layer, it is simply empty,
@@ -1810,12 +1842,32 @@ export async function createOceanMap(
     'EEZ boundaries': eez,
     'Lat/lon grid': graticule,
   };
+  /* A page's preset, applied before the defaults are captured below — so
+     "default" still means one thing, and Reset returns here rather than to
+     the map's own opening state.
+
+     Animated layers are dropped for a reduced-motion reader even when the
+     preset names them. A preset is the page author's wish; this is the
+     reader's, and it wins. That was the exact hazard the note below warned
+     about when defaults were only ever captured. */
+  if (CONFIG.layers) {
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const wanted = new Set(
+      CONFIG.layers.filter((name) => !(reduced && /animated/i.test(name)))
+    );
+    for (const [name, layer] of Object.entries(overlays)) {
+      if (wanted.has(name) && !map.hasLayer(layer)) map.addLayer(layer);
+      if (!wanted.has(name) && map.hasLayer(layer)) map.removeLayer(layer);
+    }
+  }
+
   /* What "default" means, captured rather than restated. Every layer that
-     is on right now is on because startup put it there, and startup is the
-     only place that decides — writing the list out again here would be a
-     second source of truth that drifts, and it would be wrong for a
-     reduced-motion reader, who never gets the animated field. Taken before
-     restoreView runs, so it is the defaults and not the reader's session. */
+     is on right now is on because startup put it there — or because the
+     preset above did — and that is the only place deciding. Writing the list
+     out again here would be a second source of truth that drifts, and it
+     would be wrong for a reduced-motion reader, who never gets the animated
+     field. Taken before restoreView runs, so it is the defaults and not the
+     reader's session. */
   const DEFAULT_OVERLAYS = new Set(
     Object.keys(overlays).filter((name) => map.hasLayer(overlays[name]!))
   );

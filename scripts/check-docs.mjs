@@ -257,6 +257,34 @@ if (mapPages.length) {
   }
 }
 
+/* 4c. Layer presets have to name layers that exist.
+
+       A page opens the map on a preset — a list of overlay names as the
+       switcher shows them. Misspell one and nothing happens: no error, no
+       warning, just a layer that quietly fails to come on, which is the same
+       silent-partial-result this project keeps meeting. The names live in the
+       module's `overlays` object, so both sides are read here. */
+const overlayBlock = /const overlays[^=]*=\s*\{([\s\S]*?)\n  \};/.exec(
+  fs.readFileSync('packages/ocean-map/index.ts', 'utf8')
+);
+if (overlayBlock) {
+  const known = new Set([...overlayBlock[1].matchAll(/^\s*'([^']+)':/gm)].map((m) => m[1]));
+  const pages = fs
+    .readdirSync('src/pages', { recursive: true })
+    .filter((f) => String(f).endsWith('.astro'))
+    .map((f) => `src/pages/${f}`);
+  for (const page of pages) {
+    const text = fs.readFileSync(page, 'utf8');
+    const preset = /layers=\{\[([\s\S]*?)\]\}/.exec(text);
+    if (!preset) continue;
+    for (const [, name] of preset[1].matchAll(/'([^']+)'/g)) {
+      if (!known.has(name)) {
+        note(page, `opens the map on \`${name}\`, which is not a layer the map offers`);
+      }
+    }
+  }
+}
+
 /* 5. The README promises CI gates the deploy on `npm run verify`. Keep that
       promise honest: if the gate is removed, the claim is a lie. */
 const workflow = fs.readFileSync(WORKFLOW, 'utf8');

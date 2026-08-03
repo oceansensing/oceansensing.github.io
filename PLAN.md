@@ -30,6 +30,13 @@ Above the map, an active-storm status line that updates without a reload;
 beside that, a server-synchronised UTC clock. The page refreshes itself when
 a new build lands, keeping your basemap, layers and position.
 
+The same map now carries two pages. `/visualization/` is the general-purpose
+one — bathymetry, surface flow and a shoreline over the whole ocean, with
+everything else a switch away — and it replaced News in the navigation. The
+news pages and their feed are untouched at `/news/`, still linked from the
+home page and the footer; only the nav entry moved. A page differs from
+another by its preset and its home bounds, nothing else.
+
 The map is no longer part of the page. It is `packages/ocean-map`, an npm
 workspace package — configurable, multiple-instances-per-page, self-styling,
 fully typed against a published data contract, with the renderer-independent

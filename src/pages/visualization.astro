@@ -1,0 +1,109 @@
+---
+/* The general-purpose map: the same engine the hurricane page uses, with no
+   scientific framing on top of it.
+
+   The difference between this page and that one is its preset and its home
+   bounds — bathymetry, surface flow and a shoreline, opened on the whole
+   ocean rather than a basin. Everything else is one switch away in the layer
+   list, and the reader's choices are kept for the session. */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import AssetMap from '../components/AssetMap.astro';
+import UtcClock from '../components/UtcClock.astro';
+
+const title = 'Visualization';
+const description =
+  'An interactive map of the global ocean: bathymetry, modelled currents at ' +
+  'two depths, sea-surface temperature and salinity, seafloor contours, ' +
+  'maritime boundaries, and the uncrewed platforms reporting from it.';
+---
+
+<BaseLayout title={title} description={description}>
+  <article class="container">
+    <div class="topline">
+      <p class="eyebrow">Ocean data</p>
+      <UtcClock />
+    </div>
+    <h1>{title}</h1>
+
+    <p class="lede">
+      A map of the ocean as it is right now. It opens on bathymetry, the
+      modelled surface flow and a shoreline; everything else — temperature,
+      salinity, currents at 60 m, depth contours, maritime boundaries and the
+      platforms reporting from the water — is a switch away in the layer list.
+    </p>
+
+    <AssetMap
+      storageKey="visualization-map-view"
+      label="Interactive map of the global ocean"
+      home={[[-60, -175], [70, 175]]}
+      layers={['Surface currents (animated)', 'Coastline']}
+    />
+
+    <h2>Using it</h2>
+    <ul>
+      <li>
+        The layer list, top right, holds the basemaps and every overlay. Only
+        one scalar field and one current depth can show at a time — two of
+        either over the same water cannot be told apart.
+      </li>
+      <li>
+        Right-click, or press and hold on a touchscreen, to read the position,
+        the seafloor depth and the current wherever you point. With a
+        temperature or salinity layer on, that too; with maritime boundaries
+        on, whose waters they are.
+      </li>
+      <li>
+        The 📏 button measures distance and bearing along as many legs as you
+        click. Escape clears it.
+      </li>
+      <li>
+        Under the map: the colour scale, its range, and how strongly the depth
+        contours show through. Reset puts everything back.
+      </li>
+      <li>
+        <strong>Your own overlay.</strong> Load a KMZ or KML — a survey plan, a
+        station grid, an operating area, a georeferenced chart — and it is
+        drawn over the top and kept in this browser for next time. It stays on
+        your machine; nothing is uploaded anywhere.
+      </li>
+    </ul>
+
+    <h2>Where the data comes from</h2>
+    <p>
+      The same feeds as the <a href="/observations/hurricanes/">hurricane
+      page</a>, which describes each one: NHC storm forecasts, gliders from
+      four national data centres, NOAA saildrones, the Argo array, the US Navy
+      ESPC-D-V02 forecast for currents, temperature and salinity, NOAA OISST
+      for observed temperature, GEBCO for bathymetry and depth contours,
+      EMODnet for the shoreline, and Marine Regions for maritime boundaries.
+      Everything but the seafloor is refetched hourly.
+    </p>
+  </article>
+</BaseLayout>
+
+<style>
+  .topline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+  }
+
+  .lede {
+    max-width: 65ch;
+    color: var(--text-muted);
+  }
+
+  h2 {
+    margin-top: var(--space-lg);
+  }
+
+  ul {
+    max-width: 65ch;
+  }
+
+  li {
+    margin-bottom: var(--space-xs);
+  }
+</style>

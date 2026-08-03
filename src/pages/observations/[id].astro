@@ -95,7 +95,30 @@ const collapsible = byYear.length > 1;
     </div>
     <h1>{title}</h1>
     {map === 'assets' && <StormStatus />}
-    {map === 'assets' && <AssetMap />}
+    {
+      /* The hurricane preset: the fleet, the water it is working in, and the
+         Atlantic basin. Named here rather than in the component, because the
+         difference between this map and the general-purpose one at
+         /visualization/ is exactly this list and these bounds. */
+      map === 'assets' && (
+        <AssetMap
+          storageKey="asset-map-view"
+          label="Map of active hurricanes and uncrewed ocean assets"
+          home={[[7, -100], [45, -20]]}
+          layers={[
+            'Hurricanes',
+            'NOAA USVs',
+            'IOOS gliders',
+            'Argo floats',
+            'Surface currents (animated)',
+            'SST (Navy forecast)',
+            'Isobaths',
+            'Coastline',
+            'Lat/lon grid',
+          ]}
+        />
+      )
+    }
     {/* A page with a live map opens on it — the map is what the reader came
         for, and a hero photo above it just pushes it below the fold. The
         cover still feeds the homepage card either way. */}

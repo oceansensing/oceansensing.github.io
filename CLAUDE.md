@@ -216,6 +216,24 @@ ended exactly on a lattice line.
 
 The remaining seams, in order of what they unlock:
 
+- **One engine, several pages.** `/visualization/` and
+  `/observations/hurricanes/` are the same map. What separates them is a
+  **preset** — the `layers` option, a list of overlay names as the switcher
+  shows them, plus `home` bounds — passed as props to `AssetMap.astro` by each
+  page. The generic map opens on bathymetry, surface flow and a shoreline over
+  the whole ocean; the hurricane map opens on the fleet, SST, isobaths and the
+  graticule over the Atlantic. Neither knows anything the other does not.
+
+  `DEFAULT_OVERLAYS` is still *captured* rather than restated — the preset is
+  applied first, then the defaults are read off the map, so Reset returns to
+  the page's preset and there is still only one place deciding what "default"
+  means. Animated layers are dropped from a preset for a reduced-motion
+  reader: a preset is the page author's wish, and the reader's wins.
+
+  A misspelt layer name would do nothing at all — no error, just a layer that
+  never comes on — so `check:docs` reads the names out of the module's
+  `overlays` object and fails on any preset naming one that does not exist.
+
 - **Configuration** comes off one `CONFIG` object — data base URL, home
   bounds, storage key — read from `data-map-*` attributes on the container
   when present, so markup can configure it with no build step. Eleven
@@ -739,6 +757,24 @@ All four were shipped and all four were silent:
   assignment and the built bundle would die on `L is not defined`. The dev
   server hides this by serving Leaflet's UMD build, so **it breaks only in
   `dist/`**.
+
+**A fifth, found by opening a page at globe zoom.** The scale is measured off
+the map, and the particle layer is built *before* the page has finished laying
+the map out — so on the new `/visualization/` page it was measured against
+bounds the reader never sees: **259 against a settled 0.436**, six hundred
+times too fast. Particles crossed the whole map between frames, landed off the
+grid and were respawned where they started — 120,000 strokes of exactly zero
+length, a globe covered in long straight streaks, and no error anywhere. It
+survived until the reader happened to zoom, because a zoom was the only thing
+that refreshed it. The scale is now recomputed on every settled view rather
+than only on a zoom change, and once more after `whenReady`. Same failure as
+the rounded-Jacobian bug below, reached by a different route: there the
+measurement was wrong, here it was taken too early.
+
+jsdom does no layout, so the harness cannot reproduce that race — at
+construction its bounds are already the settled ones. It tests the *cause*
+instead: a pan across latitude with no zoom change must still rescale, which
+is the exact line that was wrong.
 
 `npm run test:map` catches all four by recording the canvas draw calls: it
 prints the per-frame displacement distribution, fails if particles go

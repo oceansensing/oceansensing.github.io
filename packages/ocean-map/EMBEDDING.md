@@ -37,6 +37,7 @@ the attribute over the default.
 | `dataBase` | `data-map-data` | `/map/` |
 | `home` | `data-map-home` | `[[7, -100], [45, -20]]` |
 | `storageKey` | `data-map-storage-key` | `ocean-map:<container id>` |
+| `layers` | `data-map-layers` (JSON array) | whatever the map opens with |
 
 ```js
 import { createOceanMap } from '@c4po/ocean-map';
@@ -46,6 +47,12 @@ createOceanMap(document.querySelector('#map'), {
   home: [[50, -30], [65, 10]],     // the Norwegian Sea, say
 });
 ```
+
+`layers` names overlays as the switcher shows them, and is how one engine
+serves several pages: this site's general-purpose map and its hurricane map
+differ only in their preset and their home bounds. Reset returns to the
+preset. Animated layers are dropped for a reduced-motion reader even when the
+preset names them.
 
 **Two maps on a page is supported and tested.** Give each its own container;
 they keep separate homes, saved views and controls. Set `storageKey`

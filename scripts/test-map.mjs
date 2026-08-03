@@ -1284,6 +1284,35 @@ const paneSvgUnclamped =
   /\.leaflet-pane>svg\{[^}]*max-width:none/.test(builtCss.replace(/\s+/g, '')) ||
   /\.leaflet-pane>svg\{[^}]*max-width:none/.test(builtCss);
 
+/* The particle scale has to follow the view, not just the zoom.
+
+   It divides out the viewport area and the projection's Jacobian, so it
+   changes with any pan across latitude — but it used to be refreshed only
+   when the zoom changed. That left it measured against whatever bounds
+   existed when the layer was built, which is before the page has finished
+   laying the map out: on a page opening at globe zoom it came out 259
+   against a settled 0.436, six hundred times too fast, and stayed there
+   until the reader happened to zoom. 120,000 zero-length strokes, a globe of
+   straight streaks, no error anywhere.
+
+   jsdom does no layout, so it cannot reproduce that race — at construction
+   the bounds are already the settled ones. What it *can* reproduce is the
+   cause: a pan with no zoom change must still rescale. That is the exact
+   line that was wrong, and reverting the fix fails this. */
+const scaleNow = () => {
+  let found = null;
+  host._map.eachLayer((l) => {
+    if (l._windy && found === null) found = l.options?.velocityScale ?? null;
+  });
+  return found;
+};
+host._map.setView([12, -60], host._map.getZoom(), { animate: false });
+await new Promise((r) => setTimeout(r, 400));
+const scaleSouth = scaleNow();
+host._map.setView([46, -60], host._map.getZoom(), { animate: false });
+await new Promise((r) => setTimeout(r, 400));
+const scaleNorth = scaleNow();
+
 const bathyPaneZ = (name) =>
   Number(host.querySelector(`.leaflet-${name}-pane`)?.style.zIndex ?? NaN);
 const bathyRequestsBeforeSwitchOn = bathyFetched.length;
@@ -1396,6 +1425,8 @@ await new Promise((r) => setTimeout(r, 300));
 
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
+  ['panning across latitude rescales the particle field, with no zoom change',
+    scaleSouth !== null && scaleNorth !== null && scaleSouth !== scaleNorth],
 
   // ---- a reader's own KMZ overlay
   ['an uploaded KMZ is decoded and drawn',
