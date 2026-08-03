@@ -1280,6 +1280,33 @@ const hardcodedPaths = [...withoutComments.matchAll(/['"`]\/map\/[^'"`]*/g)].map
    where the path belongs. Anything else is a fetch that ignores the option. */
 const strayPaths = hardcodedPaths.filter((hit) => hit !== "'/map/");
 
+/* Every instance of the map must look and behave the same wherever it is
+   placed, so all of its styling lives in the package's own stylesheet and a
+   host page contributes placement only. A rule written into a page instead
+   would apply to that page's map and no other — the two would drift, and the
+   one anybody checks is whichever they opened.
+
+   Scans the site's own CSS and the style blocks of its components for
+   anything that styles the map: a `--map-*` declaration, or a selector
+   reaching for the class or the tone attribute. Markup is not searched,
+   because the container legitimately carries `data-ocean-map` hooks. */
+const siteStyles = (function walk(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return walk(full);
+    if (entry.name.endsWith('.css')) return [[full, fs.readFileSync(full, 'utf8')]];
+    if (!entry.name.endsWith('.astro')) return [];
+    const blocks = [...fs.readFileSync(full, 'utf8').matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)];
+    return blocks.map((block) => [full, block[1]]);
+  });
+})('src');
+
+const strayMapStyles = siteStyles
+  .filter(([, css]) =>
+    /--map-[\w-]+\s*:/.test(css) || /\.ocean-map|data-basemap-tone|\.map-(coast|bathy|land|grid|eez|asset|casing)\b/.test(css)
+  )
+  .map(([file]) => file);
+
 /* Two of the map's colours are keyed to the *basemap* rather than the theme —
    the isobath halo and the shoreline tint — because what they have to be seen
    against is the water GEBCO or Esri paints, which dark mode does not change.
@@ -1534,6 +1561,8 @@ const checks = [
     basemapBeatsTheme('--map-bathy-halo')],
   ['and so does the shoreline tint',
     basemapBeatsTheme('--map-coast')],
+  ['no page styles the map, so every instance of it looks the same',
+    strayMapStyles.length === 0],
   ['every data fetch goes through the configured dataBase',
     strayPaths.length === 0 && hardcodedPaths.length === 1],
   /* The shoreline replaced a Natural Earth polyline whose vertices were 16

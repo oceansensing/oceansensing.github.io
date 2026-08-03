@@ -81,7 +81,20 @@ An id matches at most one map per page. Shared class names carry an `om-`
 prefix: the stylesheet is plain CSS with none of Astro's automatic scoping, so
 an unprefixed `.legend` leaks into whatever page imports it.
 
-### S7. Nothing is document-scoped
+### S7. Styling and behaviour live here, never in a host page
+
+A page places the map; it does not restyle it. A rule written into one page
+applies to that page's map and no other, so two instances drift and the one
+anybody notices is whichever they opened. Everything about how the map looks
+is in `ocean-map.css`; everything about how it acts is in `index.ts`. What a
+host may vary is the `layers` preset and `home` — which is the entire
+difference between this site's two map pages.
+
+*Enforced by* the stray-style scan in `npm run test:map`, which fails on a
+`--map-*` declaration or an `.ocean-map` / `data-basemap-tone` / `map-*`
+selector anywhere under the host's `src/`.
+
+### S8. Nothing is document-scoped
 
 Every lookup is relative to the container's `[data-ocean-map]` root. No
 singletons, no `getElementById`, no shared storage key.
@@ -99,7 +112,7 @@ That is the whole point of the option. See S3.
 
 ### F2. Two maps must coexist on one page
 
-See S7. This is not hypothetical — the storm status line is claimed by the
+See S8. This is not hypothetical — the storm status line is claimed by the
 first map to ask for it, precisely because both claiming it had them wiring the
 same zoom buttons and fighting over where a click sent the view.
 
@@ -132,7 +145,9 @@ Before adding anything, ask:
 4. Does it add a colour? Then the palette, or a themed CSS variable in all
    three blocks.
 5. Does it query the document, or assume one map? Then it is wrong.
+5a. Does it style or change behaviour? Then it goes here, not in a host page,
+    so every instance of the map gets it.
 6. Does it change a measured constant? Then re-measure and rewrite the reason.
 
-`npm run verify` is the gate — 844 checks across nine steps. CI runs exactly
+`npm run verify` is the gate — 911 checks across nine steps. CI runs exactly
 it, and the deploy will not run unless it passes.

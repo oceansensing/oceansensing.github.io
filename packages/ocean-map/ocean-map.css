@@ -85,8 +85,6 @@
       --map-eez: saturate(0.5) brightness(1.4);
       --map-bathy: #aab4c2;
       --map-bathy-halo: rgba(4, 8, 13, 0.7);
-      --map-coast: brightness(1.5) contrast(1.15);
-      --map-coast-halo: rgba(9, 14, 21, 0.6);
       --map-currents-blend: multiply;
       --map-measure-halo: #e8eef5;
     }
@@ -106,8 +104,6 @@
     --map-eez: saturate(0.5) brightness(1.4);
     --map-bathy: #aab4c2;
     --map-bathy-halo: rgba(4, 8, 13, 0.7);
-    --map-coast: brightness(1.5) contrast(1.15);
-    --map-coast-halo: rgba(9, 14, 21, 0.6);
     --map-currents-blend: multiply;
     --map-measure-halo: #ffffff;
   }
@@ -142,7 +138,17 @@
        prevalence-weighted contrast of 1.02 at worst and 2.34 overall: at
        globe zoom, where it also lands exactly where GEBCO draws its own
        coast edge, it was invisible, which is how it was reported. Lightening
-       it takes that to 4.80. Esri is untouched at 4.48. */
+       it takes that to 4.80. Esri is untouched at 4.48.
+
+       The shoreline now takes *no* value from the theme blocks — it is the
+       one thing here keyed to the basemap alone, and there are only two
+       cases: dark line over a light basemap, light line over a dark one.
+       Dark mode used to lighten it over the light basemaps too, on the
+       reasoning that those get dimmed. Measured, that buys a weighted 3.13
+       against 2.06 over dimmed Esri water — and reads as a glaring white
+       thread on a dark page, which is how it was reported. The dark line
+       carries its light halo there instead, and looks the same by day or by
+       night, which is what a shoreline should do. */
     --map-coast: brightness(1.75) contrast(1.2);
     --map-coast-halo: rgba(9, 14, 21, 0.75);
   }

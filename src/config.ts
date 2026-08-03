@@ -17,8 +17,8 @@ export const NAV = [
   { label: 'People', href: '/people/' },
   { label: 'Publications', href: '/publications/' },
   { label: 'Presentations', href: '/presentations/' },
-  { label: 'Data & Tools', href: '/data/' },
   { label: 'Visualization', href: '/visualization/' },
+  { label: 'Data & Tools', href: '/data/' },
 ] as const;
 
 export const CONTACT = {

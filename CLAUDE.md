@@ -531,6 +531,26 @@ black. The active basemap's tone is published as `data-basemap-tone` on the
 map container and **only light basemaps are dimmed**. Add a basemap and it
 counts as dark unless you list it in `LIGHT_BASEMAPS`.
 
+### One map, however many pages carry it
+
+**A change to how the map looks or behaves has to reach every instance of it,
+uniformly.** Two pages carry it today and more will; a rule or a behaviour
+written into one page applies to that page's map and no other, the two drift,
+and the one anybody notices is whichever they happened to open. So all of it
+lives in the package — `ocean-map.css` for the styling, `index.ts` for the
+behaviour — and a host page contributes **placement only**. `AssetMap.astro`'s
+whole style block is one `margin`.
+
+What a page *may* vary is its preset: which layers open, and where. That is
+the entire intended difference between `/visualization/` and the hurricane
+page, and it goes through the `layers` and `home` options rather than through
+CSS.
+
+`test:map` scans every stylesheet and every component style block under `src/`
+for a `--map-*` declaration or a selector reaching for `.ocean-map`,
+`data-basemap-tone` or a `map-*` layer class, and fails on any hit. Mutation-
+tested: planting one rule in `visualization.astro` fails it.
+
 ### Map colour, and the contrast gate
 
 **Never inline a colour in `AssetMap.astro`.** They live in
@@ -904,6 +924,14 @@ the isobaths use, because tinting alone cannot serve GEBCO — deep water near
 black, shallow banks pale mint, so whichever way the line goes it vanishes
 against one of them. The light line's worst case is 1.15 and that tone *is*
 the pale shelf.
+
+The shoreline takes **no value from the theme at all** — it is keyed to the
+basemap alone, so there are only two cases: dark line over a light basemap,
+light line over a dark one. Dark mode used to lighten it over the light
+basemaps too, on the reasoning that those get dimmed. Measured, that buys a
+weighted 3.13 against 2.06 over dimmed Esri water and reads as a glaring
+white thread on a dark page, which is how it was reported. The dark line
+carries its light halo there instead and looks the same by day or by night.
 
 **The rule that keys these to the basemap did not apply in dark mode at all,
 and had not since it was written.** `:root[data-theme='dark'] .ocean-map` is
