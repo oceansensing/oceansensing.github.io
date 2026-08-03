@@ -9,6 +9,7 @@ import { coordText, elapsed, initialBearing, spanText, stamp } from './geo';
 import { rampColour, rampStops } from './ramp';
 import { tileKeysFor } from './tiles';
 import { readKmz, summarise, type KmzDocument, type KmzFeature, type KmzOverlay } from './kmz';
+import { matrix3d, type Pixel } from './warp';
 import { listOverlays, removeOverlay, saveOverlay } from './store';
 import type {
   IsobathFile,
@@ -1845,16 +1846,83 @@ export async function createOceanMap(
      is held until the tab closes. */
   const overlayUrls = new Map<string, string[]>();
 
+  /* An image on four arbitrary corners, which an axis-aligned image overlay
+     cannot express: with gx:LatLonQuad opposite edges need not be parallel,
+     so the image has to be warped rather than scaled and rotated.
+
+     The element keeps its natural size and is placed by a CSS matrix3d built
+     in warp.ts from the four corners projected into layer coordinates —
+     recomputed on every view change, because those coordinates move. */
+  const QuadImage = L.Layer.extend({
+    initialize(this: any, url: string, corners: [number, number][], options: L.LayerOptions) {
+      this._url = url;
+      this._corners = corners;
+      L.setOptions(this, options);
+    },
+    onAdd(this: any) {
+      const image = L.DomUtil.create('img', 'om-kmz-quad');
+      image.src = this._url;
+      image.alt = (this.options.alt as string) ?? 'overlay image';
+      image.style.position = 'absolute';
+      image.style.transformOrigin = '0 0';
+      if (this.options.opacity != null) image.style.opacity = String(this.options.opacity);
+      this._image = image;
+      this.getPane()!.appendChild(image);
+      // The natural size is not known until it loads, and the matrix needs it.
+      image.addEventListener('load', () => this._reset());
+      this._map.on('zoomend viewreset moveend', this._reset, this);
+      this._reset();
+    },
+    onRemove(this: any) {
+      this._map.off('zoomend viewreset moveend', this._reset, this);
+      this._image?.remove();
+      this._image = null;
+    },
+    getBounds(this: any) {
+      return L.latLngBounds(this._corners.map(([lon, lat]: number[]) => L.latLng(lat!, lon!)));
+    },
+    _reset(this: any) {
+      const image: HTMLImageElement | null = this._image;
+      if (!image || !this._map) return;
+      const width = image.naturalWidth;
+      const height = image.naturalHeight;
+      if (!width || !height) return;
+      image.style.width = `${width}px`;
+      image.style.height = `${height}px`;
+      /* Layer points, because the element is a child of the pane and Leaflet
+         positions the pane itself. KML lists the corners counterclockwise
+         from the south-west; the matrix wants them in the unit square's own
+         order, which is north-west first and clockwise from there. */
+      const at = (i: number): Pixel => {
+        const [lon, lat] = this._corners[i];
+        const point = this._map.latLngToLayerPoint(L.latLng(lat, lon));
+        return [point.x, point.y];
+      };
+      image.style.transform = matrix3d(width, height, [at(3), at(2), at(1), at(0)]);
+    },
+  });
+
   const drawOverlays = (group: L.LayerGroup, id: string, overlays: KmzOverlay[]) => {
     const urls: string[] = [];
     for (const overlay of overlays) {
       const url = URL.createObjectURL(new Blob([overlay.image as BlobPart], { type: overlay.mediaType }));
       urls.push(url);
+      if (overlay.corners) {
+        group.addLayer(
+          new (QuadImage as unknown as new (u: string, c: [number, number][], o: L.LayerOptions) => L.Layer)(
+            url,
+            overlay.corners,
+            { pane: 'user', opacity: overlay.opacity, alt: overlay.name ?? 'overlay image' } as L.LayerOptions
+          )
+        );
+        continue;
+      }
+      const bounds = overlay.bounds!;
       const image = L.imageOverlay(
         url,
         [
-          [overlay.bounds.south, overlay.bounds.west],
-          [overlay.bounds.north, overlay.bounds.east],
+          [bounds.south, bounds.west],
+          [bounds.north, bounds.east],
         ],
         { pane: 'user', opacity: overlay.opacity, alt: overlay.name ?? 'overlay image' }
       );

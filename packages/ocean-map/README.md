@@ -99,11 +99,12 @@ packages/ocean-map/
   palette.ts          map-palette.json, typed
   storm-status.ts     shared with the host's build-time status line
   kmz.ts              KMZ/KML decode — no Leaflet, no DOM, parser injected
+  warp.ts             the projective transform behind gx:LatLonQuad overlays
   store.ts            IndexedDB, for overlays a reader uploads
   data/               the palette, and the sampled basemap water it is gated against
 ```
 
-`geo.ts`, `ramp.ts`, `tiles.ts` and `schema.ts` import neither Leaflet nor the
-DOM and typecheck standalone. That is deliberate and worth preserving: they
+`geo.ts`, `ramp.ts`, `tiles.ts`, `schema.ts`, `warp.ts` and `kmz.ts` import
+neither Leaflet nor the DOM and typecheck standalone. That is deliberate and worth preserving: they
 are what a native port keeps, reimplementing only the drawing. Keep new logic
 that does not touch `L.` out of the Leaflet path.

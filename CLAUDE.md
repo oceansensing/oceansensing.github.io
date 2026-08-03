@@ -961,9 +961,28 @@ details in that:
 Object URLs are revoked when a layer is removed. A KMZ of scanned charts runs
 to tens of megabytes and an unrevoked blob is held until the tab closes.
 
-Only `LatLonBox` is handled. `gx:LatLonQuad` puts an image on an arbitrary
-quadrilateral, which needs a warp rather than a bounding box, and is counted
-as skipped.
+**`gx:LatLonQuad` is drawn too**, on its four corners. Opposite edges need not
+be parallel, so this is a projective transform and not a scale-and-rotate —
+the one thing an axis-aligned image overlay cannot express.
+`packages/ocean-map/warp.ts` computes the homography taking the unit square to
+the four corners, folds in the image's own size, and emits a CSS `matrix3d`; a
+small custom layer recomputes it on every view change, since layer coordinates
+move. It falls back to the affine form when the quad is a parallelogram, which
+is not a shortcut but a necessity — the projective denominator vanishes there.
+
+`warp.ts` imports neither Leaflet nor the DOM. A native port needs the same
+homography and can keep it.
+
+**The tag is namespaced, and that mattered.** `getElementsByTagName('LatLonQuad')`
+matches nothing — it must be `getElementsByTagNameNS('*', 'LatLonQuad')`. The
+branch that used to *count* these as skipped therefore never fired once, and
+every quad overlay was reported as an unreadable `GroundOverlay` instead.
+
+Verified in a browser rather than only in the harness: the drawn image's four
+corners land within **0 px** of their georeferenced positions, and stay there
+across zoom 6, 8 and 9 and a pan. jsdom loads no images, so `naturalWidth`
+stays 0 and the matrix is never computed there — the harness checks the layer
+is built and placed, and the geometry is checked for real.
 
 **What is skipped is counted, not dropped.** NetworkLink is refused on
 purpose as well as for effort — it fetches a URL chosen by the file. The map

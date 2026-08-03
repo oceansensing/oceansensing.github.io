@@ -363,6 +363,9 @@ const KMZ_FIXTURE =
 const OVERLAY_FIXTURE =
   'UEsDBBQAAAAIAMCxAl2+9dEdbwEAAHwDAAAHAAAAZG9jLmttbK2TzW7CMAzH7zxF1fOo+RgDTSZI27RpEhJoGw+QtaZUtDFKAoW3XxrKCmgHDsvJtv6y/XNsnOyLPNiRNhmrcdiNOmFAKuYkU+k4XHy9tkfhRLRw7VROqcw4XFm7eQQoyzLiDak0M5EiC04BvagXCnzheFuQsgKVLEg8r6S2BsE7LXzTvFXJzJXM5aGWfG71jg5BXClrIcacsxbfvaV/CEcfEy3LmU5Iix5C47SCAN9jVgJXmpZimeVkwOeLNipF8FEEL6m0U2mnrJ547zpgbVeiP3KFvYWGt1XgAeFoIUljRXt4j+AtLMn7TuAtl89l1GyldUMU/Q7Cr4NwVgku2f+exUI5ntMQGsDu/9IOr2kH17T9K9pBTXtO1LoN6YMKtnTagMveq20ybp1oL4tNThHrFKzjuRGke8XRucToXkB0bkOY5zKmQup13f48U6f/mHNW7XXMrN2FSEummsxdNc7zGEIthCaXK9QcRnUt4gdQSwMEFAAAAAgAwLECXW5F7FJEAAAASQAAAA8AAABmaWxlcy9jaGFydC5wbmfrDPBz5+WS4mJgYOD19HAJAtIcIMzBBCS9czXvACkBTxfHkIo5yQkrLBpleXU5GQRmBjBeYt/lCZRj8HT1c1nnlNAEAFBLAQIUAxQAAAAIAMCxAl2+9dEdbwEAAHwDAAAHAAAAAAAAAAAAAACAAQAAAABkb2Mua21sUEsBAhQDFAAAAAgAwLECXW5F7FJEAAAASQAAAA8AAAAAAAAAAAAAAIABlAEAAGZpbGVzL2NoYXJ0LnBuZ1BLBQYAAAAAAgACAHIAAAAFAgAAAAA=';
 
+const QUAD_FIXTURE =
+  'UEsDBBQAAAAIAPC0Al3xtSyzEwEAADYCAAAHAAAAZG9jLmttbK2R0U6EMBBF3/mKhme21cUFQoZuYozGZBOjrh/QlNIlQmeFIvj3lq5mJfHFxD7dNmdm7u3Admob8q66vkZThJf0IiTKSCxro4vwZX+7ysItD+DVUY40fREerD3mjI3jSPGojK57apRljmBrug5PWK6nBakRdaOoxNaDarIedp1vUA6tMpaDEa3iz6OwB2BeB3DX4WDKB+evER9fxJMoRUf6HxxIbLDjUlb+ADvdA0LgXqLhcOhUxau6UT3zdfRoNDD/CswjM6unfCfsDs3jIMq5KXbuG4RVPV+lSRQnZJXGdOMEvZplFGd07cSGZlGc0mSeey4BtuwXAFum+T3dtSjJm+O/o/17AOf6z0bZeUnz+vgnUEsDBBQAAAAIAPC0Al3L73oURQAAAEoAAAAPAAAAZmlsZXMvc3dhdGgucG5n6wzwc+flkuJiYGDg9fRwCQLSbCDMwQQk89dVyAMpQU8Xx5CKOck7hBc0tklkaLMw7F+hf3Hn9CvxQEkGT1c/l3VOCU0AUEsBAhQDFAAAAAgA8LQCXfG1LLMTAQAANgIAAAcAAAAAAAAAAAAAAIABAAAAAGRvYy5rbWxQSwECFAMUAAAACADwtAJdy+96FEUAAABKAAAADwAAAAAAAAAAAAAAgAE4AQAAZmlsZXMvc3dhdGgucG5nUEsFBgAAAAACAAIAcgAAAKoBAAAAAA==';
+
 const bundle = fs.readdirSync('dist/_astro').find((f) => f.startsWith('AssetMap') && f.endsWith('.js'));
 if (!bundle) {
   console.error('no AssetMap bundle in dist/_astro — run `npm run build` first');
@@ -1215,6 +1218,30 @@ const kmzOverlay = await (async () => {
   return { images, note: document.querySelector('[data-kmz-note]')?.textContent ?? '' };
 })();
 
+/* A third upload: an image on four arbitrary corners. */
+const kmzQuad = await (async () => {
+  const input = document.querySelector('[data-kmz-file]');
+  if (!input) return null;
+  const bytes = Uint8Array.from(atob(QUAD_FIXTURE), (c) => c.charCodeAt(0));
+  const file = new window.File([bytes], 'quad.kmz', { type: 'application/vnd.google-earth.kmz' });
+  Object.defineProperty(input, 'files', {
+    value: Object.assign([file], { item: (i) => [file][i], length: 1 }),
+    configurable: true,
+  });
+  input.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 1200));
+  const element = host.querySelector('.om-kmz-quad');
+  return {
+    drawn: !!element,
+    note: document.querySelector('[data-kmz-note]')?.textContent ?? '',
+    opacity: element?.style.opacity,
+    /* jsdom loads no images, so naturalWidth stays 0 and the matrix is never
+       computed — the transform is checked in a real browser instead. What is
+       worth asserting here is that the layer is built and placed at all. */
+    inUserPane: element?.parentElement?.classList.contains('leaflet-user-pane') ?? false,
+  };
+})();
+
 /* ---- isobaths -------------------------------------------------------------
 
    The layer is off by default and neither tier is fetched until it is
@@ -1398,6 +1425,13 @@ const checks = [
      host it names; refused for the reason NetworkLink is, and counted. */
   ['an image hosted elsewhere is refused and reported',
     !!kmzOverlay && /hosted elsewhere/.test(kmzOverlay.note)],
+  ['a gx:LatLonQuad overlay is drawn on its four corners',
+    !!kmzQuad && kmzQuad.drawn && kmzQuad.inUserPane],
+  ['carrying its own opacity', !!kmzQuad && kmzQuad.opacity === '0.8'],
+  /* Four points or it is not a quadrilateral; the fixture's second overlay
+     gives two. */
+  ['a quad with the wrong number of corners is refused',
+    !!kmzQuad && /skipped 1 GroundOverlay/.test(kmzQuad.note)],
   ['a polygon-only outline switch does not erase the lines',
     !!kmzUpload &&
       kmzUpload.drawn.some((o) => o.color === '#ff0000' && o.fill !== true && o.stroke !== false) &&

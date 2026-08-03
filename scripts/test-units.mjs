@@ -28,6 +28,7 @@ import {
 } from '../packages/ocean-map/geo.ts';
 import { rampColour, rampStops } from '../packages/ocean-map/ramp.ts';
 import { tileKeysFor } from '../packages/ocean-map/tiles.ts';
+import { apply, matrix3d, unitSquareTo } from '../packages/ocean-map/warp.ts';
 import {
   kmlColour,
   parseCoordinates,
@@ -270,6 +271,40 @@ check('the archive image is not also counted as a spare resource',
   overlaid.skipped['embedded resource'], undefined);
 check('images are summarised alongside features',
   /1 feature · 2 images/.test(summarise(overlaid)), true);
+
+// ---- gx:LatLonQuad --------------------------------------------------------
+
+const quadded = await load('quad.kmz');
+check('a quad overlay is read', quadded.overlays.length, 1);
+const swath = quadded.overlays[0];
+check('four corners, in the file\'s order — SW, SE, NE, NW',
+  swath.corners, [[-76, 36], [-73.5, 36.4], [-73, 38.2], [-75.8, 37.6]]);
+check('a quad has no box', swath.bounds, undefined);
+/* Its corners already carry the orientation, so there is no separate
+   rotation to apply on top. */
+check('and no rotation of its own', swath.rotation, 0);
+check('alpha still becomes opacity', Math.round(swath.opacity * 100) / 100, 0.8);
+/* Anything that is not four points is not a quadrilateral. */
+check('a malformed quad is refused and counted', quadded.skipped.GroundOverlay, 1);
+
+/* The warp itself: a projective transform has to land every corner exactly,
+   or the image creeps away from its georeference at the edges. */
+const quad = [[10, 20], [210, 40], [190, 180], [30, 140]];
+const homography = unitSquareTo(quad);
+const landed = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([x, y]) => apply(homography, x, y));
+check('the unit square lands on all four corners',
+  landed.map(([x, y]) => [Math.round(x * 1e6) / 1e6, Math.round(y * 1e6) / 1e6]), quad);
+/* Opposite edges not parallel is exactly what a box cannot express, so the
+   projective terms must be non-zero — an affine fallback would look almost
+   right and be wrong away from the corners. */
+check('a non-parallelogram needs the projective terms',
+  homography.g !== 0 && homography.h !== 0, true);
+const rect = unitSquareTo([[0, 0], [100, 0], [100, 50], [0, 50]]);
+check('but a plain rectangle stays affine', [rect.g, rect.h], [0, 0]);
+check('a degenerate quad does not produce NaN',
+  Object.values(unitSquareTo([[0, 0], [0, 0], [0, 0], [0, 0]])).every(Number.isFinite), true);
+check('matrix3d emits sixteen values',
+  matrix3d(200, 100, quad).replace(/matrix3d\(|\)/g, '').split(',').length, 16);
 
 // A bare .kml names images that travelled beside it and are not here.
 const plainOverlay = await load('plain.kml');

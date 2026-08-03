@@ -42,12 +42,17 @@ export interface KmzFeature {
 }
 
 /* A georeferenced image — a scanned chart, a satellite grab, a model figure.
-   Only LatLonBox is handled; gx:LatLonQuad places an image on an arbitrary
-   quadrilateral, which Leaflet's image overlay cannot do without a warp. */
+   Placed either on a north/south/east/west box or, with gx:LatLonQuad, on
+   four arbitrary corners. Exactly one of `bounds` and `corners` is set. */
 export interface KmzOverlay {
   name?: string;
-  /** North, south, east, west edges in degrees. */
-  bounds: { north: number; south: number; east: number; west: number };
+  /** North, south, east, west edges in degrees, from LatLonBox. */
+  bounds?: { north: number; south: number; east: number; west: number };
+  /** Four corners from gx:LatLonQuad, counterclockwise from the south-west —
+      so SW, SE, NE, NW, which is the order KML writes them in. Opposite edges
+      need not be parallel, which is why this needs a projective warp rather
+      than a box. */
+  corners?: [LonLat, LonLat, LonLat, LonLat];
   /** Degrees counterclockwise about the centre, from LatLonBox. */
   rotation: number;
   /** From the overlay's own `color`, whose alpha is the opacity. */
@@ -338,18 +343,30 @@ export function parseKml(doc: Document): KmzDocument & { pending: PendingOverlay
      are counted as unreachable rather than half-drawn. */
   const pending: PendingOverlay[] = [];
   for (const element of doc.getElementsByTagName('GroundOverlay')) {
-    const box = element.getElementsByTagName('LatLonBox')[0];
-    if (!box) {
-      // gx:LatLonQuad, or malformed. Either way there is no axis-aligned box.
-      count(element.getElementsByTagName('LatLonQuad').length ? 'rotated-quad overlay' : 'GroundOverlay');
-      continue;
-    }
-    const edge = (tag: string) => Number(text(box, tag));
-    const bounds = {
-      north: edge('north'), south: edge('south'), east: edge('east'), west: edge('west'),
-    };
     const href = text(element.getElementsByTagName('Icon')[0] ?? element, 'href');
-    if (!href || !Object.values(bounds).every(Number.isFinite)) {
+
+    const box = element.getElementsByTagName('LatLonBox')[0];
+    /* Namespaced, so it has to be matched on local name: `gx:LatLonQuad` is
+       invisible to getElementsByTagName('LatLonQuad'), which is why the
+       branch that used to count these never once fired and every quad
+       overlay was reported as a plain unreadable GroundOverlay. */
+    const quad = element.getElementsByTagNameNS('*', 'LatLonQuad')[0];
+
+    let bounds: KmzOverlay['bounds'];
+    let corners: KmzOverlay['corners'];
+    if (box) {
+      const edge = (tag: string) => Number(text(box, tag));
+      const read = {
+        north: edge('north'), south: edge('south'), east: edge('east'), west: edge('west'),
+      };
+      if (Object.values(read).every(Number.isFinite)) bounds = read;
+    } else if (quad) {
+      const points = parseCoordinates(text(quad, 'coordinates'));
+      // Four and only four; anything else is not a quadrilateral.
+      if (points.length === 4) corners = points as [LonLat, LonLat, LonLat, LonLat];
+    }
+
+    if (!href || (!bounds && !corners)) {
       count('GroundOverlay');
       continue;
     }
@@ -365,7 +382,9 @@ export function parseKml(doc: Document): KmzDocument & { pending: PendingOverlay
       href: href.replace(/^\.?\//, ''),
       name: text(element, 'name'),
       bounds,
-      rotation: Number(text(box, 'rotation')) || 0,
+      corners,
+      // A quad has no rotation of its own; its corners already carry it.
+      rotation: box ? Number(text(box, 'rotation')) || 0 : 0,
       opacity: colour?.opacity ?? 1,
       drawOrder: Number(text(element, 'drawOrder')) || 0,
     });
