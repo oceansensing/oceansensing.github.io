@@ -35,54 +35,63 @@ const description =
       layers={['Surface currents (animated)', 'Coastline']}
     />
 
-    <h2>Using it</h2>
-    <ul>
-      <li>
-        The layer list, top right, holds the basemaps and every overlay. Only
-        one scalar field and one current depth can show at a time — two of
-        either over the same water cannot be told apart.
-      </li>
-      <li>
-        Right-click, or press and hold on a touchscreen, to read the position,
-        the seafloor depth and the current wherever you point. With a
-        temperature or salinity layer on, that too; with maritime boundaries
-        on, whose waters they are.
-      </li>
-      <li>
-        The 📏 button measures distance and bearing along as many legs as you
-        click. Escape clears it.
-      </li>
-      <li>
-        Under the map: the colour scale, its range, how strongly the depth
-        contours show through, and the <strong>forecast hour</strong>. Reset
-        puts everything back.
-      </li>
-      <li>
-        <strong>The forecast.</strong> Each Navy model run carries eight days,
-        and the currents, temperature and salinity are published at five hours
-        of it — now and four steps to two days ahead, labelled by their valid
-        time in UTC. The map opens on whichever is closest to now. Hours other
-        than that one are marked, because the 1/12° detail exists only for the
-        present: a forecast hour is drawn from the coarser regional grids.
-      </li>
-      <li>
-        <strong>Your own overlay.</strong> Load a KMZ or KML — a survey plan, a
-        station grid, an operating area, a georeferenced chart — and it is
-        drawn over the top and kept in this browser for next time. It stays on
-        your machine; nothing is uploaded anywhere.
-      </li>
-    </ul>
+    <!-- Collapsed by default, and native <details> rather than a script: the
+         page is the map, and prose above the fold pushes it down on a phone
+         for a reader who has already worked out what a layer switcher is.
+         Open by keyboard, findable by browser search, and works with no JS —
+         which is what the rest of this site does too. -->
+    <details class="aside">
+      <summary>Using it</summary>
+      <ul>
+        <li>
+          The layer list, top right, holds the basemaps and every overlay. Only
+          one scalar field and one current depth can show at a time — two of
+          either over the same water cannot be told apart.
+        </li>
+        <li>
+          Right-click, or press and hold on a touchscreen, to read the position,
+          the seafloor depth and the current wherever you point. With a
+          temperature or salinity layer on, that too; with maritime boundaries
+          on, whose waters they are.
+        </li>
+        <li>
+          The 📏 button measures distance and bearing along as many legs as you
+          click. Escape clears it.
+        </li>
+        <li>
+          Under the map: the colour scale, its range, how strongly the depth
+          contours show through, and the <strong>forecast hour</strong>. Reset
+          puts everything back.
+        </li>
+        <li>
+          <strong>The forecast.</strong> Each Navy model run carries eight days.
+          The currents, temperature and salinity are published at two hours of
+          it — now and a day ahead — labelled by their valid time in UTC, and
+          both at the model's own 1/12° resolution. The map opens on whichever
+          is nearer the clock, which on a late run is not necessarily the first.
+        </li>
+        <li>
+          <strong>Your own overlay.</strong> Load a KMZ or KML — a survey plan, a
+          station grid, an operating area, a georeferenced chart — and it is
+          drawn over the top and kept in this browser for next time. It stays on
+          your machine; nothing is uploaded anywhere.
+        </li>
+      </ul>
+    </details>
 
-    <h2>Where the data comes from</h2>
-    <p>
-      The same feeds as the <a href="/observations/hurricanes/">hurricane
-      page</a>, which describes each one: NHC storm forecasts, gliders from
-      four national data centres, NOAA saildrones, the Argo array, the US Navy
-      ESPC-D-V02 forecast for currents, temperature and salinity, NOAA OISST
-      for observed temperature, GEBCO for bathymetry and depth contours,
-      EMODnet for the shoreline, and Marine Regions for maritime boundaries.
-      Everything but the seafloor is refetched hourly.
-    </p>
+    <details class="aside">
+      <summary>Where the data comes from</summary>
+      <p>
+        The same feeds as the <a href="/observations/hurricanes/">hurricane
+        page</a>, which describes each one: NHC storm forecasts, gliders from
+        four national data centres, NOAA saildrones, the Argo array, the US Navy
+        ESPC-D-V02 forecast for currents, temperature and salinity, NOAA OISST
+        for observed temperature, GEBCO for bathymetry and depth contours,
+        EMODnet for the shoreline, and Marine Regions for maritime boundaries.
+        Everything but the seafloor is refetched hourly.
+      </p>
+    </details>
+
   </article>
 </BaseLayout>
 
@@ -95,8 +104,31 @@ const description =
     gap: var(--space-sm);
   }
 
-  h2 {
-    margin-top: var(--space-lg);
+  .aside {
+    max-width: 65ch;
+    margin-top: var(--space-md);
+    border-top: 1px solid var(--border);
+  }
+
+  .aside summary {
+    padding: var(--space-xs) 0;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* The marker is the only thing saying these open, so it has to stay put
+     when the summary is styled as an eyebrow. */
+  .aside summary:hover,
+  .aside summary:focus-visible {
+    color: var(--text);
+  }
+
+  .aside[open] summary {
+    color: var(--text);
   }
 
   ul {
