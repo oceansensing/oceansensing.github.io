@@ -222,6 +222,11 @@ files['tiles-60m/index'] = { ...files['tiles/index'], depth: 60 };
     header: {
       nx, ny, lo1: 0.125, la1: 85.125, dx: 1, dy: 1,
       refTime: '2026-08-01T12:00:00Z', source: 'US Navy ESPC-D-V02', units: 'degC',
+      /* Same run as the currents fixture, because in production it is: both
+         come from one aggregation at one hour. Without it here the two
+         credits differ for a reason production does not have, and the
+         shared-source check has nothing to catch. */
+      modelRun: '2026-08-01T12:00:00Z',
       details: [], tileIndex: '/map/tiles-sst-navy/index.json',
     },
     data: Array.from({ length: nx * ny }, () => 7.5),
@@ -868,6 +873,16 @@ host._map.closePopup();
 host._map.fire('contextmenu', { latlng: window.L.latLng(11, -51) });
 await new Promise((r) => setTimeout(r, 200));
 const navyRead = host.querySelector('.om-point-readout .leaflet-popup-content')?.textContent ?? '';
+
+/* Read here and nowhere else: this is the one moment both ESPC layers are on
+   — the Navy field was just switched on and the animated currents have been
+   on since startup. Later the basemap changes and OISST comes back, so the
+   same reading taken at the end says nothing about the case this checks. */
+const sharedSourceAttribution =
+  host.querySelector('.leaflet-control-attribution')?.textContent ?? '';
+const currentsOnWithNavy = [/Surface currents/, /Currents at 60 m/].some(
+  (label) => overlayLabelled(label)?.querySelector('input')?.checked === true
+);
 
 const sstLegend = document.querySelector('[data-sst-key]');
 const legendShown = sstLegend && !sstLegend.hidden;
@@ -1891,7 +1906,22 @@ const checks = [
      while every check stayed green, and the only thing that gave it away was
      the run printed in the attribution. */
   ['the SST layer credits its source on screen',
-    /Sea surface temp: .*(ESPC|OISST)/.test(attributionBeforeReset)],
+    /(ESPC-D-V02|OISST)/.test(attributionBeforeReset)],
+  /* The currents and the Navy fields come off the same model at the same
+     hour, and with the quantity written into each string the control named
+     ESPC twice on a line already long enough to wrap. A layer credits who
+     published the data and when and nothing about itself, so the two
+     strings are identical and Leaflet — which counts attributions by their
+     text — shows one.
+
+     The guard on `currentsOnWithNavy` is the whole check: without it this
+     passes just as well when neither layer is on, which is how the first
+     version of it passed against the duplicate it was written to catch. */
+  ['both ESPC layers are on where this is measured', currentsOnWithNavy],
+  ['a source shared by two layers is credited once',
+    (sharedSourceAttribution.match(/ESPC-D-V02/g) ?? []).length === 1],
+  ['and the run it came from is still on screen',
+    /\d{4}-\d{2}-\d{2} \d{2}:\d{2}Z run/.test(sharedSourceAttribution)],
   ['the Navy SST file records which run it came from',
     typeof files['sst-navy'].header.modelRun === 'string' ||
       typeof JSON.parse(fs.readFileSync('public/map/sst-navy.json', 'utf8')).header.modelRun === 'string'],

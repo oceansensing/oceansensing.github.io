@@ -304,8 +304,9 @@ with.
 Leaflet, self-hosted from npm. Reads, from `public/map/`: `ocean-assets.json`
 (storms, gliders, USVs), `argo.json`, the current grids (`currents.json`,
 `currents-atlantic.json`, `currents-arctic.json`, `tiles/`), and
-`coastline.json` + `boundaries.json` (Natural Earth, RDP-simplified). All are
-committed except the tiles.
+`boundaries.json` (Natural Earth, RDP-simplified). All are committed except
+the tiles. `coastline.json` is still published but nothing fetches it — see
+Basemaps.
 
 Vector layers carry a **`className`, never a colour** — CSS owns their stroke and
 fill so a theme switch restyles every path with no redraw. Adding a hardcoded
@@ -520,9 +521,18 @@ fetched hourly (see below).
 
 ### Basemaps
 
-GEBCO is the default. Esri Ocean, OpenStreetMap and an offline coastline-only
-layer are the alternatives; the coastline one is the no-tracking option and
-ships with the site.
+GEBCO is the default; Esri Ocean and OpenStreetMap are the alternatives.
+
+**There is no longer a no-tracking basemap, and that is a deliberate
+trade.** A fourth option, "Coastline only", drew `coastline.json` from the
+site's own files and was the only basemap making no third-party request. It
+was removed at the author's call for the reason it was never much use:
+Natural Earth is simplified hard enough to commit, so at any working zoom it
+drew a blocky line, and a basemap nobody wants to look at is not a choice.
+Every basemap now means tile requests off site. The file stays published for
+anyone reading `dataBase`, and there is **no pipeline in this repo that
+regenerates it** — it was built once by hand — so restoring the option at a
+usable fidelity means writing one and committing a much larger file.
 
 Tone matters, because dark mode dims the tile pane and that was written when
 the light Esri basemap was the default — GEBCO's deep ocean sits near 0.10
@@ -908,8 +918,9 @@ alternative and is on a host already trusted here for the EEZ lines, but it
 renders **bright green with about half the ink**; EMODnet comes out neutral
 grey, so CSS tints it the way it tints the EEZ tiles.
 
-`coastline.json` stays exactly where it was — it is still the offline
-no-tracking basemap, which is what it was simplified for.
+`coastline.json` is no longer drawn anywhere. It was the offline basemap
+until that option was removed, and the same coarseness is why: the
+simplification that let it be committed is what made it blocky.
 
 **Its tint follows the basemap, not the theme, and it shipped following the
 theme.** EMODnet serves a neutral `#808080` line, so CSS decides which way it
@@ -1254,6 +1265,17 @@ the two apart — which is exactly how the currents sat two days stale while
 looking current. An analysis has no run; its own date is the answer. The
 layer's attribution says whichever it has, so staleness is visible on screen
 rather than only in a header.
+
+**One credit per source and run, however many layers draw from it.** The
+currents and the Navy fields come off the same model at the same hour, so
+with the quantity written into each string the attribution control said "US
+Navy ESPC-D-V02" twice on a line already long enough to wrap. Leaflet counts
+attributions by their exact text and shows each once, so the fix is to make
+the shared credit *be* shared rather than to merge two strings afterwards: a
+layer contributes who published the data and when, and nothing about itself.
+Which quantity, and at what depth, is what the switcher names it. It goes
+back to two lines when the runs genuinely differ — separate pipelines can
+land on different runs — which is the thing the run stamp exists to show.
 
 The raster is painted **fully opaque**, and that is load-bearing: the gate
 checks the markers against these exact ramp colours, so blending with the

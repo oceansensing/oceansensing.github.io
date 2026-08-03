@@ -67,7 +67,7 @@ Colour scale, range and contour opacity are yours to set.
 - [GEBCO](https://www.gebco.net/) — global bathymetry, the default
 - [Esri Ocean](https://www.esri.com/) — alternative bathymetry
 - [OpenStreetMap](https://www.openstreetmap.org/copyright) — alternative reference map
-- [Natural Earth](https://www.naturalearthdata.com/) — country and state borders, and the offline coastline basemap
+- [Natural Earth](https://www.naturalearthdata.com/) — country and state borders
 
 Glider endpoints follow the [OceanGliders regional
 list](https://www.europeanglidercommunity.org/data-management-and-tools/).

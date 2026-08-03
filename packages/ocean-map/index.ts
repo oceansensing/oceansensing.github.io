@@ -204,6 +204,25 @@ export async function createOceanMap(
 
   map.attributionControl.setPrefix('');
 
+  /* One credit per source and run, however many layers draw from it.
+     Currents and the Navy scalar fields come from the same model at the
+     same hour, so with the quantity written into each string the control
+     said "US Navy ESPC-D-V02" twice on a line already long enough to wrap.
+
+     Leaflet counts attributions by their exact text and shows each once, so
+     the fix is to make the shared credit *be* shared rather than to merge
+     two strings afterwards: what a layer contributes is who published the
+     data and when, and nothing about the layer. Which quantity, and at what
+     depth, is what the switcher names it — the attribution's job is the
+     credit and the date.
+
+     It stays two lines when the runs genuinely differ, which is right: the
+     fields and the currents are fetched by separate pipelines and can land
+     on different runs, and that is exactly the thing the run stamp exists
+     to show. */
+  const credit = (source: string, run?: string, at?: string) =>
+    source + (run ? ` — ${run}Z run` : at ? ` — ${at}` : '');
+
   /* Leaflet keeps no route from the element back to the map, so hang it
      here: the headless harness in scripts/test-map.mjs reads it, and it
      makes the map pokeable from the console. Nothing on the page uses it. */
@@ -211,9 +230,15 @@ export async function createOceanMap(
 
   /* Bathymetry is the default, since the point of the map is where the
      platforms sit relative to the ocean floor. GEBCO leads; Esri's ocean
-     basemap is the lighter alternative. Either means tile requests off
-     site — the coastline layer below is the offline, no-tracking option,
-     drawn from a file shipped with the site. */
+     basemap is the lighter alternative.
+
+     There used to be a fourth, "Coastline only (no tracking)", drawn from
+     `coastline.json` shipped with the site — the one basemap that made no
+     third-party request. It is gone at the author's call: Natural Earth is
+     simplified hard enough to fit in the repo, so at any working zoom it
+     drew a blocky line, and a basemap nobody wants to look at is not a
+     choice. **Every basemap now means tile requests off site.** The file
+     stays published for anyone reading `dataBase`; nothing here fetches it. */
   const bathymetry = L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
     { attribution: 'Esri — GEBCO, NOAA, National Geographic', maxZoom: 13 }
@@ -429,16 +454,16 @@ export async function createOceanMap(
     flows.push(entry);
     Promise.all([fetch(url).then((r) => r.json()), loadPlugin()])
     .then(([coarse]) => {
-      // Name the run in the attribution: ESPC publishes once a day at 12Z,
-      // so this is how a reader can tell how fresh the field actually is.
+      /* Name the run in the attribution: ESPC publishes once a day at 12Z,
+         so this is how a reader can tell how fresh the field actually is.
+
+         Source and run, and deliberately nothing else — see `credit()`.
+         The depth this layer draws is in its own name in the switcher, and
+         repeating it here is what made the control say ESPC twice. */
       const run = coarse?.[0]?.header?.modelRun?.slice(0, 16).replace('T', ' ');
-      // Depth comes from the data, not the filename this happened to fetch.
-      const metres = coarse?.[0]?.header?.depth ?? 0;
       const flowReady = L.velocityLayer({
         data: coarse,
-        attribution:
-          `Currents: US Navy ESPC-D-V02 at ${metres ? `${metres} m` : 'the surface'}` +
-          (run ? ` — ${run}Z run` : ''),
+        attribution: credit('US Navy ESPC-D-V02', run),
         paneName: 'currents',
         displayValues: false,
         velocityScale: scaleForView(),
@@ -988,9 +1013,11 @@ export async function createOceanMap(
            its own date is the answer, so that is what it shows. */
         const run = coarse.header?.modelRun?.slice(0, 16).replace('T', ' ');
         const at = coarse.header?.refTime?.slice(0, 10);
-        layer.options.attribution =
-          `${field.label}: ${coarse.header?.source ?? 'unknown source'}` +
-          (run ? ` — ${run}Z run` : at ? ` — ${at}` : '');
+        layer.options.attribution = credit(
+          coarse.header?.source ?? 'unknown source',
+          run,
+          at
+        );
 
         group.addLayer(layer);
         layer.setGrid(coarse);
@@ -1527,7 +1554,6 @@ export async function createOceanMap(
       '<a href="https://emodnet.ec.europa.eu/en/bathymetry">EMODnet Bathymetry</a> — coastline',
   });
 
-  const coastline = L.layerGroup();
   const gebco = L.tileLayer.wms('https://wms.gebco.net/mapserv?', {
     layers: 'GEBCO_LATEST',
     format: 'image/png',
@@ -1541,7 +1567,6 @@ export async function createOceanMap(
       attribution: '© OpenStreetMap contributors',
       maxZoom: 19,
     }),
-    'Coastline only (no tracking)': coastline,
   };
   gebco.addTo(map);
 
@@ -2644,16 +2669,8 @@ export async function createOceanMap(
     if (allBounds && allBounds.isValid()) map.fitBounds(allBounds.pad(0.1));
   };
 
-  // ---- coastline (the offline basemap) and borders (overlay) ----
+  // ---- borders (overlay) ----
   const flip = (line: number[][]) => line.map(([x, y]) => [y, x] as [number, number]);
-
-  fetch(`${DATA}coastline.json`)
-    .then((r) => r.json())
-    .then(({ rings }) => {
-      const style = { weight: 0.8, className: 'map-land' };
-      for (const ring of rings as number[][][]) L.polygon(flip(ring), style).addTo(coastline);
-    })
-    .catch(() => {});
 
   fetch(`${DATA}boundaries.json`)
     .then((r) => r.json())

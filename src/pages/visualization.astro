@@ -19,11 +19,14 @@ const description =
 
 <BaseLayout title={title} description={description}>
   <article class="container">
+    <!-- The heading is the eyebrow: "Ocean data visualization" is one phrase,
+         and the map below it is what the page is for. It stays an h1 — the
+         document still needs a heading, it is just set as a label rather than
+         a banner. -->
     <div class="topline">
-      <p class="eyebrow">Ocean data</p>
+      <h1 class="eyebrow">Ocean data visualization</h1>
       <UtcClock />
     </div>
-    <h1>{title}</h1>
 
     <AssetMap
       storageKey="visualization-map-view"

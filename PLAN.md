@@ -46,7 +46,7 @@ website, `PORTING-IOS.md` for the iOS app, and `BOUNDARIES.md` for anyone
 adding to it — those separations are what keep the other two possible, and
 they are easy to breach by accident.
 
-`npm run verify` stands at 911 checks across nine steps: build, type-check,
+`npm run verify` stands at 914 checks across nine steps: build, type-check,
 docs, the renderer-independent units, the published data contract, colour
 contrast, the rendered map, two maps on a page, and the clock.
 
