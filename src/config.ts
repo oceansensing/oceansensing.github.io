@@ -41,3 +41,23 @@ export const HIGHLIGHT_AUTHORS = [
   'Bourdon',
   'Wang',
 ] as const;
+
+/**
+ * Where the map fetches its data.
+ *
+ * Its own repository, on a separate account, and both halves of that matter.
+ * The data is real-time and the site is not: a repository that commits what
+ * it fetches keeps every superseded version forever, and this one had banked
+ * 356 MB of them for 130 MB of live data. Over there each run replaces the
+ * last and the history does not grow.
+ *
+ * A separate *account* also means separate GitHub Pages quotas. The site had
+ * reached ~900 MB of a 1 GB cap and one more layer would not have fitted;
+ * split, the site is a few megabytes and the data has a gigabyte to itself.
+ *
+ * It publishes `access-control-allow-origin: *`, so this is a plain
+ * cross-origin fetch with no proxy. It is **not a public service** — see that
+ * repository's README. Anything of ours that reads it should go through here,
+ * so there is one string to change.
+ */
+export const MAP_DATA = 'https://truedichotomy.github.io/ocean-data-repo/map/';

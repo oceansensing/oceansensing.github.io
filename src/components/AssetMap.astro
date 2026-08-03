@@ -8,9 +8,14 @@
    hurricane map is the preset and the home bounds, not the code: each page
    says which layers it opens with and where it looks, and the map does the
    rest. Reset returns to that preset rather than to the map's own defaults. */
+import { MAP_DATA } from '../config';
+
 interface Props {
   /** Overlay names to switch on, as the layer switcher shows them. */
   layers?: string[];
+  /** Where to fetch from. Defaults to the data repository; a page or a
+      preview can point somewhere else without touching the module. */
+  dataBase?: string;
   /** Bounds the map opens on, and that Reset returns to. */
   home?: [[number, number], [number, number]];
   /** Per instance, so two pages do not share a saved view. */
@@ -22,22 +27,24 @@ interface Props {
 const {
   layers,
   home,
+  dataBase = MAP_DATA,
   storageKey = 'asset-map-view',
   label = 'Map of ocean observing platforms and the water they are working in',
 } = Astro.props;
 
-/* Data comes from /map/*.json, refreshed on every deploy by the scripts in
-   scripts/ (see .github/workflows/deploy.yml). Leaflet is bundled from npm
-   rather than a CDN. The default basemap is GEBCO's bathymetry, so a page
-   carrying this map does request tiles; readers who would rather not can
-   switch to "Coastline only", drawn from a file shipped with the site. That
-   file is fetched only when they do. */
+/* Data comes from the ocean-data repository rather than from this site — see
+   MAP_DATA in src/config.ts for why, and note that it means the map now
+   depends on a second origin being up. Leaflet is bundled from npm rather
+   than a CDN. The default basemap is GEBCO's bathymetry, so a page carrying
+   this map does request tiles; readers who would rather not can switch to
+   "Coastline only", which is fetched only when they do. */
 ---
 
 <figure class="map-figure" data-ocean-map>
   <div
     id="asset-map"
     data-ocean-map-canvas
+    data-map-data={dataBase}
     data-map-storage-key={storageKey}
     data-map-layers={layers ? JSON.stringify(layers) : undefined}
     data-map-home={home ? JSON.stringify(home) : undefined}
