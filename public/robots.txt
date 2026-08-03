@@ -1,4 +1,11 @@
 User-agent: *
 Allow: /
 
+# The map's data, which is served from this domain because project pages
+# inherit the organisation's custom domain. It is a few hundred megabytes of
+# JSON that exists for one map to draw, it is rewritten every hour, and it is
+# not a service — see github.com/oceansensing/ocean-data-repo. Nothing is
+# gained by indexing it and a crawler would pay for all of it.
+Disallow: /ocean-data-repo/
+
 Sitemap: https://oceansensing.org/sitemap-index.xml

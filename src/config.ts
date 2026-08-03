@@ -59,9 +59,17 @@ export const HIGHLIGHT_AUTHORS = [
  * under either owner would have done the same. An earlier version of this
  * comment claimed otherwise.
  *
- * It publishes `access-control-allow-origin: *`, so this is a plain
- * cross-origin fetch with no proxy. It is **not a public service** — see that
- * repository's README. Anything of ours that reads it should go through here,
- * so there is one string to change.
+ * Under the lab's organisation rather than a personal account, so the site's
+ * data does not depend on one person's handle surviving. That move changed
+ * this URL and not by a little: `oceansensing.github.io` carries a CNAME, and
+ * **project pages inherit their organisation's custom domain**, so the data
+ * is served from oceansensing.org rather than from github.io. Same origin as
+ * the site, which makes CORS moot — it still publishes
+ * `access-control-allow-origin: *` — but it also means the data now *looks*
+ * like part of the website. It is **not a public service**; robots.txt keeps
+ * crawlers out of it and that repository's README says the rest.
+ *
+ * Anything of ours that reads it goes through here, so there is one string to
+ * change — which is what made the move a one-line commit rather than a sweep.
  */
-export const MAP_DATA = 'https://truedichotomy.github.io/ocean-data-repo/map/';
+export const MAP_DATA = 'https://oceansensing.org/ocean-data-repo/map/';
