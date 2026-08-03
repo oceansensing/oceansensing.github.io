@@ -46,6 +46,7 @@
     --map-bathy: #97a2b3;
     --map-bathy-halo: rgba(9, 14, 21, 0.65);
     --map-coast: brightness(0.55) contrast(1.3);
+    --map-coast-halo: rgba(255, 255, 255, 0.6);
     --map-currents-blend: multiply;
 
     height: clamp(24rem, 62vh, 40rem);
@@ -85,6 +86,7 @@
       --map-bathy: #aab4c2;
       --map-bathy-halo: rgba(4, 8, 13, 0.7);
       --map-coast: brightness(1.5) contrast(1.15);
+      --map-coast-halo: rgba(9, 14, 21, 0.6);
       --map-currents-blend: multiply;
       --map-measure-halo: #e8eef5;
     }
@@ -105,6 +107,7 @@
     --map-bathy: #aab4c2;
     --map-bathy-halo: rgba(4, 8, 13, 0.7);
     --map-coast: brightness(1.5) contrast(1.15);
+    --map-coast-halo: rgba(9, 14, 21, 0.6);
     --map-currents-blend: multiply;
     --map-measure-halo: #ffffff;
   }
@@ -116,9 +119,32 @@
      either. Two steps darker it does: a dark line inside a dark casing over
      GEBCO's navy is one muddy smudge. So dark basemaps get a light halo and
      the pairing keeps its contrast whichever way the water goes.
-     `data-basemap-tone` is already published for the tile dimming below. */
-  .ocean-map[data-basemap-tone='dark'] {
+     `data-basemap-tone` is already published for the tile dimming below.
+
+     **The leading `:root` is load-bearing, and without it this rule did not
+     apply in dark mode at all.** `:root[data-theme='dark'] .ocean-map` is
+     three compound selectors and a bare `.ocean-map[...]` is two, so the
+     theme block simply out-specified this one: over GEBCO in dark mode the
+     isobath halo came out `rgba(4, 8, 13, 0.7)` — the dark casing under a
+     dark line that the paragraph above says must never happen. It was wrong
+     from the day it was written and looked plausible because the light-mode
+     case, which is what anyone checks, was right. The `:root` brings this to
+     the same specificity; sitting after both theme blocks is then what makes
+     it win, so this rule must stay below them. */
+  :root .ocean-map[data-basemap-tone='dark'] {
     --map-bathy-halo: rgba(232, 238, 245, 0.5);
+
+    /* The shoreline needs the same treatment for the same reason, and went
+       out without it. Its tint was keyed to the theme while the thing it has
+       to be seen against is the *basemap* — so in light mode over GEBCO the
+       grey EMODnet line was darkened to near-black and laid over navy water.
+       Measured against GEBCO's sampled ocean tones it came out at a
+       prevalence-weighted contrast of 1.02 at worst and 2.34 overall: at
+       globe zoom, where it also lands exactly where GEBCO draws its own
+       coast edge, it was invisible, which is how it was reported. Lightening
+       it takes that to 4.80. Esri is untouched at 4.48. */
+    --map-coast: brightness(1.75) contrast(1.2);
+    --map-coast-halo: rgba(9, 14, 21, 0.75);
   }
 
   /* Only light basemaps get dimmed in dark mode — see markBasemapTone. */
@@ -229,6 +255,17 @@
      tiles do: dark over the light basemaps, light over the dark ones. */
   .ocean-map .map-coast {
     filter: var(--map-coast);
+  }
+
+  /* And it carries a halo for the same reason the isobaths do, by the same
+     means — a drop-shadow on the pane, which for a transparent PNG of a line
+     fringes the line itself. Tinting alone cannot serve GEBCO: its deep water
+     is near-black and its shallow banks are pale mint, so whichever way the
+     line goes it disappears against one of them. Measured, the light line's
+     worst case over GEBCO's sampled water is 1.15 and that tone is the pale
+     shelf — which is exactly the ground the halo covers. */
+  .ocean-map .leaflet-coast-pane {
+    filter: drop-shadow(0 0 0.6px var(--map-coast-halo));
   }
 
   /* Isobaths. Light grey, which reads over GEBCO's deep navy and over most

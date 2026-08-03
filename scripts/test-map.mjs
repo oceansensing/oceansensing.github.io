@@ -1280,6 +1280,50 @@ const hardcodedPaths = [...withoutComments.matchAll(/['"`]\/map\/[^'"`]*/g)].map
    where the path belongs. Anything else is a fetch that ignores the option. */
 const strayPaths = hardcodedPaths.filter((hit) => hit !== "'/map/");
 
+/* Two of the map's colours are keyed to the *basemap* rather than the theme —
+   the isobath halo and the shoreline tint — because what they have to be seen
+   against is the water GEBCO or Esri paints, which dark mode does not change.
+   Both are set in the theme blocks first and overridden for a dark basemap
+   after, and the override is one compound selector shorter than the blocks it
+   has to beat. So it lost, and only in dark mode: over GEBCO the isobath halo
+   resolved to the dark casing its own comment says must never happen, and it
+   had been wrong since the day it was written. Light mode, which is what
+   anyone checks by eye, was right throughout.
+
+   This resolves the cascade over the built CSS for a map on a dark basemap
+   and asserts the basemap rule wins. jsdom cannot: it does not cascade custom
+   properties, which is why nothing here caught it. */
+const specificity = (selector) =>
+  (
+    selector
+      .replace(/::[\w-]+/g, ' ')
+      // :not() and friends contribute their argument, not themselves
+      .replace(/:(?:not|is|has)\(/g, '(')
+      .replace(/[()]/g, ' ')
+      .match(/#[\w-]+|\.[\w-]+|\[[^\]]*\]|:[\w-]+/g) || []
+  ).reduce((n, part) => n + (part.startsWith('#') ? 1000 : 1), 0);
+
+/* Every rule setting one of these, in document order. The selector is
+   whatever precedes the brace and cannot contain one, so an @media wrapper
+   is skipped rather than captured — a media query does not affect the
+   cascade between two rules of equal specificity anyway; source order does. */
+const rulesSetting = (property) =>
+  [...builtCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .map(([, selector, body], order) => ({ selector: selector.trim(), body, order }))
+    .filter((rule) => new RegExp(`(^|;)\\s*${property}\\s*:`).test(rule.body));
+
+const basemapBeatsTheme = (property) => {
+  const rules = rulesSetting(property);
+  if (rules.length < 2) return false;
+  const winner = rules.reduce((best, rule) =>
+    specificity(rule.selector) > specificity(best.selector) ||
+    (specificity(rule.selector) === specificity(best.selector) && rule.order > best.order)
+      ? rule
+      : best
+  );
+  return /\[data-basemap-tone=['"]?dark/.test(winner.selector);
+};
+
 const paneSvgUnclamped =
   /\.leaflet-pane>svg\{[^}]*max-width:none/.test(builtCss.replace(/\s+/g, '')) ||
   /\.leaflet-pane>svg\{[^}]*max-width:none/.test(builtCss);
@@ -1486,6 +1530,10 @@ const checks = [
       bathyLayersAt7.every((l) => /map-bathy/.test(l.options.className))],
   ['vectors in a custom pane are not clamped to 0x0 by the site reset',
     paneSvgUnclamped],
+  ['the isobath halo follows the basemap even in dark mode',
+    basemapBeatsTheme('--map-bathy-halo')],
+  ['and so does the shoreline tint',
+    basemapBeatsTheme('--map-coast')],
   ['every data fetch goes through the configured dataBase',
     strayPaths.length === 0 && hardcodedPaths.length === 1],
   /* The shoreline replaced a Natural Earth polyline whose vertices were 16

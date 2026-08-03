@@ -891,6 +891,32 @@ grey, so CSS tints it the way it tints the EEZ tiles.
 `coastline.json` stays exactly where it was — it is still the offline
 no-tracking basemap, which is what it was simplified for.
 
+**Its tint follows the basemap, not the theme, and it shipped following the
+theme.** EMODnet serves a neutral `#808080` line, so CSS decides which way it
+goes — and it was darkened to near-black in light mode, over GEBCO's navy.
+Measured against GEBCO's sampled water tones that is a prevalence-weighted
+contrast of **2.34, and 1.02 against the commonest one**: identical
+luminance, invisible. At globe zoom it also lands exactly where GEBCO draws
+its own coast edge, which is where it was noticed and reported as a missing
+layer. Lightening it over dark basemaps takes that to 4.80; Esri is untouched
+at 4.48. It carries a halo as well, by the same drop-shadow-on-the-pane means
+the isobaths use, because tinting alone cannot serve GEBCO — deep water near
+black, shallow banks pale mint, so whichever way the line goes it vanishes
+against one of them. The light line's worst case is 1.15 and that tone *is*
+the pale shelf.
+
+**The rule that keys these to the basemap did not apply in dark mode at all,
+and had not since it was written.** `:root[data-theme='dark'] .ocean-map` is
+three compound selectors; `.ocean-map[data-basemap-tone='dark']` is two, so
+the theme block out-specified the basemap block and won. Over GEBCO in dark
+mode the isobath halo therefore resolved to the dark casing its own comment
+says must never happen. Light mode — the case anyone checks by eye — was
+right throughout, which is why it survived. A leading `:root` brings the
+basemap rule level, and sitting after both theme blocks is what makes it win,
+so **it must stay below them**. `test:map` resolves that cascade over the
+built CSS and asserts the basemap rule wins for both variables; jsdom cannot
+see it, because it does not cascade custom properties.
+
 #### Why they are SVG, and one path per depth
 
 Every contour at one depth becomes a **single multi-line polyline** rather
@@ -1248,6 +1274,33 @@ how old the data it kept is rather than a neutral "keeping the previous
 fields". Neither change makes a stale map fail the build, deliberately: an
 outage should degrade to stale rather than block a deploy. What changed is
 that the log says so.
+
+#### An old run can serve a current hour, and only `modelRun` says so
+
+The two are independent and it is easy to read one for the other. The FMRC
+"best" aggregation keeps serving forecast steps from the newest run it has,
+so `refTime` marches forward on its own — the fields stay valid for *now*
+whether or not a new run has landed. `modelRun` is the only thing that says
+which run they came from.
+
+Measured on 2026-08-03 04:16 UTC: the aggregation held nine distinct runs,
+daily from 2026-07-24 12Z to **2026-08-01 12Z**, and nothing since. The 08-02
+run was about 40 hours late against a daily cadence. The site's own field was
+valid 2026-08-03 03:00Z, from that 08-01 12Z run, and every hourly build
+since had been green — CI was working, the model was not. Nothing downstream
+can distinguish this from a healthy day except the run stamp, which is
+exactly why it is published and shown in the map's attribution.
+
+So before suspecting the pipeline, check the aggregation's own `time_run`
+axis. If its newest run is what the map reports, there is nothing to fix
+here. OISST is the same shape of question with no run at all: its own date
+*is* the answer, and on the same day its newest published step was
+2026-07-28 — the preliminary product running about six days behind rather
+than its usual four.
+
+Cadence, for reference: the deploy workflow runs at **:17 past every hour**
+and both pipelines run in it, before the build. A new run is picked up within
+the hour of landing; nothing here waits on a schedule of its own.
 
 #### HYCOM fails per request, not outright
 

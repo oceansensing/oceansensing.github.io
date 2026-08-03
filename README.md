@@ -13,6 +13,14 @@ sea-surface temperature and salinity, isobaths, a detailed coastline and EEZ
 boundaries — with the colour scale, its range, the isobath opacity, and every
 layer under the reader's control.
 
+It carries two pages. [`/visualization/`](https://oceansensing.org/visualization/)
+is the general-purpose one and
+[`/observations/hurricanes/`](https://oceansensing.org/observations/hurricanes/)
+is framed around the storm season. They run the same engine off the same data
+and differ only in their **preset** — which layers open, and where. Adding
+another such page means one `.astro` file passing `layers` and `home` to
+`AssetMap`.
+
 It lives in **[`packages/ocean-map`](packages/ocean-map/)**, an npm workspace
 package rather than a page component, so it can be used elsewhere: see its
 [README](packages/ocean-map/README.md),

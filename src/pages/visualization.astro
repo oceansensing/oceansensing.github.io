@@ -25,13 +25,6 @@ const description =
     </div>
     <h1>{title}</h1>
 
-    <p class="lede">
-      A map of the ocean as it is right now. It opens on bathymetry, the
-      modelled surface flow and a shoreline; everything else — temperature,
-      salinity, currents at 60 m, depth contours, maritime boundaries and the
-      platforms reporting from the water — is a switch away in the layer list.
-    </p>
-
     <AssetMap
       storageKey="visualization-map-view"
       label="Interactive map of the global ocean"
@@ -88,11 +81,6 @@ const description =
     align-items: baseline;
     justify-content: space-between;
     gap: var(--space-sm);
-  }
-
-  .lede {
-    max-width: 65ch;
-    color: var(--text-muted);
   }
 
   h2 {
