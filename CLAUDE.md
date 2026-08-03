@@ -1478,9 +1478,18 @@ that the log says so.
 #### The forecast hour
 
 Each ESPC run carries eight days and the map used to show one hour of it.
-**Two frames — now and +24 h — at full resolution**, for currents at both
-depths, Navy SST and Navy salinity. `LEADS` in each pipeline is the knob and
-`--leads=0,12,24,36,48` brings the rest back.
+**Nowcast only, and the scaffolding kept.** `LEADS = [0]` in each pipeline;
+`--leads=0,24` or `--leads=0,12,24,36,48` brings the frames back and nothing
+else has to change — the map builds its control from whatever the data
+advertises, and with one frame it advertises nothing and no control appears.
+
+The frames were built, measured, and then dropped on the numbers. Over 48
+hours the median Navy SST change is **0.1 °C on a ramp spanning 20** and the
+median salinity change is **0.00 psu**, so at the tier a reader sees, most of
+the ocean did not move. Serving them at full resolution to fix that doubled
+the tile sets and took the published data to ~700 MB — a great deal of
+storage for a difference mostly below one step of an 8-bit channel. The room
+goes to products that will show a reader something new.
 
 **It started as five coarse frames and the measurement killed them.** With
 tiles at lead 0 only, the forecast hours came from the 0.96°/0.24° grids —
@@ -1493,13 +1502,13 @@ shelves — are exactly the fine structure the coarse grid smooths away. Four
 extra hours at a resolution that hides the change is a worse deal than one
 hour at the resolution that shows it.
 
-So every lead now carries its own tile set, in its own directory
-(`tiles-f24h/`, `tiles-sst-navy-f24h/`), and each frame's header points at
-its own index. **This is expensive and it is the reason the data needs to
-move.** A second tile set is another 92 MB per depth for currents and ~43 MB
-each for the two Navy fields: the published site goes from ~634 MB to ~904
-MB against GitHub Pages' **1 GB cap**, or 90% of it. One more layer would
-not fit. See the data-repository item in `PLAN.md`.
+The machinery for that is intact: every lead builds its own tile set in its
+own directory (`tiles-f24h/`, `tiles-sst-navy-f24h/`), each frame's header
+points at its own index, and `test-schema` checks that a frame's `tileIndex`
+carries its own lead rather than reaching into the present. Turning the
+frames back on is one constant. What it costs is a second tile set per
+product — 92 MB per depth for currents, ~43 MB each for the Navy fields —
+which is the reason the default is one frame.
 
 Verified end to end on the live site rather than argued: reading the same
 point (Newfoundland shelf, the largest 48-hour change in the grid) through

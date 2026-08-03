@@ -139,27 +139,24 @@ LEVELS = [
 UA = {'User-Agent': 'oceansensing.org current map (github.com/oceansensing)'}
 
 
-# How far ahead to publish, in hours from now, and **every lead gets the full
-# tier chain including 1/12 deg tiles**. Override with --leads=0,12,24,36,48.
+# How far ahead to publish, in hours from now. **Nowcast only by default.**
+# Override with --leads=0,24 or --leads=0,12,24,36,48 — every frame the rest
+# of this file can build is still one flag away, and nothing downstream
+# needed changing to turn them off.
 #
-# This started as five coarse frames, 12-hourly to +48, with tiles at lead 0
-# only. Measured on the published files, that was the wrong trade: over 48
-# hours the *median* SST change is 0.1 degC on a ramp spanning 20, and the
-# median salinity change is 0.00 psu. Half the ocean moved by a two-hundredth
-# of the colour range — the control looked broken because there was nothing
-# to see, and the frames that showed anything were the ones the coarse grid
-# blurred away.
+# The forecast frames were measured and then dropped, and both halves matter.
+# Over 48 hours the median Navy SST change is 0.1 degC on a ramp spanning 20
+# and the median salinity change is 0.00 psu, so at the tier a reader
+# actually sees, most of the ocean did not move. Serving them at full
+# resolution to fix that doubled the tile sets — the published site went to
+# ~700 MB — which is a great deal of storage for a difference that is mostly
+# below one step of an 8-bit channel.
 #
-# So: fewer hours, at the resolution that makes them worth looking at. One
-# forecast frame at full detail beats four at a resolution that hides what
-# changed.
-#
-# The cost is real and worth stating: a second tile set is another 92 MB per
-# depth, and the published site goes from ~634 MB to ~904 MB against a 1 GB
-# GitHub Pages cap. That is 90%, and it is why moving the data to its own
-# repository stops being an improvement and becomes the next necessary
-# thing — see PLAN.md.
-LEADS = [0, 24]
+# So the scaffolding stays and the frames go, which leaves room for products
+# that will show a reader something new. Set LEADS back and it all returns:
+# the map builds its control from whatever the data advertises, and with one
+# frame it advertises nothing and the control does not appear.
+LEADS = [0]
 
 
 def at_depth(name: str, suffix: str) -> str:
@@ -699,11 +696,15 @@ def main() -> int:
                 # has its own set now: one forecast hour at native detail is
                 # worth more than four at a resolution that hides the change.
                 extra['tileIndex'] = f'/map/{tile_dir_name(level, lead)}/index.json'
-                if lead == 0:
-                    # What frames exist, so the map learns the lead times from
-                    # the data the way it already learns the regions and the
-                    # tile index — not from a list repeated in the component,
-                    # where the two would drift.
+                # What frames exist, so the map learns the lead times from
+                # the data the way it already learns the regions and the tile
+                # index — not from a list repeated in the component, where
+                # the two would drift.
+                #
+                # Only when there is more than one, matching the fields
+                # pipeline: a single-frame list would have the map advertise
+                # a control with nothing to choose between.
+                if lead == 0 and len(frames) > 1:
                     extra['forecast'] = [
                         {
                             'lead': l,

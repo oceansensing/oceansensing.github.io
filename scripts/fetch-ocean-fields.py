@@ -633,20 +633,24 @@ def usable_step(product: dict) -> tuple[str, str, str]:
     raise RuntimeError(f'no usable time step in {len(candidates)} candidates')
 
 
-# How far ahead to publish, in hours, and every lead gets its own tile set.
-# Mirrors LEADS in fetch-currents.py and has to: currents and the scalar
-# fields come off the same model at the same hour, and a map showing +24h
-# flow over +12h temperature would be two oceans again.
+# How far ahead to publish, in hours from now. **Nowcast only by default.**
+# Override with --leads=0,24 or --leads=0,12,24,36,48 — every frame the rest
+# of this file can build is still one flag away, and nothing downstream
+# needed changing to turn them off.
 #
-# Cut from five 12-hourly frames to one, at full resolution, because the
-# measurement said so: over 48 hours the median SST change is 0.1 degC on a
-# 20 degC ramp and the median salinity change is 0.00 psu, so four extra
-# coarse hours showed a reader nothing while the coarseness hid the fronts
-# that did move. --leads=0,12,24,36,48 brings them back.
+# The forecast frames were measured and then dropped, and both halves matter.
+# Over 48 hours the median Navy SST change is 0.1 degC on a ramp spanning 20
+# and the median salinity change is 0.00 psu, so at the tier a reader
+# actually sees, most of the ocean did not move. Serving them at full
+# resolution to fix that doubled the tile sets — the published site went to
+# ~700 MB — which is a great deal of storage for a difference that is mostly
+# below one step of an 8-bit channel.
 #
-# Only the forecast products get these — an analysis has none, which is why
-# OISST is absent from the control rather than greyed out in it.
-LEADS = [0, 24]
+# So the scaffolding stays and the frames go, which leaves room for products
+# that will show a reader something new. Set LEADS back and it all returns:
+# the map builds its control from whatever the data advertises, and with one
+# frame it advertises nothing and the control does not appear.
+LEADS = [0]
 
 
 def lead_steps(product: dict, leads: list[int]) -> list[tuple[int, str, str, str]]:
