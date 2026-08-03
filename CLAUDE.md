@@ -437,8 +437,8 @@ calls counts what is on screen, not the fleet.
 ### Where the data lives
 
 **Not here.** `MAP_DATA` in `src/config.ts` points at
-`https://truedichotomy.github.io/ocean-data-repo/map/`, and
-[that repository](https://github.com/truedichotomy/ocean-data-repo) fetches
+`https://oceansensing.org/ocean-data-repo/map/`, and
+[that repository](https://github.com/oceansensing/ocean-data-repo) fetches
 on its own hourly schedule at :05 and publishes to its own Pages site.
 
 Two reasons, and both were measured before the move.
@@ -479,6 +479,42 @@ in `scripts/fixtures/map/` — enough to catch the module's expectations
 drifting from the contract, which is what that gate was ever for. Fresh
 upstream drift is caught by the data repository's own run, which is the only
 place it can be.
+
+### The bloom photographs
+
+Also not here. `HAB_DATA` in `src/config.ts` points at
+[`oceansensing/hab-data-repo`](https://github.com/oceansensing/hab-data-repo),
+which holds the 95 aerial photographs the harmful-algal-bloom page shows.
+
+**Same split, weaker reason, and the docs should not pretend otherwise.** The
+ocean data had to move: it was rewritten hourly and banked every version
+forever. These were committed once and never touched — 27 MB live against
+28 MB of history. What the move bought is weight (`dist/` fell from 71 MB to
+12) and a clean line between prose and binaries, not an escape from churn.
+
+**`astro:assets` no longer touches them, and that is the substantive cost.**
+It was making 361 responsive webp derivatives at build time. It cannot now —
+the files are not here — and it should not, because this site rebuilds
+*hourly* and re-encoding 95 photographs every hour to emit last hour's bytes
+is work nobody sees. `hab-data-repo` runs sharp once per change and publishes
+`w800` and `w1400`; `HAB_WIDTHS` here and that workflow **must agree**, since
+a `srcset` does not negotiate — a width in one place only is a broken image,
+not a smaller one.
+
+The widths stop at 1400 because the largest thing published is the source
+file, and it is **not one size**: 57 of the 95 are 2000 px, re-exported from
+camera originals with their GPS and capture times restored, and 38 are the
+older 1600 px web exports whose originals have not been found. So the
+lightbox and the download button take the file itself.
+
+Each served file carries copyright, creator and usage terms in EXIF, IPTC and
+XMP, written by that repository on publish rather than into the copies in
+git — so a photograph that leaves the site says who made it, and the wording
+can change without rewriting 95 binaries. The year comes from the
+photograph's own filename: a 2017 bloom is not a 2026 work.
+
+The **cover** is the one photograph still here, so the observation card's
+hero is optimised locally and the hurricane page's own cover is untouched.
 
 ### The published data contract
 

@@ -181,41 +181,24 @@ contrast, the rendered map, two maps on a page, and the clock.
   false`, the `currents-raster` pane, the tile definition, the blend CSS), so
   a picture-only Mercator layer remains one flag. It is not a fallback,
   though: it is WMTS imagery, and the particles need numeric u/v.
-- **Move the data to its own repository.** Proposed 2026-08-03, and the
-  right call — but the reason is not the one it looks like, and the trap is
-  in the details.
+- **The data moved out, and so did the photographs.** Done 2026-08-03.
 
-  *What is actually tight.* The git repository is **129 MB packed**, which is
-  nowhere near anything: GitHub's soft guidance starts at 1 GB. The
-  **published site** is the binding limit — Pages caps a site at 1 GB, and
-  `dist/` is 364 MB before CI adds ~184 MB of current tiles and ~86 MB of
-  field tiles. That is **~630 MB, about 63% of the cap**, and every layer
-  added since has moved it up.
+  `oceansensing/ocean-data-repo` fetches the real-time data hourly at :05 and
+  publishes it without committing any of it; the static half — isobaths,
+  coastline, borders — is committed there because the seafloor does not churn
+  and cannot be rebuilt in CI anyway. `oceansensing/hab-data-repo` holds the
+  95 bloom photographs and makes their derivatives.
 
-  *What is growing worst.* History is permanent, and the isobaths have been
-  rebuilt twice: 252 MB of tile blobs in history for 123 MB of current data,
-  plus 38 MB for a global file that is 12 MB. Committed model grids
-  contribute another 57 MB of pure churn — snapshots rewritten and
-  recommitted. None of that is reclaimable without rewriting history.
+  What it bought, measured: `.git` 129 MB → 36 MB after the history rewrite,
+  `dist/` 71 MB → 12 MB, the published site ~904 MB → ~12 MB against a 1 GB
+  Pages cap, and a site build of about three minutes with no Python in it.
 
-  *Why it works cleanly here.* The map was built for it: `dataBase` is a
-  configured option, every fetch goes through `fromData()`, and
-  `EMBEDDING.md` already documents pointing it at another origin. Verified
-  2026-08-03 that GitHub Pages answers `access-control-allow-origin: *`, so
-  a cross-origin data host needs no proxy and no code change — one
-  `data-map-data` attribute.
-
-  *The trap, and it is the whole design.* A data repo that **commits** what
-  it fetches is the same disease at an hourly rate: 24 commits a day of
-  grids that are rewritten every time, forever. It has to publish without
-  committing — build into the Pages artifact the way this repo already does
-  for the current tiles, or force-push an orphan branch so history never
-  accumulates, or put the big static sets (isobaths, tiles) in Releases,
-  which are 2 GB per file and cost the repository nothing.
-
-  Two things that do not improve by splitting: each Pages site has its own
-  1 GB cap, so this buys a second bucket rather than a bigger one, and the
-  ~100 GB/month bandwidth allowance is per account.
+  Two things worth carrying forward. **Pages limits are per site, not per
+  account** — an earlier note here claimed a separate account bought separate
+  quotas and it did not; the second *repository* is what bought the room.
+  And **project pages inherit their organisation's custom domain**, so both
+  repositories serve from `oceansensing.org/<repo>/` rather than github.io,
+  which is why `robots.txt` disallows both paths: they are not offerings.
 
 - **Payload.** Currents come in three tiers per depth: a 0.96° global grid
   with the page, 0.24°/0.12° regional grids on zooming in, and 1/12° tiles

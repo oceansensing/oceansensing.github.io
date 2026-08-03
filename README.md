@@ -127,6 +127,7 @@ GitHub Pages and so the work is open to inspection; that is not a grant of
 any licence to reuse it.
 
 Third-party material keeps its own terms: dependencies as declared in
-`package.json`, and the scientific data in `public/map/` under the terms of
+`package.json`, and the scientific data — served from
+[ocean-data-repo](https://github.com/oceansensing/ocean-data-repo) — under the terms of
 the bodies that produced it (GEBCO, Natural Earth, NOAA, IOOS, Ifremer, the
 US Navy via HYCOM, Marine Regions and others), each credited on the map.
