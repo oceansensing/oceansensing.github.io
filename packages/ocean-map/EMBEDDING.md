@@ -107,7 +107,7 @@ saves only this copying.
 ## What you will hit
 
 - **The fleet is assumed.** Layer names, legend entries and popups say
-  hurricanes, NOAA USVs, IOOS gliders, Argo floats. Reading the same
+  hurricanes, NOAA USVs, ocean gliders, Argo floats. Reading the same
   `dataBase` that is simply correct. Showing *different* platforms means
   making the platform layers pluggable, which is a real piece of work and has
   deliberately been left until a second use defines what it needs. If that is

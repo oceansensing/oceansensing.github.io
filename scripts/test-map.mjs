@@ -439,7 +439,7 @@ const SEEDED_VIEW = {
     'Current speed (Mercator)',
     'Hurricanes',
     'NOAA USVs',
-    'IOOS gliders',
+    'Ocean gliders',
     'Country & state borders',
     'Lat/lon grid',
   ],

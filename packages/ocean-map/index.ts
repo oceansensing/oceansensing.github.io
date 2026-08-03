@@ -2127,7 +2127,7 @@ export async function createOceanMap(
     ...(MERCATOR_RASTER ? { 'Current speed (Mercator)': currents } : {}),
     'Hurricanes': storms,
     'NOAA USVs': usvs,
-    'IOOS gliders': gliders,
+    'Ocean gliders': gliders,
     'Argo floats': argo,
     'Isobaths': bathy,
     'Coastline': shoreline,

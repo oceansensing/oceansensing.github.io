@@ -276,7 +276,7 @@ The remaining seams, in order of what they unlock:
   kind of invisible dependency whose failure is silent.
 - **Still to do**: the chrome markup is the host's, so a second site
   reproduces the legend and controls; the module is one 2,700-line file; and
-  the fleet is assumed — the legend names hurricanes, USVs, IOOS gliders and
+  the fleet is assumed — the legend names hurricanes, USVs, ocean gliders and
   Argo, and the layer switcher matches.
 
 Moving the stylesheet turned up **two fetches that ignored `dataBase`** — the
@@ -1268,6 +1268,19 @@ currents beside them, off the same model, said nothing.
 
 `FIELDS[...].label` is deliberately a different string: the quantity, for the
 readout and the colour bar, where "Salinity: 34.2 psu" beats the acronym.
+
+**A platform layer is named for what it holds, not for one of its sources.**
+`IOOS gliders` became `Ocean gliders` because the layer was never only
+IOOS's: `GLIDER_SOURCES` has held four national networks — IOOS, NOC/BODC,
+OTN and VOTO — since the fleet went from 38 to 52, and they all land in the
+same layer. The name outlived the thing it described, which is the ordinary
+way a label goes wrong: nothing broke, the map just quietly credited one of
+four. Add a fifth network and nothing here has to change.
+
+The legend key follows it (`Ocean glider`, singular, as the other keys are),
+and so does the hurricane page's preset — a preset naming a layer that no
+longer exists silently switches nothing on, which is why `check:docs` reads
+the names out of `overlays` and fails on a mismatch.
 
 ### Sea-surface temperature and salinity
 

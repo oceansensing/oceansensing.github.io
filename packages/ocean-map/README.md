@@ -79,7 +79,7 @@ Leaflet's own CSS with it.
   has to reproduce that markup — see `AssetMap.astro`. The module should build
   it, which would reduce a deployment to one `<div>`.
 - **The fleet is assumed**, and the legend is where it shows: the entries name
-  hurricanes, NOAA USVs, IOOS gliders and Argo floats, and the layer switcher
+  hurricanes, NOAA USVs, ocean gliders and Argo floats, and the layer switcher
   matches. Fine for another deployment reading the same `dataBase`; a
   blocker for one with different platforms.
 - **`index.ts` is still ~2,700 lines.** The renderer-independent parts are
