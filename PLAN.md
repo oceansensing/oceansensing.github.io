@@ -134,6 +134,19 @@ contrast, the rendered map, two maps on a page, and the clock.
   CI, where today there are none. That is the whole cost, and it buys the
   only real answer to a stalled run.
 
+  Two things about that access, both of which look otherwise from a search.
+  **There is no API key.** The toolbox takes a username and password and
+  nothing else — `--username`/`--password`, the environment pair
+  `COPERNICUSMARINE_SERVICE_USERNAME`/`_PASSWORD`, or a credentials file;
+  every one of those is the same secret in a different wrapper. (The API key
+  belongs to the *other* Copernicus service: CDS, which is ERA5.) And the
+  **OPeNDAP and ERDDAP endpoints are gone** — Copernicus announced them in
+  2022 and retired them, with MOTU, FTP and WMS, in April 2024. The article
+  is still the first search result, which is how it wastes an afternoon.
+  There is therefore no route that the existing stdlib `urllib` code could
+  take, which is what makes the dependency unavoidable rather than a
+  preference.
+
   *The open alternatives have thinned, which is worth knowing before
   reaching for one.* NOAA retired NOMADS' OPeNDAP in 2025 (SCN 25-81), so
   RTOFS is no longer reachable the way HYCOM is. OSCAR on CoastWatch ERDDAP
