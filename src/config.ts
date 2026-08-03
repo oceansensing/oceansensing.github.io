@@ -51,9 +51,13 @@ export const HIGHLIGHT_AUTHORS = [
  * 356 MB of them for 130 MB of live data. Over there each run replaces the
  * last and the history does not grow.
  *
- * A separate *account* also means separate GitHub Pages quotas. The site had
- * reached ~900 MB of a 1 GB cap and one more layer would not have fitted;
- * split, the site is a few megabytes and the data has a gigabyte to itself.
+ * The split is what bought the room: the site had reached ~900 MB of a 1 GB
+ * cap and one more layer would not have fitted, and now it is a few megabytes
+ * with the data on its own gigabyte. **The separate account had nothing to do
+ * with it** — GitHub's three Pages limits (1 GB published, 100 GB/month, 10
+ * builds/hour) are all per *site*, not per account, so a second repository
+ * under either owner would have done the same. An earlier version of this
+ * comment claimed otherwise.
  *
  * It publishes `access-control-allow-origin: *`, so this is a plain
  * cross-origin fetch with no proxy. It is **not a public service** — see that
