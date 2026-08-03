@@ -20,6 +20,7 @@ interface Props {
       alt: string;
       caption?: string | undefined;
       full: string;
+      full_file: string;
       when: string;
       where: string;
     }>;
@@ -47,6 +48,7 @@ const { survey } = Astro.props;
             data-alt={photo.alt}
             data-when={photo.when}
             data-where={photo.where}
+            data-file={photo.full_file}
           >
             <img
               src={photo.src}
@@ -56,6 +58,18 @@ const { survey } = Astro.props;
               loading="lazy"
               decoding="async"
             />
+          </a>
+          {/* Outside the <a class="shot">, not inside it: nested anchors are
+              invalid, and a download control within the link the lightbox
+              intercepts would open the viewer instead of saving.
+
+              "Full size" rather than "original", deliberately. What is
+              served is a 1600 px web export — the camera originals are not
+              published anywhere — and calling it the original would promise
+              a Phantom 4 Pro frame to anyone who clicked. It carries its own
+              copyright metadata. */}
+          <a class="get" href={photo.full_file} download aria-label={`Download the full-size photograph: ${photo.alt}`}>
+            Download
           </a>
           {photo.caption && <figcaption>{photo.caption}</figcaption>}
         </figure>
@@ -103,6 +117,47 @@ const { survey } = Astro.props;
     aspect-ratio: 4 / 3;
     object-fit: cover;
     transition: opacity 0.15s ease;
+  }
+
+  /* Sits over the corner of the photograph, and appears on hover or focus
+     rather than always: 95 of these permanently on screen would read as
+     chrome over the observations. Always visible on a touchscreen, where
+     there is no hover to reveal it — a control nobody can summon is a
+     control that does not exist. */
+  figure {
+    position: relative;
+  }
+
+  .get {
+    position: absolute;
+    top: var(--space-2xs);
+    right: var(--space-2xs);
+    padding: 0.15rem var(--space-2xs);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    text-decoration: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  figure:hover .get,
+  .get:focus-visible {
+    opacity: 1;
+  }
+
+  @media (hover: none) {
+    .get {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .get {
+      transition: none;
+    }
   }
 
   .shot {

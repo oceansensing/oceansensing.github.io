@@ -62,6 +62,17 @@ const panels = await Promise.all(
         alt: photo.alt,
         caption: photo.caption,
         full: `${HAB_DATA}w${HAB_WIDTHS[HAB_WIDTHS.length - 1]}/${stem(photo.src)}.webp`,
+        /* The full-size file, carrying its own copyright metadata — see the
+           attribution step in hab-data-repo's workflow.
+
+           Not the *camera* original: every one of these is a 1600 px web
+           export and none of them ever reached a repository at capture size.
+           The wording in the control says so.
+
+           Same origin as this page, which is what lets `download` actually
+           save it — the attribute is ignored cross-origin, so on the old
+           personal host this button would have navigated away instead. */
+        full_file: `${HAB_DATA}${photo.src}`,
         when: [
           photo.time
             ? `${day(survey.date)}, ${photo.time}${survey.timezone ? ` ${survey.timezone}` : ''}`
@@ -202,6 +213,7 @@ const collapsible = byYear.length > 1;
         <div class="info">
           <p class="when" />
           <p class="where" />
+          <a class="get" href="" download>Download full size</a>
         </div>
         <p class="count" />
       </dialog>
@@ -223,6 +235,7 @@ const collapsible = byYear.length > 1;
     const count = dialog.querySelector('.count');
     const when = dialog.querySelector('.when');
     const where = dialog.querySelector('.where');
+    const get = dialog.querySelector('.get');
     let at = 0;
 
     const show = (k) => {
@@ -231,6 +244,9 @@ const collapsible = byYear.length > 1;
       img.src = shot.getAttribute('href');
       img.alt = shot.dataset.alt ?? '';
       when.textContent = shot.dataset.when ?? '';
+      // The full-size file, with its copyright metadata. Same origin, so
+      // `download` saves rather than navigates.
+      get.href = shot.dataset.file ?? '';
       where.textContent = shot.dataset.where ?? '';
       count.textContent = `${at + 1} / ${shots.length}`;
     };
