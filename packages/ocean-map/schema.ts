@@ -120,6 +120,24 @@ export interface RegionLink {
   deg: number;
 }
 
+/** One published frame of a forecast, listed by the lead-0 global file.
+
+    The map learns which lead times exist from the data, the way it already
+    learns the regions and the tile index — a list restated in the component
+    would be a second source of truth for something the pipeline decides.
+
+    Only the lead-0 file carries this. Following a frame's `url` gets a file
+    that knows its own `lead` and points at its own regions, and stops there;
+    there is no chain to walk and no way to end up a frame off. */
+export interface ForecastFrame {
+  /** Hours ahead of the build. 0 is the field for now. */
+  lead: number;
+  /** What that lead resolved to on the model's own time axis. */
+  valid: Timestamp;
+  /** Resolved against the map's dataBase, not fetched as given. */
+  url: string;
+}
+
 /* Row-major from the north-west corner: index = row * nx + column, with row 0
    at `la1` and column 0 at `lo1`. Longitude wraps and latitude does not — a
    global grid must span a full 360°, which is the exact condition
@@ -143,10 +161,25 @@ export interface GridHeader {
   units?: string;
   /** Metres below the surface. */
   depth?: number;
-  /** Link to the tile index for this product, if it has a tile tier. */
+  /** Hours ahead of the build this frame is for; 0 or absent is the field for
+      now. Read from here rather than inferred from the filename, for the same
+      reason `depth` is: a mislabelled frame then shows on screen as the wrong
+      hour rather than as the right hour over the wrong water. */
+  lead?: number;
+  /** Link to the tile index for this product, if it has a tile tier.
+      **Lead 0 only.** Five frames of the 1/12° tiles would be 460 MB per
+      depth, so above lead 0 the regional grids are the finest tier there is
+      and the map has to say so. */
   tileIndex?: string;
-  /** Finer regional grids, coarsest first. */
+  /** Finer regional grids, coarsest first. At lead > 0 these are that lead's
+      own regions — a +24h global file pointing at the regions for now would
+      step back in time on zooming in, with nothing on screen to give it
+      away. */
   details?: RegionLink[];
+  /** The forecast frames this product publishes. Lead-0 global file only, and
+      absent for an analysis, which has no forecast — which is why the lead
+      control offers nothing for OISST rather than sitting there dead. */
+  forecast?: ForecastFrame[];
 }
 
 /** leaflet-velocity identifies the u and v components by these. */

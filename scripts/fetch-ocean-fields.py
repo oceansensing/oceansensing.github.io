@@ -567,6 +567,73 @@ def usable_step(product: dict) -> tuple[str, str, str]:
     raise RuntimeError(f'no usable time step in {len(candidates)} candidates')
 
 
+# How far ahead to publish, in hours. Mirrors LEADS in fetch-currents.py and
+# has to: currents and the scalar fields come off the same model at the same
+# hour, and a map showing +24h flow over +12h temperature would be two oceans
+# again. Only the forecast products get these — an analysis has none, which
+# is why OISST is absent from the control rather than greyed out in it.
+LEADS = [0, 12, 24, 36, 48]
+
+
+def lead_steps(product: dict, leads: list[int]) -> list[tuple[int, str, str, str]]:
+    """(lead, step token, valid time, model run) for each lead that works.
+
+    Keeps the per-step probing that `usable_step` exists for: HYCOM fails per
+    member file rather than as a whole, so each lead walks outward from its
+    own nearest step until one actually serves data. Without that a single
+    bad file would take a whole frame out, and the frame either side is fine.
+
+    A lead is matched by time, never by adding `lead / spacing` to an index —
+    see the same note in fetch-currents.py. Anything past the end of the
+    aggregation is dropped rather than clamped, since a clamped +48h file
+    would hold some other hour under the right name.
+    """
+    das = get(f"{product['base']}.das", timeout=60)
+    marker = 'hours since '
+    at = das.find(marker, das.find('time {'))
+    epoch = datetime.strptime(
+        das[at + len(marker):at + len(marker) + 19], '%Y-%m-%d %H:%M:%S'
+    ).replace(tzinfo=timezone.utc)
+
+    last = time_axis(product['base']) - 1
+    body = get(encode(f"{product['base']}.ascii?time[0:1:{last}]"), timeout=90)
+    hours = [float(t) for t in [l for l in body.splitlines() if l.strip()][-1].split(',') if t.strip()]
+    runs: list[float] = []
+    try:
+        body = get(encode(f"{product['base']}.ascii?time_run[0:1:{last}]"), timeout=90)
+        runs = [float(t) for t in [l for l in body.splitlines() if l.strip()][-1].split(',') if t.strip()]
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+        pass
+
+    def stamp(h: float) -> str:
+        return (epoch + timedelta(hours=h)).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+    now = (datetime.now(timezone.utc) - epoch).total_seconds() / 3600
+    y, x = product['nlat'] // 2, product['nlon'] // 2
+    out = []
+    for lead in leads:
+        target = now + lead
+        order = sorted(range(len(hours)), key=lambda i: abs(hours[i] - target))
+        for i in order[:4]:
+            # Half a step of slack. Nearest-match silently returns the last
+            # step for anything past the end of the axis, so the gap is the
+            # only thing that catches a lead the model does not reach.
+            if abs(hours[i] - target) > 2:
+                continue
+            try:
+                fetch(product, str(i), y, y + 4, x, x + 4, 2, 2)
+            except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:
+                print(f'  +{lead}h step {i} unusable: {exc}', file=sys.stderr)
+                continue
+            out.append((lead, str(i), stamp(hours[i]), stamp(runs[i]) if i < len(runs) else ''))
+            break
+        else:
+            print(f'  ! +{lead}h has no usable step — skipped', file=sys.stderr)
+    if not out:
+        raise RuntimeError('no usable time step at any lead')
+    return out
+
+
 def build_product(product: dict, tiles_only: bool) -> None:
     when, valid, run = usable_step(product)
     print(f"{product['label']} — valid {valid}" + (f", from the {run} run" if run else ''))
@@ -579,36 +646,58 @@ def build_product(product: dict, tiles_only: bool) -> None:
         return
 
     name = f"{product['prefix']}-{product['key']}"
-    details = []
-    for region in REGIONS:
-        details.append({
-            'url': f'/map/{name}-{region["name"]}.json',
-            'label': region['label'],
-            'west': region.get('west', -180.0), 'east': region.get('east', 180.0),
-            'south': region['south'], 'north': region['north'],
-            'minZoom': region['minZoom'],
-            'deg': round(min(product['dlon'] * product['strides']['region'][0],
-                             product['dlat'] * product['strides']['region'][1]), 4),
-        })
 
-    # The global file advertises the finer tiers, so the map learns them from
-    # the data rather than repeating the bounds in the component.
-    build(product, when, valid, MAP_DIR / f'{name}.json',
-          south=-80.0, north=85.0, west=-180.0, east=180.0,
-          stride=product['strides']['global'], wrap=True, run=run,
-          extra={
-              'details': details,
-              # Only advertised where a tile tier exists; the map follows this
-              # link, so a product without one must not offer it.
-              **({'tileIndex': f'/map/tiles-{product["prefix"]}-{product["key"]}/index.json'}
-                 if product.get('tiles') else {}),
-          })
+    def at_lead(stem: str, lead: int) -> str:
+        """sst-navy-atlantic -> sst-navy-atlantic-f24h. Lead 0 keeps its name."""
+        return f'{stem}-f{lead}h' if lead else stem
 
-    for region in REGIONS:
-        build(product, when, valid, MAP_DIR / f'{name}-{region["name"]}.json',
-              south=region['south'], north=region['north'],
-              west=region.get('west', -180.0), east=region.get('east', 180.0),
-              stride=product['strides']['region'], wrap=region['wrap'], run=run)
+    def region_links(lead: int) -> list[dict]:
+        return [
+            {
+                'url': '/map/' + at_lead(name + '-' + region['name'], lead) + '.json',
+                'label': region['label'],
+                'west': region.get('west', -180.0), 'east': region.get('east', 180.0),
+                'south': region['south'], 'north': region['north'],
+                'minZoom': region['minZoom'],
+                'deg': round(min(product['dlon'] * product['strides']['region'][0],
+                                 product['dlat'] * product['strides']['region'][1]), 4),
+            }
+            for region in REGIONS
+        ]
+
+    # An analysis has no forecast, so it publishes the one step it has. That
+    # is why the lead control offers nothing when OISST is the field showing:
+    # the absence is in the data, not a special case in the map.
+    frames = ([(0, when, valid, run)] if product['kind'] == 'erddap'
+              else lead_steps(product, LEADS))
+
+    for lead, step, lead_valid, lead_run in frames:
+        extra: dict = {'details': region_links(lead)}
+        if lead == 0:
+            # Only advertised where a tile tier exists; the map follows this
+            # link, so a product without one must not offer it. And only at
+            # lead 0 — five frames of the Navy SST tiles would be ~195 MB.
+            if product.get('tiles'):
+                extra['tileIndex'] = f'/map/tiles-{product["prefix"]}-{product["key"]}/index.json'
+            if len(frames) > 1:
+                extra['forecast'] = [
+                    {'lead': l, 'valid': v, 'url': f'/map/{at_lead(name, l)}.json'}
+                    for l, _, v, _ in frames
+                ]
+        # The global file advertises the finer tiers, so the map learns them
+        # from the data rather than repeating the bounds in the component.
+        build(product, step, lead_valid, MAP_DIR / f'{at_lead(name, lead)}.json',
+              south=-80.0, north=85.0, west=-180.0, east=180.0,
+              stride=product['strides']['global'], wrap=True, run=lead_run,
+              extra={**extra, 'lead': lead})
+
+        for region in REGIONS:
+            build(product, step, lead_valid,
+                  MAP_DIR / (at_lead(name + '-' + region['name'], lead) + '.json'),
+                  south=region['south'], north=region['north'],
+                  west=region.get('west', -180.0), east=region.get('east', 180.0),
+                  stride=product['strides']['region'], wrap=region['wrap'],
+                  run=lead_run, extra={'lead': lead})
 
 
 def main() -> int:

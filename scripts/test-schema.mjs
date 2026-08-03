@@ -231,6 +231,80 @@ if (bathy) {
   if (bad) fail(f, `${bad} feature(s) are not a LineString with a numeric depth`);
 }
 
+/* ---- forecast frames -------------------------------------------------
+
+   Each ESPC run carries eight days and the map publishes five hours of it.
+   The frames are where a mislabelling would be least visible: every one is
+   the same shape over the same water, so the only thing distinguishing a
+   +48h field from the field for now is the stamp on it. These checks are
+   what make that stamp trustworthy.
+
+   The frames are gitignored and built in CI, so a local run legitimately
+   finds none — the loop simply does nothing then, like the tiles above. */
+for (const name of ['currents', 'currents-60m', 'sst-navy', 'sss-navy']) {
+  const root = read(`${name}.json`);
+  if (!root) continue;
+  const head = Array.isArray(root) ? root[0]?.header : root?.header;
+  const frames = head?.forecast;
+  if (!frames) continue;
+  const at = `${name}.json forecast`;
+
+  if (!Array.isArray(frames) || !frames.length) {
+    fail(at, 'should be a non-empty array of frames');
+    continue;
+  }
+  /* Lead 0 is the field for now and has to be in the list, or a reader
+     stepping back from +12h would have nowhere to land. */
+  if (frames[0]?.lead !== 0) fail(at, 'the first frame must be lead 0');
+  for (const [i, frame] of frames.entries()) {
+    field(at, frame, 'lead', (v) => isNum(v) && v >= 0, 'a non-negative number');
+    field(at, frame, 'valid', isTime, 'an ISO timestamp');
+    field(at, frame, 'url', isStr, 'a string');
+    if (i && frame.lead <= frames[i - 1].lead) {
+      fail(at, `frame ${i} has lead ${frame.lead}, not ahead of ${frames[i - 1].lead}`);
+    }
+  }
+
+  for (const frame of frames) {
+    const file = frame.url?.replace(/^.*\/map\//, '');
+    const g = read(file);
+    if (!g) { fail(at, `${file} is listed but missing`); continue; }
+    checked++;
+    const h = Array.isArray(g) ? g[0]?.header : g?.header;
+    if (!h) { fail(file, 'missing header'); continue; }
+
+    /* The frame must be the hour it claims. Everything else here is
+       structure; this is the one that catches a pipeline fetching the same
+       step five times, which looks entirely healthy from outside. */
+    if (h.lead !== frame.lead) fail(file, `header lead is ${h.lead}, listed as ${frame.lead}`);
+    if (h.refTime !== frame.valid) fail(file, `valid ${h.refTime}, listed as ${frame.valid}`);
+
+    if (frame.lead === 0) continue;
+    /* Above lead 0 there are no tiles — five frames of them would be 460 MB
+       per depth — so a tileIndex here would send the map to the field for
+       now and it would draw it as the forecast. */
+    if (h.tileIndex) fail(file, 'carries a tileIndex, but tiles are lead 0 only');
+    if (h.forecast) fail(file, 'lists frames; only the lead 0 file does');
+    /* Its regions must be its own. Pointing at the regions for now would
+       step back in time on zooming in, with nothing on screen to say so. */
+    for (const region of h.details ?? []) {
+      if (!region.url?.includes(`-f${frame.lead}h`)) {
+        fail(file, `region ${region.url} is not the +${frame.lead}h grid`);
+      }
+    }
+  }
+}
+
+/* An analysis has no forecast, and the map relies on that: the lead control
+   offers nothing for OISST because the data says there is nothing, not
+   because the map special-cases it. */
+{
+  const oisst = read('sst-oisst.json');
+  if (oisst?.header?.forecast) {
+    fail('sst-oisst.json', 'lists forecast frames, but an analysis has none');
+  }
+}
+
 console.log(
   failures
     ? `\n${failures} problem(s) — a published file does not match schema.ts.`
