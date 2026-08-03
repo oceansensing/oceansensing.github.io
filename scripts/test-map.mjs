@@ -29,6 +29,7 @@ const dom = new JSDOM(
   '<span class="field-controls" data-field-controls hidden>' +
   '<select data-field-map></select><input type="number" data-field-min />' +
   '<input type="number" data-field-max /><button type="button" data-field-auto></button></span>' +
+  '<span class="forecast-controls" data-forecast-controls hidden></span>' +
   '<span class="bathy-controls" data-bathy-controls hidden>' +
   '<input type="range" data-bathy-opacity min="10" max="100" step="5" /></span>' +
   '<span class="om-kmz-controls" data-kmz-controls><input type="file" data-kmz-file />' +
@@ -138,6 +139,67 @@ const files = {
   'sst-oisst-arctic': JSON.parse(fs.readFileSync('public/map/sst-oisst-arctic.json', 'utf8')),
 };
 
+/* ---- forecast frames -------------------------------------------------
+
+   Synthetic, and per product on purpose. The bug this guards against is a
+   layer stepping to another hour and fetching *someone else's* frame: the
+   first version handed every layer the same frame object, so one click had
+   the 60 m field, the temperature and the salinity all fetch the surface
+   current grid. Nothing about that is visible on screen — a vector file
+   read as a scalar simply draws nothing, and 60 m drawing surface water
+   looks like a current.
+
+   So each frame here carries a value unique to its product *and* its lead,
+   and the checks below assert who asked for what. The real files are
+   gitignored, hence stubs rather than reads. */
+const FRAME_LEADS = [0, 12, 24];
+const frameStamp = (lead) =>
+  new Date(Date.parse('2026-08-03T06:00:00Z') + lead * 3600e3).toISOString().replace('.000', '');
+
+const frameList = (stem) =>
+  FRAME_LEADS.map((lead) => ({
+    lead,
+    valid: frameStamp(lead),
+    url: `/map/${lead ? `${stem}-f${lead}h` : stem}.json`,
+  }));
+
+/* Lead 0 is the file already in `files`; the rest are stubs of it with the
+   lead written through, so a frame that came from the wrong product or the
+   wrong hour is detectable rather than merely plausible. */
+for (const stem of ['currents', 'currents-60m']) {
+  files[stem][0].header.forecast = frameList(stem);
+  files[stem][0].header.lead = 0;
+  for (const lead of FRAME_LEADS.slice(1)) {
+    files[`${stem}-f${lead}h`] = files[stem].map((part) => ({
+      header: {
+        ...part.header, lead, refTime: frameStamp(lead),
+        tileIndex: undefined, forecast: undefined,
+        details: (part.header.details ?? []).map((d) => ({
+          ...d, url: d.url.replace(/\.json$/, `-f${lead}h.json`),
+        })),
+      },
+      data: part.data,
+    }));
+    for (const region of ['currents-atlantic', 'currents-arctic']) {
+      const base = stem === 'currents-60m' ? `${region}-60m` : region;
+      files[`${base}-f${lead}h`] = files[base];
+    }
+  }
+}
+for (const stem of ['sss-navy']) {
+  files[stem].header.forecast = frameList(stem);
+  files[stem].header.lead = 0;
+  for (const lead of FRAME_LEADS.slice(1)) {
+    files[`${stem}-f${lead}h`] = {
+      header: {
+        ...files[stem].header, lead, refTime: frameStamp(lead),
+        tileIndex: undefined, forecast: undefined, details: [],
+      },
+      data: files[stem].data,
+    };
+  }
+}
+
 /* The 1/12 degree tiles are ~92 MB and gitignored — CI builds them, nothing
    here has them. So the tier logic is exercised against a synthetic index
    and one synthetic tile: it is the choosing that can break, not the data.
@@ -245,6 +307,9 @@ const bathyFetched = [];
    it, which is the only reason it can be published at a resolution worth
    having. */
 const coastlineFetched = [];
+/* Every fetch, in order. The forecast checks below need to know which layer
+   asked for which frame, and that is only answerable from the whole log. */
+const fetched = [];
 const ring = (lon, lat) => [
   [lon, lat], [lon + 2, lat], [lon + 2, lat + 2], [lon, lat + 2], [lon, lat],
 ];
@@ -283,6 +348,7 @@ const bathyIndex = {
 let identifyUrl = null;
 let gazetteerUrl = null;
 globalThis.fetch = async (u) => {
+  fetched.push(String(u));
   if (String(u).includes('coastline.json')) coastlineFetched.push(String(u));
   if (String(u).includes('/map/bathy')) {
     bathyFetched.push(String(u));
@@ -1094,6 +1160,31 @@ const tropics = await rangeAt(12, -50, 4);
 const polar = await rangeAt(70, -10, 4);
 const wholeDegrees = (r) => !!r && Number.isInteger(r[0]) && Number.isInteger(r[1]) && r[1] > r[0];
 
+/* ---- the forecast hour ----------------------------------------------- */
+const forecastControls = host.closest('[data-ocean-map]')?.querySelector('[data-forecast-controls]')
+  ?? document.querySelector('[data-forecast-controls]');
+const forecastButtons = () => [...(forecastControls?.querySelectorAll('button') ?? [])];
+const forecastActive = () => forecastButtons().filter((b) => b.classList.contains('active')).map((b) => b.textContent);
+
+/* The frame nearest the reader's own clock, not lead 0. Those agree on a
+   healthy day and part on the bad one this was asked for: a run 40 hours
+   late makes lead 0 a field for 40 hours ago while a later frame is valid
+   about now. The fixture stamps lead 0 at 2026-08-03 06Z, which is in the
+   past by the time this runs, so "nearest" is a real decision here. */
+const forecastDefault = forecastActive();
+
+/* Who fetched what. The first version of this feature handed every layer the
+   same frame object, so one click had the 60 m field, the temperature and
+   the salinity all fetch the *surface current* grid — invisible on screen,
+   since a vector file read as a scalar draws nothing and 60 m drawing
+   surface water still looks like a current. */
+const beforeStep = fetched.length;
+const stepButton = forecastButtons().find((b) => /12Z|18Z|06Z/.test(b.textContent) && !b.classList.contains('active'));
+stepButton?.click();
+await new Promise((r) => setTimeout(r, 900));
+const askedByStep = fetched.slice(beforeStep).map((u) => String(u).split('/map/')[1]).filter(Boolean);
+const steppedActive = forecastActive();
+
 /* Read before the reset runs. Both of these look at live DOM, so once the
    map is back at defaults they would report the reset state rather than what
    they were written to check. */
@@ -1591,6 +1682,29 @@ const checks = [
      affordable: rebuilt from Natural Earth 10m it is 4.2 MB against 0.3, so
      loading it with the page for a basemap most readers never pick would be
      a poor trade for all of them. */
+  // ---- the forecast hour
+  ['the forecast hour is offered as one button per published frame',
+    forecastButtons().length === FRAME_LEADS.length],
+  /* Not lead 0 — the frame nearest the reader's clock. The two agree on a
+     healthy day and part on a late run, which is the case this exists for. */
+  ['it opens on the frame nearest now, not on lead 0',
+    forecastDefault.length === 1 && forecastDefault[0] === 'Now'],
+  ['stepping to another hour marks that button and only that one',
+    steppedActive.length === 1 && steppedActive[0] !== 'Now'],
+  /* The bug: every layer was handed the same frame object, so one click had
+     four layers fetch the surface current grid. Each product must ask for
+     its own file, and exactly once. */
+  ['each layer fetches its own frame, not another product\'s',
+    askedByStep.length > 0 &&
+      askedByStep.every((f) => /-f\d+h\.json$/.test(f)) &&
+      new Set(askedByStep).size === askedByStep.length &&
+      askedByStep.some((f) => f.startsWith('currents-f')) &&
+      askedByStep.some((f) => f.startsWith('currents-60m-f'))],
+  /* Above lead 0 there is no 1/12° tier — five frames of tiles would be 460
+     MB per depth — so a step forward must not go looking for one. */
+  ['and no tile is requested for a forecast hour',
+    askedByStep.every((f) => !f.includes('tiles'))],
+
   ['the offline basemap is offered', !!coastlineBase],
   ['and fetches nothing until it is selected', coastlineRequestsBeforeSwitchOn === 0],
   ['selecting it fetches the file once and draws land',

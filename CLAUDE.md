@@ -1361,6 +1361,58 @@ fields". Neither change makes a stale map fail the build, deliberately: an
 outage should degrade to stale rather than block a deploy. What changed is
 that the log says so.
 
+#### The forecast hour
+
+Each ESPC run carries eight days and the map used to show one hour of it.
+Five frames are published per product — now and **+12/24/36/48 h** — for
+currents at both depths, Navy SST and Navy salinity. `LEADS` in each
+pipeline is the one knob.
+
+**Why 12-hourly to +48 rather than 3-hourly to +24**: the same five frames
+either way, but at 0.96° and 0.24° the 3-hourly detail is below what the
+grid resolves, and two days out is the horizon somebody planning a
+deployment actually asks about.
+
+**The tiles get no frames, and that is the whole shape of the feature.**
+92 MB per depth × 5 is 460 MB, against 0.55 MB gzipped for five frames of
+the global grid — three orders of magnitude apart. So the 1/12° tier serves
+*now* and nothing else, and above lead 0 the regional grids are the finest
+there is. The control marks those hours, because a coarser field that says
+nothing reads as a broken one.
+
+**The frame shown by default is the one nearest the reader's clock, not lead
+0.** Those are the same thing on a healthy day and part on exactly the bad
+one this was asked for: when a run lands 40 hours late, lead 0 is a field
+for 40 hours ago while +48h is valid about now. Picking by absolute valid
+time means a late run degrades into a forecast that is still about the
+present rather than into a confidently-labelled past.
+
+**The buttons are labelled by valid time in UTC, not by lead.** A lead is
+measured from a *build*, and the run behind that build can be two days old,
+so "+24h" is counted from a moment the reader knows nothing about. A clock
+time is unambiguous. They are buttons rather than a slider for a mechanical
+reason too: stepping calls `setOptions({data})` on the particle layer, which
+tears the animation down and restarts it, and a dragged slider would do that
+five times with each restart cancelling a redraw still in flight.
+
+**Every layer steps by lead, resolving its own frame — never by sharing a
+frame object.** The first version registered one frame per step and handed
+it to all four layers, so a single click had the 60 m field, the temperature
+and the salinity all fetch the *surface current* grid. Nothing about that is
+visible: a vector file read as a scalar draws nothing, and 60 m drawing
+surface water still looks like a current. `test:map` asserts each product
+asks for its own file, exactly once, and mutation-testing that check against
+the shared-frame version fails it.
+
+The lead rides in the saved view as a **lead, not a valid time** — a reader
+who steps to +24h and comes back after the hourly reload wants
+tomorrow-from-now, not the absolute hour that meant an hour ago. Reset
+returns to the frame nearest now, which is where the map opens.
+
+OISST publishes no frames because an analysis has no forecast, and that
+absence is the mechanism rather than a special case in the map: the control
+simply has nothing to offer for it.
+
 #### An old run can serve a current hour, and only `modelRun` says so
 
 The two are independent and it is easy to read one for the other. The FMRC

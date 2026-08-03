@@ -400,6 +400,60 @@
   /* Isobath opacity, in the same row and for the same reason. Shown only
      while the layer is on — a slider for a layer that is not drawn is a
      control with nothing behind it. */
+  /* The forecast hour. Sits with the other reader controls under the map
+     rather than inside it, for the reason the colour-scale row does: a row
+     of small buttons over the ocean is awkward on a touchscreen and covers
+     the thing it is describing. */
+  .om-forecast-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3xs, 0.125rem);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: var(--text-sm, 0.875rem);
+    color: var(--text-muted, #5b6672);
+  }
+
+  .om-forecast-controls[hidden] {
+    display: none;
+  }
+
+  .om-forecast-controls button {
+    font: inherit;
+    padding: 0 var(--space-2xs, 0.25rem);
+    border: 1px solid var(--border, #d6dbe0);
+    background: var(--bg, #ffffff);
+    color: var(--text-muted, #5b6672);
+    cursor: pointer;
+  }
+
+  /* One row, not five separate chips: they are steps along one axis. */
+  .om-forecast-controls button + button {
+    border-left: 0;
+  }
+
+  .om-forecast-controls button:first-of-type {
+    border-radius: var(--radius, 4px) 0 0 var(--radius, 4px);
+  }
+
+  .om-forecast-controls button:last-child {
+    border-radius: 0 var(--radius, 4px) var(--radius, 4px) 0;
+  }
+
+  .om-forecast-controls button.active {
+    background: var(--accent, #1f6f8b);
+    border-color: var(--accent, #1f6f8b);
+    color: var(--accent-contrast, #ffffff);
+  }
+
+  /* Every hour but the one nearest now is a forecast, and above that hour
+     there is no 1/12 degree tier — the regional grid is the finest there
+     is. Marking them is what stops a coarser field reading as a broken one. */
+  .om-forecast-controls button[data-coarser]::before {
+    content: '~';
+    opacity: 0.65;
+    margin-right: 0.15em;
+  }
+
   .om-bathy-controls {
     display: inline-flex;
     align-items: center;

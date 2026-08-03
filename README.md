@@ -10,8 +10,8 @@ shuffle and lightbox on observation pages, the asset map, and the UTC clock.
 The map is the one heavyweight: gliders from four national data centres,
 NOAA saildrones, the Argo array, animated currents at two depths,
 sea-surface temperature and salinity, isobaths, a detailed coastline and EEZ
-boundaries — with the colour scale, its range, the isobath opacity, and every
-layer under the reader's control.
+boundaries — with the colour scale, its range, the isobath opacity, the
+forecast hour, and every layer under the reader's control.
 
 It carries two pages. [`/visualization/`](https://oceansensing.org/visualization/)
 is the general-purpose one and

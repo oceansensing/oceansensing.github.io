@@ -371,6 +371,78 @@ export async function createOceanMap(
      the reader has on rather than a fixed depth. */
   const flows: { group: L.LayerGroup; layer: L.Layer | null }[] = [];
 
+  /* ---- the forecast hour ------------------------------------------------
+
+     Each ESPC run carries eight days and the map used to show one hour of
+     it. Five frames are published — now and +12/24/36/48 — and every layer
+     off that model steps together: currents at +24h under temperature for
+     now would be two oceans on one map, the same trap the mutually
+     exclusive fields exist to avoid.
+
+     **The frame shown by default is the one whose valid time is nearest the
+     reader's clock, not lead 0.** Those are the same thing on a healthy day
+     and diverge on exactly the bad one this feature was asked for: when a
+     run lands 40 hours late, lead 0 is a field for 40 hours ago while +48h
+     is valid about now. Picking by absolute time means a late run degrades
+     into a forecast that is still about the present, rather than into a
+     confidently-labelled past. */
+  type Frame = { lead: number; valid: string; url: string };
+  const forecast: {
+    frames: Frame[];
+    lead: number | null;
+    /* Keyed by **lead**, never by a frame object. Every ESPC product
+       publishes its own frames at the same leads, so a shared frame would
+       be one product's URL handed to all of them — which is exactly what
+       the first version did: one click and all four layers fetched the
+       surface current grid, so the 60 m field would have drawn surface
+       water and the temperature layer would have been handed a vector
+       file. Each layer resolves the lead against its own list. */
+    swap: ((lead: number) => void)[];
+    render: (() => void)[];
+  } = { frames: [], lead: null, swap: [], render: [] };
+
+  /** Whichever published frame is closest to now, by absolute valid time. */
+  const nearestFrame = (frames: Frame[]) => {
+    const now = Date.now();
+    return frames.reduce((best, f) =>
+      Math.abs(Date.parse(f.valid) - now) < Math.abs(Date.parse(best.valid) - now) ? f : best
+    );
+  };
+
+  /* A layer announces the frames it publishes and how to step to one. The
+     first layer to report wins: every ESPC product is built from the same
+     aggregation at the same hours, so they agree, and a layer switched on
+     later adopts the hour already showing rather than resetting it. */
+  const offerFrames = (frames: Frame[] | undefined, load: (frame: Frame) => void) => {
+    if (!frames?.length) return;
+    if (!forecast.frames.length) {
+      forecast.frames = frames;
+      forecast.lead = nearestFrame(frames).lead;
+      forecast.render.forEach((r) => r());
+    }
+    const swap = (lead: number) => {
+      const own = frames.find((f) => f.lead === lead);
+      // A product that does not publish this lead keeps the hour it has
+      // rather than guessing at a neighbour, and the control says which
+      // hour is showing, so the mismatch is visible rather than silent.
+      if (own) load(own);
+    };
+    forecast.swap.push(swap);
+    /* A layer switched on after the reader has stepped forward has to catch
+       up, or it would quietly draw a different hour from everything else on
+       the map. Its own file is the lead-0 one it has just loaded, so this
+       only fires when the showing lead is something else. */
+    if (forecast.lead !== null && forecast.lead !== frames[0].lead) swap(forecast.lead);
+  };
+
+  const showLead = (lead: number) => {
+    if (!forecast.frames.some((f) => f.lead === lead) || forecast.lead === lead) return;
+    forecast.lead = lead;
+    forecast.swap.forEach((s) => s(lead));
+    forecast.render.forEach((r) => r());
+    saveView();
+  };
+
   /* leaflet-velocity is a UMD plugin: it reaches for Leaflet on the
      global object, which the bundled ESM build never sets. A static
      import is hoisted above any assignment, so the global has to be put
@@ -457,7 +529,10 @@ export async function createOceanMap(
     const entry: { group: L.LayerGroup; layer: L.Layer | null } = { group, layer: null };
     flows.push(entry);
     Promise.all([fetch(url).then((r) => r.json()), loadPlugin()])
-    .then(([coarse]) => {
+    .then(([loadedCoarse]) => {
+      // Reassignable: stepping to another forecast hour swaps the whole
+      // chain — this grid, its regions and its tiles — for that hour's.
+      let coarse = loadedCoarse;
       /* Name the run in the attribution: ESPC publishes once a day at 12Z,
          so this is how a reader can tell how fresh the field actually is.
 
@@ -504,7 +579,7 @@ export async function createOceanMap(
          one. Containment assumes a region does not straddle the
          antimeridian; none does, and one that did would need its own
          wrap-aware test. */
-      const details = [...(coarse?.[0]?.header?.details ?? [])].sort(
+      let details = [...(coarse?.[0]?.header?.details ?? [])].sort(
         (a, b) => a.deg - b.deg
       );
       const grids = new Map<string, unknown>();
@@ -677,6 +752,34 @@ export async function createOceanMap(
          built, so the first measurement above is taken against bounds the
          reader never sees. */
       map.whenReady(() => setTimeout(() => applyView(true), 0));
+
+      /* Stepping to another forecast hour replaces this layer's whole tier
+         chain: a frame's global file brings its own regions, and above lead
+         0 brings no tiles at all. So the coarse grid, the region list and
+         the tile index are all reloaded from the frame, and `showing` is
+         cleared so applyView cannot keep drawing the previous hour's grid
+         because its URL happens to be unchanged. */
+      offerFrames(coarse?.[0]?.header?.forecast, (frame) =>
+        fetch(fromData(frame.url))
+          .then((r) => r.json())
+          .then((next) => {
+            coarse = next;
+            details = [...(next?.[0]?.header?.details ?? [])].sort((a, b) => a.deg - b.deg);
+            tiles = null;
+            grids.clear();
+            showing = null;
+            fetching = null;
+            const index = next?.[0]?.header?.tileIndex;
+            if (!index) {
+              applyView(false);
+              return;
+            }
+            fetch(fromData(index))
+              .then((r) => r.json())
+              .then((loaded) => { tiles = loaded; applyView(false); })
+              .catch(() => applyView(false));
+          })
+      );
     })
     .catch(() => {
       // No field: the switcher still lists the layer, it is simply empty,
@@ -1008,7 +1111,10 @@ export async function createOceanMap(
 
     fetch(url)
       .then((r) => r.json())
-      .then((coarse: Scalar) => {
+      .then((loadedCoarse: Scalar) => {
+        // Reassignable for the same reason as the flow layer's: a forecast
+        // hour brings its own grid, its own regions and no tiles.
+        let coarse = loadedCoarse;
         /* Credit the source, and name the run where there is one. A
            forecast step valid an hour from now is worthless if it came
            from a run three days old, and without the run on screen there
@@ -1026,7 +1132,7 @@ export async function createOceanMap(
         group.addLayer(layer);
         layer.setGrid(coarse);
 
-        const details = [...(coarse.header?.details ?? [])].sort(
+        let details = [...(coarse.header?.details ?? [])].sort(
           (a: RegionLink, b: RegionLink) => a.deg - b.deg
         );
         const grids = new Map<string, Scalar>();
@@ -1139,6 +1245,29 @@ export async function createOceanMap(
 
         map.on('zoomend moveend', applyView);
         applyView();
+
+        offerFrames(coarse.header?.forecast, (frame) =>
+          fetch(fromData(frame.url))
+            .then((r) => r.json())
+            .then((next: Scalar) => {
+              coarse = next;
+              details = [...(next.header?.details ?? [])].sort((a, b) => a.deg - b.deg);
+              tiles = null;
+              grids.clear();
+              showing = null;
+              fetching = null;
+              layer.setGrid(next);
+              const index = next.header?.tileIndex;
+              if (!index) {
+                applyView();
+                return;
+              }
+              fetch(fromData(index))
+                .then((r) => r.json())
+                .then((loaded: TileIndexFile) => { tiles = loaded; applyView(); })
+                .catch(() => applyView());
+            })
+        );
       })
       .catch(() => {
         /* No field. HYCOM in particular serves metadata while refusing
@@ -1188,6 +1317,55 @@ export async function createOceanMap(
      whichever is chosen becomes the water under every marker, so the set is
      the one the contrast gate has checked. A free colour picker would let a
      reader hide the fleet. */
+  /* The forecast hour, as buttons rather than a slider.
+
+     Two reasons, and the first is mechanical: stepping a frame calls
+     `setOptions({data})` on the particle layer, which tears the animation
+     down and restarts it. A slider dragged across five values would do that
+     five times, each restart cancelling a redraw still in flight — the same
+     shape of fight the two animated fields had over `overlayadd`. Discrete
+     buttons make each step deliberate and single.
+
+     The second is honesty. The label on each button is its **valid time in
+     UTC**, not "+24h": the leads are relative to a *build*, and the run
+     behind that build can be two days old, so "+24h" would be measured from
+     a moment the reader knows nothing about. A clock time is unambiguous,
+     and the one nearest their own clock is marked and selected by default. */
+  const forecastControls = find<HTMLElement>('[data-forecast-controls]');
+  if (forecastControls) {
+    const draw = () => {
+      if (forecast.frames.length < 2) return;
+      forecastControls.hidden = false;
+      forecastControls.textContent = '';
+      const label = document.createElement('span');
+      label.className = 'om-vh';
+      label.textContent = 'Forecast hour';
+      forecastControls.append(label);
+
+      const nearest = nearestFrame(forecast.frames);
+      for (const frame of forecast.frames) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        const at = new Date(frame.valid);
+        const day = at.toUTCString().slice(0, 3);
+        const hour = String(at.getUTCHours()).padStart(2, '0');
+        button.textContent = frame === nearest ? 'Now' : `${day} ${hour}Z`;
+        button.title = frame === nearest
+          ? `${frame.valid.slice(0, 16).replace('T', ' ')}Z — nearest to now`
+          : `${frame.valid.slice(0, 16).replace('T', ' ')}Z — forecast, +${frame.lead}h from the build`;
+        if (frame.lead === forecast.lead) button.classList.add('active');
+        button.setAttribute('aria-pressed', String(frame.lead === forecast.lead));
+        /* Above lead 0 there is no tile tier, so the finest grid is the
+           regional one. Saying so is the difference between a coarser
+           forecast and a map that looks like it broke. */
+        if (frame !== nearest) button.dataset.coarser = '';
+        button.addEventListener('click', () => showLead(frame.lead));
+        forecastControls.append(button);
+      }
+    };
+    forecast.render.push(draw);
+  }
+
   const controls = find<HTMLElement>('[data-field-controls]');
   const mapPicker = controls?.querySelector<HTMLSelectElement>('[data-field-map]');
   const minInput = controls?.querySelector<HTMLInputElement>('[data-field-min]');
@@ -2252,6 +2430,11 @@ export async function createOceanMap(
              a new build lands, and an opacity that silently jumped back to
              default mid-session would read as the slider not holding. */
           bathyOpacity,
+          /* The forecast hour, as a **lead** rather than a valid time. A
+             reader who steps to +24h and comes back after the hourly
+             reload wants tomorrow-from-now, not the absolute hour that
+             meant at the time — which by then is a frame nearer the past. */
+          lead: forecast.lead,
         })
       );
     } catch {
@@ -2291,6 +2474,13 @@ export async function createOceanMap(
       }
     }
 
+    /* Applied through showLead so it goes through the same guard as a
+       click: a lead the current data does not publish is ignored rather
+       than leaving the map claiming an hour it has no grid for. Deferred,
+       because the layers announce their frames as they load. */
+    if (typeof saved.lead === 'number') {
+      setTimeout(() => showLead(saved.lead as number), 0);
+    }
     if (typeof saved.bathyOpacity === 'number' && Number.isFinite(saved.bathyOpacity)) {
       bathyOpacity = Math.max(0.1, Math.min(1, saved.bathyOpacity));
     }
@@ -2666,6 +2856,10 @@ export async function createOceanMap(
 
     bathyOpacity = BATHY_OPACITY;
     applyBathyOpacity();
+
+    // Back to the hour nearest the reader's clock, which is where the map
+    // opens — not to lead 0, which on a late run is not the same thing.
+    if (forecast.frames.length) showLead(nearestFrame(forecast.frames).lead);
 
     setMeasuring(false);
     map.closePopup();

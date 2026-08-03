@@ -149,5 +149,5 @@ Before adding anything, ask:
     so every instance of the map gets it.
 6. Does it change a measured constant? Then re-measure and rewrite the reason.
 
-`npm run verify` is the gate — 914 checks across nine steps. CI runs exactly
+`npm run verify` is the gate — 923 checks across nine steps. CI runs exactly
 it, and the deploy will not run unless it passes.
