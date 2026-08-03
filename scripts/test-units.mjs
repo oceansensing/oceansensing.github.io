@@ -237,6 +237,44 @@ check('and a .kml under any name is found', stored.name, 'Survey plan');
 const plain = await load('plain.kml');
 check('a bare KML needs no unzipping', plain.features.length, 5);
 
+// ---- GroundOverlay images -------------------------------------------------
+
+const overlaid = await load('overlay.kmz');
+check('overlay images come out of the archive', overlaid.overlays.length, 2);
+check('with their bytes, not just a name',
+  overlaid.overlays.every((o) => o.image instanceof Uint8Array && o.image.length > 0), true);
+check('and a media type a browser will draw',
+  [...new Set(overlaid.overlays.map((o) => o.mediaType))], ['image/png']);
+check('the PNG signature survives the round trip',
+  [...overlaid.overlays[0].image.slice(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
+
+/* drawOrder is the file's to decide, and Leaflet stacks within a pane by
+   insertion order — so the decoder sorts rather than leaving it to chance. */
+check('drawOrder decides the stacking', overlaid.overlays.map((o) => o.drawOrder), [1, 2]);
+check('and the lower one is the "Under" overlay', overlaid.overlays[0].name, 'Under');
+
+const chart = overlaid.overlays.find((o) => o.name === 'Survey chart');
+check('LatLonBox edges are read',
+  [chart.bounds.north, chart.bounds.south, chart.bounds.east, chart.bounds.west], [38, 36, -74, -76]);
+check('rotation is carried through', chart.rotation, 30);
+/* The overlay's own colour is white with alpha — KML uses it as an opacity
+   for the image rather than a tint. */
+check('colour alpha becomes opacity', Math.round(chart.opacity * 100) / 100, 0.7);
+check('an overlay with no colour is opaque', overlaid.overlays[0].opacity, 1);
+
+/* An absolute href is refused for the reason NetworkLink is: it would have a
+   document the reader opened fetch from a host it names. */
+check('an image hosted elsewhere is refused, and counted',
+  overlaid.skipped['overlay image hosted elsewhere'], 1);
+check('the archive image is not also counted as a spare resource',
+  overlaid.skipped['embedded resource'], undefined);
+check('images are summarised alongside features',
+  /1 feature · 2 images/.test(summarise(overlaid)), true);
+
+// A bare .kml names images that travelled beside it and are not here.
+const plainOverlay = await load('plain.kml');
+check('a bare KML has no images to give', plainOverlay.overlays.length, 0);
+
 /* Descriptions carry arbitrary HTML and a file from a colleague or a portal is
    untrusted input even when the reader chose to open it. Markup is stripped
    rather than filtered — an allow-list is a thing to get subtly wrong. */

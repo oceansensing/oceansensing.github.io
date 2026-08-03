@@ -41,9 +41,28 @@ export interface KmzFeature {
   style?: KmzStyle;
 }
 
+/* A georeferenced image — a scanned chart, a satellite grab, a model figure.
+   Only LatLonBox is handled; gx:LatLonQuad places an image on an arbitrary
+   quadrilateral, which Leaflet's image overlay cannot do without a warp. */
+export interface KmzOverlay {
+  name?: string;
+  /** North, south, east, west edges in degrees. */
+  bounds: { north: number; south: number; east: number; west: number };
+  /** Degrees counterclockwise about the centre, from LatLonBox. */
+  rotation: number;
+  /** From the overlay's own `color`, whose alpha is the opacity. */
+  opacity: number;
+  /** Higher draws on top. */
+  drawOrder: number;
+  /** The image, lifted out of the archive. */
+  image: Uint8Array;
+  mediaType: string;
+}
+
 export interface KmzDocument {
   name?: string;
   features: KmzFeature[];
+  overlays: KmzOverlay[];
   /** What was present and not drawn, counted by kind. A partial render that
       says nothing is the failure mode this project keeps meeting; this is what
       lets the map report "drew 412, skipped 3 NetworkLinks" instead. */
@@ -147,7 +166,15 @@ export function parseCoordinates(text: string | null | undefined): LonLat[] {
 /* Not supported, and each counted rather than ignored. NetworkLink is left
    out deliberately as well as for effort: it fetches a URL chosen by the
    file, which is not something a document a reader opened should get to do. */
-const UNSUPPORTED = ['NetworkLink', 'GroundOverlay', 'PhotoOverlay', 'ScreenOverlay', 'Model'];
+const UNSUPPORTED = ['NetworkLink', 'PhotoOverlay', 'ScreenOverlay', 'Model'];
+
+const MEDIA_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+};
 
 const text = (parent: Element, tag: string): string | undefined => {
   const found = parent.getElementsByTagName(tag)[0]?.textContent?.trim();
@@ -213,8 +240,12 @@ function styleFrom(element: Element): KmzStyle | undefined {
   return Object.keys(style).length ? style : undefined;
 }
 
+interface PendingOverlay extends Omit<KmzOverlay, 'image' | 'mediaType'> {
+  href: string;
+}
+
 /** Parse a KML document. Exported so a caller holding plain KML can skip the zip. */
-export function parseKml(doc: Document): KmzDocument {
+export function parseKml(doc: Document): KmzDocument & { pending: PendingOverlay[] } {
   const skipped: Record<string, number> = {};
   const count = (what: string) => {
     skipped[what] = (skipped[what] ?? 0) + 1;
@@ -302,7 +333,47 @@ export function parseKml(doc: Document): KmzDocument {
     if (placemark.getElementsByTagName('Track').length) count('gx:Track');
   }
 
+  /* Descriptors only: the bytes live in the archive, which parseKml cannot
+     see. readKmz resolves them; a bare .kml has no archive, so its overlays
+     are counted as unreachable rather than half-drawn. */
+  const pending: PendingOverlay[] = [];
+  for (const element of doc.getElementsByTagName('GroundOverlay')) {
+    const box = element.getElementsByTagName('LatLonBox')[0];
+    if (!box) {
+      // gx:LatLonQuad, or malformed. Either way there is no axis-aligned box.
+      count(element.getElementsByTagName('LatLonQuad').length ? 'rotated-quad overlay' : 'GroundOverlay');
+      continue;
+    }
+    const edge = (tag: string) => Number(text(box, tag));
+    const bounds = {
+      north: edge('north'), south: edge('south'), east: edge('east'), west: edge('west'),
+    };
+    const href = text(element.getElementsByTagName('Icon')[0] ?? element, 'href');
+    if (!href || !Object.values(bounds).every(Number.isFinite)) {
+      count('GroundOverlay');
+      continue;
+    }
+    /* An absolute URL is refused for the same reason NetworkLink is: it would
+       have a document the reader opened fetch from a host it names, leaking
+       where they are and when. Images inside the archive are self-contained. */
+    if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith('//')) {
+      count('overlay image hosted elsewhere');
+      continue;
+    }
+    const colour = kmlColour(text(element, 'color'));
+    pending.push({
+      href: href.replace(/^\.?\//, ''),
+      name: text(element, 'name'),
+      bounds,
+      rotation: Number(text(box, 'rotation')) || 0,
+      opacity: colour?.opacity ?? 1,
+      drawOrder: Number(text(element, 'drawOrder')) || 0,
+    });
+  }
+
   return {
+    pending,
+    overlays: [],
     name: doc.getElementsByTagName('Document')[0]?.getElementsByTagName('name')[0]?.textContent?.trim()
       || doc.getElementsByTagName('name')[0]?.textContent?.trim()
       || undefined,
@@ -325,8 +396,11 @@ export async function readKmz(
 ): Promise<KmzDocument> {
   const zipped = bytes[0] === 0x50 && bytes[1] === 0x4b;
   if (!zipped) {
-    // A bare .kml, which readers hand over just as often as a .kmz.
-    return parseKml(parseXml(new TextDecoder().decode(bytes)));
+    // A bare .kml, which readers hand over just as often as a .kmz. Its
+    // overlays name images that travelled with it and are not here.
+    const plain = parseKml(parseXml(new TextDecoder().decode(bytes)));
+    if (plain.pending.length) plain.skipped['overlay image missing'] = plain.pending.length;
+    return plain;
   }
   const entries = listEntries(bytes);
   const kml =
@@ -335,18 +409,43 @@ export async function readKmz(
   if (!kml) throw new KmzError('no .kml inside the archive');
   const parsed = parseKml(parseXml(new TextDecoder().decode(await read(bytes, kml))));
 
-  /* Resources are listed rather than loaded. Custom icons and overlay images
-     would each need extracting to a blob URL and revoking again; until the
-     map draws them, saying how many were passed over is more honest than
-     silently dropping them. */
-  const resources = entries.filter((e) => !e.name.toLowerCase().endsWith('.kml') && !e.name.endsWith('/'));
-  if (resources.length) parsed.skipped['embedded resource'] = resources.length;
+  /* Overlay images, lifted out of the archive. Matched case-insensitively and
+     without any leading "./" — a KMZ written on Windows will happily refer to
+     `Files/Chart.PNG` from a KML that stores it as `files/chart.png`. */
+  const used = new Set<string>();
+  const byName = new Map(entries.map((e) => [e.name.toLowerCase(), e]));
+  for (const overlay of parsed.pending) {
+    const entry = byName.get(overlay.href.toLowerCase());
+    const extension = overlay.href.split('.').pop()?.toLowerCase() ?? '';
+    const mediaType = MEDIA_TYPES[extension];
+    if (!entry || !mediaType) {
+      // Named an image the archive does not hold, or a format no browser draws.
+      parsed.skipped['overlay image missing'] = (parsed.skipped['overlay image missing'] ?? 0) + 1;
+      continue;
+    }
+    used.add(entry.name);
+    const { href, ...rest } = overlay;
+    parsed.overlays.push({ ...rest, image: await read(bytes, entry), mediaType });
+  }
+  /* Draw order is the file's to decide, and Leaflet stacks within a pane by
+     insertion, so it is applied here rather than left to chance. */
+  parsed.overlays.sort((a, b) => a.drawOrder - b.drawOrder);
+
+  /* Whatever is left is a custom icon or something else the map has no use
+     for. Counted rather than dropped in silence. */
+  const spare = entries.filter(
+    (e) => !e.name.endsWith('/') && !e.name.toLowerCase().endsWith('.kml') && !used.has(e.name)
+  );
+  if (spare.length) parsed.skipped['embedded resource'] = spare.length;
   return parsed;
 }
 
 /** "412 features · skipped 3 NetworkLinks" — for the map to show. */
 export function summarise(doc: KmzDocument): string {
   const parts = [`${doc.features.length} feature${doc.features.length === 1 ? '' : 's'}`];
+  if (doc.overlays.length) {
+    parts.push(`${doc.overlays.length} image${doc.overlays.length === 1 ? '' : 's'}`);
+  }
   for (const [what, n] of Object.entries(doc.skipped)) {
     parts.push(`skipped ${n} ${what}${n === 1 ? '' : 's'}`);
   }

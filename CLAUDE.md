@@ -943,6 +943,28 @@ resolves rather than rejects: a reader in private browsing gets a map that
 draws and forgets, not one that fails to start, and the note says so rather
 than replacing what was drawn.
 
+**GroundOverlay images are drawn**, lifted out of the archive as blobs. Four
+details in that:
+
+- **Only images inside the KMZ.** An absolute `href` is refused for the same
+  reason `NetworkLink` is — it would have a document the reader opened fetch
+  from a host it names, leaking where they are and when. Counted and reported,
+  not silently dropped.
+- **Opacity lives in the overlay's `color` alpha**, not in an opacity tag.
+- **Rotation goes on the CSS `rotate` property, not into `transform`.** Leaflet
+  owns `transform` and rewrites it on every move; the individual property
+  composes with it instead of fighting it. KML measures counterclockwise where
+  CSS measures clockwise, so the value is negated.
+- **`drawOrder` is applied by sorting** before the layers are added, since
+  Leaflet stacks within a pane by insertion.
+
+Object URLs are revoked when a layer is removed. A KMZ of scanned charts runs
+to tens of megabytes and an unrevoked blob is held until the tab closes.
+
+Only `LatLonBox` is handled. `gx:LatLonQuad` puts an image on an arbitrary
+quadrilateral, which needs a warp rather than a bounding box, and is counted
+as skipped.
+
 **What is skipped is counted, not dropped.** NetworkLink is refused on
 purpose as well as for effort — it fetches a URL chosen by the file. The map
 reports "5 features · skipped 1 NetworkLink", because a partial render that

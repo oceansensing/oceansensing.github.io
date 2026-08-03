@@ -5,7 +5,8 @@ in: storm tracks and forecast cones, gliders, saildrones, Argo floats, animated
 currents at two depths, sea-surface temperature and salinity, isobaths, a
 coastline and EEZ boundaries — with distance/bearing measurement, a
 right-click readout of depth, current, temperature and jurisdiction, and a
-reader's own KMZ or KML drawn over the top and kept between visits.
+reader's own KMZ or KML — vectors and georeferenced images — drawn over the
+top and kept between visits.
 
 Built for <https://oceansensing.org/observations/hurricanes/>, and kept free of
 that site so it can be dropped somewhere else.

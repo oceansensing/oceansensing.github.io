@@ -360,6 +360,9 @@ window.sessionStorage.setItem('asset-map-view', JSON.stringify(SEEDED_VIEW));
 const KMZ_FIXTURE =
   'UEsDBBQAAAAIAJqtAl2FC8lSbgIAACMGAAAHAAAAZG9jLmttbI1U204bMRB9z1dYW4knss6lJLQ4RqQIVAnaqMAHuMnsrhWvHXkdwv59x95LLiTQSLHH9pyZ4zOzZtdvuSKvYAtp9CTqx72IgJ6bhdTpJHp5vuteRte8w5bohZ66mESZc6vvlG42m9isQKeyiDU4ih50EA8izm7NfJ2DdgjTIgf+tLavUJKVEprRsNNhT65UQORiEilIEfMgNYQ9zuZGGcuTpIe/JGG0WrONXLiMDxmtDEa3kA4hbGZUuRdgnHh4r9cGSKRSvM9omJlZO4UBOJ43JqM7QWgdumL6KFYNWTSR70xIDLmEkmtjc6EY9TYrvPOLVfwLejLaLjG0BwSiLTKTaabw796BjcvAvofXpJAB8rozagG4FwR9gLRotPU5lJhDLuxye0z69TlbQDG3cuWw4PxMuau/Z6m7+vF8620aFsTLEY4s9ev+gBROeAAm2YVjLsy2d2kkt0O8cqgqZbGlfHGMxeYSDgreHV/EF+fDEQ490h1/jXvnwzEOfjHwJ2N/4gu4xTR1r6LR7U2P3fupYk1umrvPjMS+PEniMFXtvpuF0Vr4gwrcWBAflWBq3hoSJ5vEt1/ayoptCXZq1nohbPmzqL4RYf8ckXGE/L2A7XRJwmY9jY5J2ESih3mq7FLr/83e6BdKuG+Og3lxYKLDh4wOc3s9aSPOZzWf4sfTKP24Vk7eg8nB2bK+2NEWwMZ7R6ly/KyDPZJ0R99OqNw26j6VUy31C9zG2CUil0FxHDMLCfdvboGPLryJfKUgNjalSr5CjK8uo8El5EN/uhujw+6t1/E3vvBKlLVE80xY12hE9z2QTft+M/+o839QSwMEFAAAAAgAmq0CXVrM13MNAAAAMAAAAA4AAABmaWxlcy9pY29uLnBuZ+sM8HPn5ZLiYiASAABQSwECFAMUAAAACACarQJdhQvJUm4CAAAjBgAABwAAAAAAAAAAAAAAgAEAAAAAZG9jLmttbFBLAQIUAxQAAAAIAJqtAl1azNdzDQAAADAAAAAOAAAAAAAAAAAAAACAAZMCAABmaWxlcy9pY29uLnBuZ1BLBQYAAAAAAgACAHEAAADMAgAAAAA=';
 
+const OVERLAY_FIXTURE =
+  'UEsDBBQAAAAIAMCxAl2+9dEdbwEAAHwDAAAHAAAAZG9jLmttbK2TzW7CMAzH7zxF1fOo+RgDTSZI27RpEhJoGw+QtaZUtDFKAoW3XxrKCmgHDsvJtv6y/XNsnOyLPNiRNhmrcdiNOmFAKuYkU+k4XHy9tkfhRLRw7VROqcw4XFm7eQQoyzLiDak0M5EiC04BvagXCnzheFuQsgKVLEg8r6S2BsE7LXzTvFXJzJXM5aGWfG71jg5BXClrIcacsxbfvaV/CEcfEy3LmU5Iix5C47SCAN9jVgJXmpZimeVkwOeLNipF8FEEL6m0U2mnrJ547zpgbVeiP3KFvYWGt1XgAeFoIUljRXt4j+AtLMn7TuAtl89l1GyldUMU/Q7Cr4NwVgku2f+exUI5ntMQGsDu/9IOr2kH17T9K9pBTXtO1LoN6YMKtnTagMveq20ybp1oL4tNThHrFKzjuRGke8XRucToXkB0bkOY5zKmQup13f48U6f/mHNW7XXMrN2FSEummsxdNc7zGEIthCaXK9QcRnUt4gdQSwMEFAAAAAgAwLECXW5F7FJEAAAASQAAAA8AAABmaWxlcy9jaGFydC5wbmfrDPBz5+WS4mJgYOD19HAJAtIcIMzBBCS9czXvACkBTxfHkIo5yQkrLBpleXU5GQRmBjBeYt/lCZRj8HT1c1nnlNAEAFBLAQIUAxQAAAAIAMCxAl2+9dEdbwEAAHwDAAAHAAAAAAAAAAAAAACAAQAAAABkb2Mua21sUEsBAhQDFAAAAAgAwLECXW5F7FJEAAAASQAAAA8AAAAAAAAAAAAAAIABlAEAAGZpbGVzL2NoYXJ0LnBuZ1BLBQYAAAAAAgACAHIAAAAFAgAAAAA=';
+
 const bundle = fs.readdirSync('dist/_astro').find((f) => f.startsWith('AssetMap') && f.endsWith('.js'));
 if (!bundle) {
   console.error('no AssetMap bundle in dist/_astro — run `npm run build` first');
@@ -1191,6 +1194,27 @@ const kmzUpload = await (async () => {
   };
 })();
 
+/* A second upload, this one carrying georeferenced images. */
+const kmzOverlay = await (async () => {
+  const input = document.querySelector('[data-kmz-file]');
+  if (!input) return null;
+  const bytes = Uint8Array.from(atob(OVERLAY_FIXTURE), (c) => c.charCodeAt(0));
+  const file = new window.File([bytes], 'overlay.kmz', { type: 'application/vnd.google-earth.kmz' });
+  Object.defineProperty(input, 'files', {
+    value: Object.assign([file], { item: (i) => [file][i], length: 1 }),
+    configurable: true,
+  });
+  input.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 1200));
+  const images = [];
+  host._map.eachLayer((l) => {
+    if (l.options?.pane === 'user' && typeof l.getBounds === 'function' && l._url) {
+      images.push({ url: l._url, opacity: l.options.opacity, alt: l.options.alt, bounds: l.getBounds() });
+    }
+  });
+  return { images, note: document.querySelector('[data-kmz-note]')?.textContent ?? '' };
+})();
+
 /* ---- isobaths -------------------------------------------------------------
 
    The layer is off by default and neither tier is fetched until it is
@@ -1359,6 +1383,21 @@ const checks = [
      everything it silently erases lines — the sample shares one style between
      its legs and its unoutlined boxes, and every leg rendered stroke="none":
      drawn, right colour in the options, invisible on screen. */
+  ['GroundOverlay images are lifted out of the archive and drawn',
+    !!kmzOverlay && kmzOverlay.images.length === 2],
+  ['each as a blob, not a request back to the file\'s own host',
+    !!kmzOverlay && kmzOverlay.images.every((i) => i.url.startsWith('blob:'))],
+  ['georeferenced by their LatLonBox',
+    !!kmzOverlay && kmzOverlay.images.some((i) =>
+      Math.abs(i.bounds.getNorth() - 38) < 1e-6 && Math.abs(i.bounds.getWest() + 76) < 1e-6)],
+  /* KML puts the opacity in the overlay's colour alpha, not in an opacity
+     tag — b2 is 178/255. */
+  ['with the colour alpha read as opacity',
+    !!kmzOverlay && kmzOverlay.images.some((i) => Math.abs(i.opacity - 178 / 255) < 1e-3)],
+  /* An absolute href would have a document the reader opened fetch from a
+     host it names; refused for the reason NetworkLink is, and counted. */
+  ['an image hosted elsewhere is refused and reported',
+    !!kmzOverlay && /hosted elsewhere/.test(kmzOverlay.note)],
   ['a polygon-only outline switch does not erase the lines',
     !!kmzUpload &&
       kmzUpload.drawn.some((o) => o.color === '#ff0000' && o.fill !== true && o.stroke !== false) &&

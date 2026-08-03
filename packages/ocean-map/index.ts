@@ -8,7 +8,7 @@ import './ocean-map.css';
 import { coordText, elapsed, initialBearing, spanText, stamp } from './geo';
 import { rampColour, rampStops } from './ramp';
 import { tileKeysFor } from './tiles';
-import { readKmz, summarise, type KmzFeature } from './kmz';
+import { readKmz, summarise, type KmzDocument, type KmzFeature, type KmzOverlay } from './kmz';
 import { listOverlays, removeOverlay, saveOverlay } from './store';
 import type {
   IsobathFile,
@@ -1840,6 +1840,39 @@ export async function createOceanMap(
 
   const parseXml = (xml: string) => new DOMParser().parseFromString(xml, 'application/xml');
 
+  /* Object URLs for the overlay images, revoked when their layer goes. A KMZ
+     of scanned charts is easily tens of megabytes, and a blob left unrevoked
+     is held until the tab closes. */
+  const overlayUrls = new Map<string, string[]>();
+
+  const drawOverlays = (group: L.LayerGroup, id: string, overlays: KmzOverlay[]) => {
+    const urls: string[] = [];
+    for (const overlay of overlays) {
+      const url = URL.createObjectURL(new Blob([overlay.image as BlobPart], { type: overlay.mediaType }));
+      urls.push(url);
+      const image = L.imageOverlay(
+        url,
+        [
+          [overlay.bounds.south, overlay.bounds.west],
+          [overlay.bounds.north, overlay.bounds.east],
+        ],
+        { pane: 'user', opacity: overlay.opacity, alt: overlay.name ?? 'overlay image' }
+      );
+      /* Rotation goes on the CSS `rotate` property rather than into
+         `transform`, which Leaflet owns and rewrites on every move — the
+         individual property composes with it instead of fighting it. KML
+         measures counterclockwise where CSS measures clockwise. */
+      if (overlay.rotation) {
+        image.on('add', () => {
+          const element = image.getElement();
+          if (element) element.style.rotate = `${-overlay.rotation}deg`;
+        });
+      }
+      group.addLayer(image);
+    }
+    if (urls.length) overlayUrls.set(id, urls);
+  };
+
   const drawKmz = (features: KmzFeature[]): L.LayerGroup => {
     const group = L.layerGroup([], { pane: 'user' });
     const flip = (ring: [number, number][]) =>
@@ -1918,6 +1951,8 @@ export async function createOceanMap(
         map.removeLayer(group);
         layerControl.removeLayer(group);
         loadedOverlays.delete(id);
+        for (const url of overlayUrls.get(id) ?? []) URL.revokeObjectURL(url);
+        overlayUrls.delete(id);
         await removeOverlay(id);
         listKmz();
         showKmzNote('');
@@ -1929,11 +1964,12 @@ export async function createOceanMap(
   };
 
   const addKmz = async (id: string, name: string, bytes: ArrayBuffer) => {
-    const doc = await readKmz(new Uint8Array(bytes), parseXml);
-    if (!doc.features.length) {
+    const doc: KmzDocument = await readKmz(new Uint8Array(bytes), parseXml);
+    if (!doc.features.length && !doc.overlays.length) {
       throw new Error(`${name} has nothing this map can draw — ${summarise(doc)}`);
     }
     const group = drawKmz(doc.features);
+    drawOverlays(group, id, doc.overlays);
     (group as unknown as { _kmzName?: string })._kmzName = name;
     loadedOverlays.set(id, group);
     layerControl.addOverlay(group, name);
