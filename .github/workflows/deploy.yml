@@ -3,10 +3,10 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
-  # Refresh the hurricane / uncrewed-asset map hourly. Public repos get
-  # unlimited Actions minutes, and nothing is committed — the data is
-  # fetched into the build, so the repo does not grow with each refresh.
-  # Offset from the hour because scheduled runs bunch up at :00.
+  # Hourly, still: the storm status line above the map is rendered at build
+  # time, so only a real rebuild refreshes it. The map's *data* no longer
+  # comes from here — see MAP_DATA in src/config.ts — so this run is now
+  # cheap. Offset from the hour because scheduled runs bunch up at :00.
   schedule:
     - cron: '17 * * * *'
   workflow_dispatch:
@@ -42,85 +42,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Never fail the deploy over an upstream outage: the script keeps the
-      # committed snapshot when a source is unreachable.
-      - name: Refresh ocean asset data
-        continue-on-error: true
-        run: python3 scripts/fetch-ocean-assets.py
-
-      - name: Refresh surface current field
-        continue-on-error: true
-        run: python3 scripts/fetch-currents.py
-
-      - name: Refresh sea surface temperature and salinity
-        continue-on-error: true
-        run: python3 scripts/fetch-ocean-fields.py
-
-      # Every refresh above is continue-on-error, so an outage degrades to the
-      # committed snapshot rather than blocking a deploy. What must not pass
-      # silently is data that arrived in the wrong *shape* — that is how the
-      # ERDDAP empty-field drift produced grids shifted west, and how a stale
-      # model run was served for two days while the build reported success.
-      # `verify` runs before these steps and only ever sees the snapshot, so
-      # this is the one place fresh upstream drift can be caught.
-      - name: Check the refreshed data against the published contract
-        run: npm run test:schema
-
-      # The full-resolution tiles are ~92 MB per depth and only change when
-      # the model does, which is once a day at 12Z. Keying the cache on the
-      # run id means the hourly builds restore them instead of pulling them
-      # from HYCOM's public server twenty-four times over. Both depths share
-      # one cache entry, so a partial tile run is never half-restored.
-      - name: Identify the model run
-        id: model
-        continue-on-error: true
-        run: echo "run=$(python3 scripts/fetch-currents.py --run)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore full-resolution current tiles
-        id: tiles
-        if: steps.model.outputs.run != ''
-        uses: actions/cache@v4
-        with:
-          path: |
-            public/map/tiles
-            public/map/tiles-60m
-            public/map/tiles-f24h
-            public/map/tiles-60m-f24h
-          # v3: a tile set per forecast hour joins the cache, so a v2 hit
-          # would restore only the present and leave the +24h layer coarse
-          # while every check stayed green.
-          key: currents-tiles-v3-${{ steps.model.outputs.run }}
-
-      - name: Build full-resolution current tiles
-        if: steps.model.outputs.run != '' && steps.tiles.outputs.cache-hit != 'true'
-        continue-on-error: true
-        run: python3 scripts/fetch-currents.py --tiles
-
-      # Navy SST tiles, keyed on the same model run — they come from the same
-      # forecast, so they go stale together. OISST has no tile tier: its
-      # regional grids are already at its native 1/4 degree.
-      - name: Restore Navy field tiles
-        id: ssttiles
-        if: steps.model.outputs.run != ''
-        uses: actions/cache@v4
-        with:
-          path: |
-            public/map/tiles-sst-navy
-            public/map/tiles-sss-navy
-            public/map/tiles-sst-navy-f24h
-            public/map/tiles-sss-navy-f24h
-          # v2: the tile geometry is unchanged but the index's minZoom is not,
-          # and a cache hit would keep publishing the old threshold.
-          # v3: salinity tiles join the set, so a v2 hit would restore an
-          # incomplete one and skip building the new half.
-          # v4: same reason as the currents cache above.
-          key: field-tiles-v4-${{ steps.model.outputs.run }}
-
-      - name: Build Navy field tiles
-        if: steps.model.outputs.run != '' && steps.ssttiles.outputs.cache-hit != 'true'
-        continue-on-error: true
-        run: python3 scripts/fetch-ocean-fields.py --tiles
-
+      # No data steps. The map reads its own repository now — see MAP_DATA in
+      # src/config.ts — which fetches on its own schedule at :05 and publishes
+      # to its own Pages site. This build is the site and nothing else: no
+      # Python, no tile cache, and a deploy that takes a minute rather than
+      # twenty.
+      #
+      # The cost is a dependency on a second origin being up. That is visible
+      # to a reader as a map with no data rather than as a broken page, and
+      # the data repository's own workflow gates on the same schema check
+      # this one used to run.
       - uses: withastro/action@v3
         with:
           node-version: 22

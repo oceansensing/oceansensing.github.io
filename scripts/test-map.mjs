@@ -123,20 +123,20 @@ Object.defineProperty(window.HTMLElement.prototype, 'clientWidth', { get: () => 
 Object.defineProperty(window.HTMLElement.prototype, 'clientHeight', { get: () => 500, configurable: true });
 
 const files = {
-  coastline: JSON.parse(fs.readFileSync('public/map/coastline.json', 'utf8')),
-  boundaries: JSON.parse(fs.readFileSync('public/map/boundaries.json', 'utf8')),
-  'ocean-assets': JSON.parse(fs.readFileSync('public/map/ocean-assets.json', 'utf8')),
-  currents: JSON.parse(fs.readFileSync('public/map/currents.json', 'utf8')),
-  'currents-atlantic': JSON.parse(fs.readFileSync('public/map/currents-atlantic.json', 'utf8')),
-  'currents-arctic': JSON.parse(fs.readFileSync('public/map/currents-arctic.json', 'utf8')),
-  'currents-60m': JSON.parse(fs.readFileSync('public/map/currents-60m.json', 'utf8')),
-  'currents-atlantic-60m': JSON.parse(fs.readFileSync('public/map/currents-atlantic-60m.json', 'utf8')),
-  'currents-arctic-60m': JSON.parse(fs.readFileSync('public/map/currents-arctic-60m.json', 'utf8')),
-  argo: JSON.parse(fs.readFileSync('public/map/argo.json', 'utf8')),
-  'sss-navy': JSON.parse(fs.readFileSync('public/map/sss-navy.json', 'utf8')),
-  'sst-oisst': JSON.parse(fs.readFileSync('public/map/sst-oisst.json', 'utf8')),
-  'sst-oisst-atlantic': JSON.parse(fs.readFileSync('public/map/sst-oisst-atlantic.json', 'utf8')),
-  'sst-oisst-arctic': JSON.parse(fs.readFileSync('public/map/sst-oisst-arctic.json', 'utf8')),
+  coastline: JSON.parse(fs.readFileSync('scripts/fixtures/map/coastline.json', 'utf8')),
+  boundaries: JSON.parse(fs.readFileSync('scripts/fixtures/map/boundaries.json', 'utf8')),
+  'ocean-assets': JSON.parse(fs.readFileSync('scripts/fixtures/map/ocean-assets.json', 'utf8')),
+  currents: JSON.parse(fs.readFileSync('scripts/fixtures/map/currents.json', 'utf8')),
+  'currents-atlantic': JSON.parse(fs.readFileSync('scripts/fixtures/map/currents-atlantic.json', 'utf8')),
+  'currents-arctic': JSON.parse(fs.readFileSync('scripts/fixtures/map/currents-arctic.json', 'utf8')),
+  'currents-60m': JSON.parse(fs.readFileSync('scripts/fixtures/map/currents-60m.json', 'utf8')),
+  'currents-atlantic-60m': JSON.parse(fs.readFileSync('scripts/fixtures/map/currents-atlantic-60m.json', 'utf8')),
+  'currents-arctic-60m': JSON.parse(fs.readFileSync('scripts/fixtures/map/currents-arctic-60m.json', 'utf8')),
+  argo: JSON.parse(fs.readFileSync('scripts/fixtures/map/argo.json', 'utf8')),
+  'sss-navy': JSON.parse(fs.readFileSync('scripts/fixtures/map/sss-navy.json', 'utf8')),
+  'sst-oisst': JSON.parse(fs.readFileSync('scripts/fixtures/map/sst-oisst.json', 'utf8')),
+  'sst-oisst-atlantic': JSON.parse(fs.readFileSync('scripts/fixtures/map/sst-oisst-atlantic.json', 'utf8')),
+  'sst-oisst-arctic': JSON.parse(fs.readFileSync('scripts/fixtures/map/sst-oisst-arctic.json', 'utf8')),
 };
 
 /* ---- forecast frames -------------------------------------------------
@@ -1964,11 +1964,20 @@ const checks = [
     /* Scoped to the status line. Matching every anchor that mentions NHC
        swept in the ordinary prose link in the page's source list, which is
        body copy and rightly navigates in place — the check failed on content,
-       not on a regression. */
+       not on a regression.
+
+       **No `length > 0` here, unlike the rebuilt check above.** That page is
+       built from live data, and on a quiet day there are genuinely no
+       tropical cyclones and so no links — which is a correct page, not a
+       regression. It went unnoticed while the build read the same committed
+       snapshot the fixture came from; moving the data out made the two
+       diverge and the check failed the moment the last storm dissipated.
+       The property under test is how an advisory link opens, so it is
+       asserted of the links that exist. The rebuilt check keeps the
+       existence half, because its fixture guarantees a storm. */
     const block = /<div[^>]*class="storm-status"[\s\S]*?<\/div>/.exec(page)?.[0] ?? '';
     const links = [...block.matchAll(/<a\b[^>]*>/g)].map((m) => m[0]);
-    return links.length > 0 &&
-      links.every((tag) => /target="_blank"/.test(tag) && /\bnoopener\b/.test(tag));
+    return links.every((tag) => /target="_blank"/.test(tag) && /\bnoopener\b/.test(tag));
   })()],
   ['argo fleet is loaded', fleet.length > 500],
   ['argo coverage is global', spansHemispheres && spansLongitudes],
@@ -2114,7 +2123,7 @@ const checks = [
     /\d{4}-\d{2}-\d{2} \d{2}:\d{2}Z run/.test(sharedSourceAttribution)],
   ['the Navy SST file records which run it came from',
     typeof files['sst-navy'].header.modelRun === 'string' ||
-      typeof JSON.parse(fs.readFileSync('public/map/sst-navy.json', 'utf8')).header.modelRun === 'string'],
+      typeof JSON.parse(fs.readFileSync('scripts/fixtures/map/sst-navy.json', 'utf8')).header.modelRun === 'string'],
   ['switching SST on paints the raster', opaque > 5000],
   ['every painted pixel comes from the gated ramp', painted && strayColour === 0],
   ['the readout reports a sea surface temperature', /Sea surface/.test(oisstRead)],

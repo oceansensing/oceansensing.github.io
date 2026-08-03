@@ -23,7 +23,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const MAP = 'public/map';
+/* Which directory to check. The site repository no longer carries the data,
+   so `npm run verify` checks the frozen fixtures — enough to catch the
+   module's expectations drifting from the contract. The data repository
+   passes its freshly fetched directory instead, which is the only place
+   upstream drift can be caught. */
+const MAP = process.argv[2] ?? 'public/map';
 let failures = 0;
 let checked = 0;
 const fail = (file, msg) => {

@@ -302,12 +302,16 @@ of the figure boundary, and scoping to the figure found a stand-in in the
 caption and then never reached the real buttons the box had just been rebuilt
 with.
 
-Leaflet, self-hosted from npm. Reads, from `public/map/`: `ocean-assets.json`
-(storms, gliders, USVs), `argo.json`, the current grids (`currents.json`,
-`currents-atlantic.json`, `currents-arctic.json`, `tiles/`), and
-`coastline.json` + `boundaries.json` (Natural Earth, RDP-simplified). All are
-committed except the current tiles. `coastline.json` is fetched only when its
-basemap is chosen — see Basemaps.
+Leaflet, self-hosted from npm. **The data is not in this repository.** It is
+served from `MAP_DATA` (`src/config.ts`), which points at the ocean-data
+repository — see "Where the data lives" below. The map reads
+`ocean-assets.json` (storms, gliders, USVs), `argo.json`, the current grids
+(`currents.json`, `currents-atlantic.json`, `currents-arctic.json`,
+`tiles/`), the isobaths, and the Natural Earth coastline and borders.
+`coastline.json` is fetched only when its basemap is chosen — see Basemaps.
+
+The pipelines still write into `public/map/` when run locally, so a developer
+can point `dataBase` at their own machine; the directory is gitignored.
 
 Vector layers carry a **`className`, never a colour** — CSS owns their stroke and
 fill so a theme switch restyles every path with no redraw. Adding a hardcoded
@@ -403,7 +407,7 @@ because a stored view is read back much later.
 About four thousand dots, against sixty gliders and saildrones — which drives
 three decisions:
 
-- **Own file** (`public/map/argo.json`, ~61 KB gzipped). `ocean-assets.json`
+- **Own file** (`argo.json`, ~61 KB gzipped). `ocean-assets.json`
   is re-fetched every hour by the auto-refresh poll; Argo does not belong in
   that.
 - **Canvas renderer**, not SVG. That many vector elements would compete with
@@ -429,6 +433,52 @@ three decisions:
 
 Note the canvas renderer culls to the viewport, so a test that counts draw
 calls counts what is on screen, not the fleet.
+
+### Where the data lives
+
+**Not here.** `MAP_DATA` in `src/config.ts` points at
+`https://truedichotomy.github.io/ocean-data-repo/map/`, and
+[that repository](https://github.com/truedichotomy/ocean-data-repo) fetches
+on its own hourly schedule at :05 and publishes to its own Pages site.
+
+Two reasons, and both were measured before the move.
+
+**History.** A repository that commits what it fetches keeps every superseded
+version forever. This one had banked **356 MB of dead model grids for 130 MB
+of live data** — 88% of all blob history — and none of it is reclaimable
+without rewriting history. Over there the real-time data is fetched into the
+Pages artifact and never committed, so the previous run is simply gone.
+
+**The Pages cap.** A published site is capped at 1 GB. With a tile set per
+forecast hour this one reached **~904 MB, 90% of it**, and one more layer
+would not have fitted. The data repository is on a *separate account*, so it
+has its own gigabyte and its own bandwidth allowance.
+
+The split is not clean down the middle, and the seam is worth knowing:
+
+- **Real-time data** — currents, fields, storms, platforms — is fetched
+  there, committed nowhere.
+- **Static data** — the GEBCO isobaths, the Natural Earth coastline and
+  borders — is *committed* there. The seafloor does not change, so there is
+  nothing to churn, and it cannot be rebuilt in CI at all: contouring GEBCO
+  needs a 7.5 GB grid run by hand on a workstation.
+- **The pipelines** stay here, in `scripts/`. The data repository checks this
+  one out and runs them, so there is one copy of the code and one contract.
+  A vendored copy would drift, and the failure when it did would be a
+  published file the map no longer reads correctly.
+- **`schema.ts` stays here too**, and is the contract between them. The data
+  repository runs `test-schema.mjs` against what it has just fetched, before
+  publishing.
+
+What it costs: the map now depends on a second origin. A reader sees that as
+a map with no data rather than a broken page, and the data repository's
+`access-control-allow-origin: *` means there is no proxy in between.
+
+**`npm run verify` no longer sees real data.** It checks the frozen fixtures
+in `scripts/fixtures/map/` — enough to catch the module's expectations
+drifting from the contract, which is what that gate was ever for. Fresh
+upstream drift is caught by the data repository's own run, which is the only
+place it can be.
 
 ### The published data contract
 
@@ -887,7 +937,7 @@ fits, the same rule the current and field grids follow:
 | tier | levels | sampling | tolerance | size | fetched |
 | --- | --- | --- | --- | --- | --- |
 | `bathy-tiles/<s>_<w>.json` | **all 17** | stride 2 (0.008°) | 0.004° | 127 KB gz median, 793 KB max | per view, zoom ≥ 6 |
-| `bathy-deep.json` | 200–10000 m | stride 8 (0.033°) | 0.04° | 3.0 MB gz | on switch-on |
+| the deep file | 200–10000 m | stride 8 (0.033°) | 0.04° | 3.0 MB gz | on switch-on |
 
 161 tiles of 162; the one missing is pure land. Whole layer **123 MB raw,
 26.9 MB gzipped** — the single largest thing in the repo, and the price of

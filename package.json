@@ -29,7 +29,7 @@
     "data:coastline": "python3 scripts/fetch-coastline.py",
     "test:units": "node scripts/test-units.mjs",
     "test:multimap": "node scripts/test-multimap.mjs",
-    "test:schema": "node scripts/test-schema.mjs"
+    "test:schema": "node scripts/test-schema.mjs scripts/fixtures/map"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",

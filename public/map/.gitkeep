@@ -1,0 +1,4 @@
+The pipelines still write here when run locally, so a developer can point
+dataBase at their own machine. Nothing in it is committed — the map reads
+https://truedichotomy.github.io/ocean-data-repo/map/ instead. See MAP_DATA in
+src/config.ts, and the .gitignore entry above this directory.

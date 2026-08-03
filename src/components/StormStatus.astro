@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { stormLines, stormLabel, NO_STORMS, type Storm } from '@c4po/ocean-map/storm-status';
+import { MAP_DATA } from '../config';
 
 /* One line per active tropical cyclone, rendered at build time so the line
    is right with JavaScript off. AssetMap re-renders it in the browser from
@@ -10,12 +11,29 @@ import { stormLines, stormLabel, NO_STORMS, type Storm } from '@c4po/ocean-map/s
    the reader to be idle, so this markup alone could sit stale for a while.
    Both paths format through packages/ocean-map/storm-status.ts. */
 
+/* The data moved to its own repository, so this reads it over the network at
+   build time — the one place in the site that does.
+ *
+ * Local first, though: a developer who has run the pipelines is looking at
+ * their own output, and should not have this one line quietly disagree with
+ * the map beside it. Falling through to the network is what makes a clean
+ * checkout, and CI, come out right.
+ *
+ * A failure here says nothing rather than failing the build. The line is
+ * re-rendered in the browser from the data the map fetches anyway, so the
+ * worst case is a page that starts blank on this line and fills in — against
+ * a deploy that does not happen at all. */
 let storms: Storm[] = [];
 try {
   const raw = fs.readFileSync(path.resolve('public/map/ocean-assets.json'), 'utf8');
   storms = JSON.parse(raw).storms ?? [];
 } catch {
-  // No data file yet (a fresh checkout before the first fetch) — say nothing.
+  try {
+    const response = await fetch(`${MAP_DATA}ocean-assets.json`);
+    if (response.ok) storms = ((await response.json()) as { storms?: Storm[] }).storms ?? [];
+  } catch {
+    // Offline, or the data host is down. Say nothing and let the browser fill it in.
+  }
 }
 
 const active = stormLines(storms);
