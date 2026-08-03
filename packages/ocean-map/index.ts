@@ -371,6 +371,12 @@ export async function createOceanMap(
      mutually exclusive. */
   const flow = L.layerGroup();
   const flowDeep = L.layerGroup();
+  /* Wind is a third animated field and joins the same exclusivity group,
+     for exactly the reason the two current depths do: drifting lines are
+     told apart by nothing but their motion, so two sets over the same water
+     read as one confused field. Colour is not enough — the eye follows the
+     streaks, not the hue. */
+  const wind = L.layerGroup();
 
   /* One group per temperature field, and the same rule as the two animated
      current fields: only one at a time. Two rasters cannot be stacked —
@@ -382,7 +388,7 @@ export async function createOceanMap(
   const ssts: { group: L.LayerGroup; layer: ScalarLayer }[] = [];
   /* Both animated fields, so the point readout can sample whichever one
      the reader has on rather than a fixed depth. */
-  const flows: { group: L.LayerGroup; layer: L.Layer | null }[] = [];
+  const flows: { group: L.LayerGroup; layer: L.Layer | null; kind: FlowKind }[] = [];
 
   /* ---- the forecast hour ------------------------------------------------
 
@@ -469,10 +475,19 @@ export async function createOceanMap(
      in place first and the plugin pulled in dynamically after. Without
      this the built bundle dies on "L is not defined" — the dev server
      hides it by serving Leaflet's UMD build, which does set the global. */
-  /* Pixels a 1 m/s current should carry a particle each frame. Currents run
-     an order of magnitude slower than wind, so the plugin's wind-tuned
-     default leaves them at a fifth of a pixel — invisible. */
-  const DRIFT = 3.0;
+  /* Pixels a 1 m/s flow should carry a particle each frame — **per field,
+     because the two quantities are not the same size**. Measured on the
+     published grids: the median surface current is 0.22 m/s and the median
+     10 m wind is 5.97, so wind runs **26.7x** faster. One constant for both
+     would put one of them off screen and the other under a pixel; the
+     plugin's own default is wind-tuned, which is why currents needed 3.0 to
+     be visible at all.
+
+     Divided by that ratio, the wind drifts at the same apparent rate as the
+     currents do — which is the point. These are alternative depictions of
+     the same map, so switching between them should change the field on
+     screen and not the speed it appears to move at. */
+  const DRIFT = { current: 3.0, wind: 0.11 };
 
   /* How long a particle lives before it is reborn somewhere random. The
      plugin counts this in frames, which hides what it means, so it is
@@ -514,7 +529,7 @@ export async function createOceanMap(
      field rendered as nothing at all: the globe view had no currents on
      it. project() returns fractional pixel coordinates, which is the
      quantity the plugin actually distorts by. */
-  const scaleForView = () => {
+  const scaleForView = (drift: number = DRIFT.current) => {
     const rad = Math.PI / 180;
     const bounds = map.getBounds();
     const area = Math.abs(
@@ -530,7 +545,7 @@ export async function createOceanMap(
     // The plugin divides the eastward derivative by cos(lat); match it.
     const jacobian = Math.max(pxPerDegree / Math.cos(centre.lat * rad), 1e-6);
 
-    return DRIFT / (Math.pow(Math.max(area, 1e-6), 0.4) * jacobian);
+    return drift / (Math.pow(Math.max(area, 1e-6), 0.4) * jacobian);
   };
 
   const loadPlugin = async () => {
@@ -545,8 +560,27 @@ export async function createOceanMap(
      view. Both depths run this same code. Each global file names its own
      regions and tiles, so the chain of links cannot cross between depths
      and leave 60 m particles drifting over a surface grid. */
-  const buildFlow = (url: string, group: L.LayerGroup) => {
-    const entry: { group: L.LayerGroup; layer: L.Layer | null } = { group, layer: null };
+  /* What separates one animated field from another. Everything else in
+     `buildFlow` is tier plumbing and is genuinely shared — the wind reuses
+     the region containment, the frame stepping and the scale measurement
+     unchanged, because none of that is about what the vectors mean. */
+  type FlowKind = {
+    source: string;      // who published it; the credit is theirs, not the layer's
+    drift: number;       // see DRIFT — wind and current are 27x apart
+    maxVelocity: number; // the top of the colour ramp, in m/s
+    colours: string[];
+    /* Which convention the readout reports this field in, and it is not a
+       detail: **a current is named for where it goes, a wind for where it
+       comes from.** A southwesterly blows towards the northeast. Reporting
+       wind the ocean way would be exactly 180 degrees wrong and entirely
+       plausible on screen, which is the worst kind of error this map can
+       make. */
+    reads: 'toward' | 'from';
+  };
+
+  const buildFlow = (url: string, group: L.LayerGroup, kind: FlowKind) => {
+    const entry: { group: L.LayerGroup; layer: L.Layer | null; kind: FlowKind } =
+      { group, layer: null, kind };
     flows.push(entry);
     Promise.all([fetch(url).then((r) => r.json()), loadPlugin()])
     .then(([loadedCoarse]) => {
@@ -562,14 +596,14 @@ export async function createOceanMap(
       const run = coarse?.[0]?.header?.modelRun;
       const flowReady = L.velocityLayer({
         data: coarse,
-        attribution: credit('US Navy ESPC-D-V02', run, undefined,
+        attribution: credit(kind.source, run, undefined,
                             coarse?.[0]?.header?.refTime),
         paneName: 'currents',
         displayValues: false,
-        velocityScale: scaleForView(),
+        velocityScale: scaleForView(kind.drift),
         minVelocity: 0,
-        maxVelocity: 1.5,
-        colorScale: palette.currents,
+        maxVelocity: kind.maxVelocity,
+        colorScale: kind.colours,
         /* Denser and thicker than the plugin's wind defaults: ocean
            particles move slowly, so they need weight to register.
 
@@ -741,7 +775,7 @@ export async function createOceanMap(
           showing = url;
           layer.setOptions?.({
             data: url ? grids.get(url) : coarse,
-            velocityScale: scaleForView(),
+            velocityScale: scaleForView(kind.drift),
           });
           return;
         }
@@ -763,7 +797,7 @@ export async function createOceanMap(
            Same failure as the rounded-Jacobian bug this file already carries
            a note about, reached by a different route: there the measurement
            was wrong, here it was taken too early. */
-        layer.setOptions?.({ velocityScale: scaleForView() });
+        layer.setOptions?.({ velocityScale: scaleForView(kind.drift) });
       };
 
       map.on('zoomend', () => applyView(true));
@@ -809,8 +843,43 @@ export async function createOceanMap(
     });
   };
 
-  buildFlow(`${DATA}currents.json`, flow);
-  buildFlow(`${DATA}currents-60m.json`, flowDeep);
+  const ESPC_FLOW: FlowKind = {
+    source: 'US Navy ESPC-D-V02',
+    drift: DRIFT.current,
+    // The ramp tops out well under the fastest water on the map: the Gulf
+    // Stream core runs past 2 m/s, and scaling to it would leave every
+    // other current in the bottom fifth of the ramp.
+    maxVelocity: 1.5,
+    colours: palette.currents,
+    reads: 'toward',
+  };
+
+  buildFlow(`${DATA}currents.json`, flow, ESPC_FLOW);
+  buildFlow(`${DATA}currents-60m.json`, flowDeep, ESPC_FLOW);
+  buildFlow(`${DATA}wind.json`, wind, {
+    source: 'ECMWF IFS',
+    drift: DRIFT.wind,
+    /* 25 m/s is a strong gale, near the top of what the 0.25 degree field
+       resolves outside a cyclone core — measured, the global p99 is 17.6
+       and the maximum 36.9. Topping the ramp at the maximum would put
+       almost every wind on the map in its lowest quarter. */
+    maxVelocity: 25,
+    /* The **same ramp as the currents**, and that is measured rather than
+       lazy. The colour space clearing both bathymetries, every colormap a
+       reader can switch on, and every marker is nearly empty: a search over
+       hue, chroma and lightness found **four** ramps that clear it all, every
+       one of them pink — the glider's own hue — and the best of them cleared
+       the features by 24.4 against this ramp's 24.2. No gain, in a worse
+       place, for a second colour to gate forever.
+
+       It costs nothing here because the animated fields are mutually
+       exclusive: wind and current particles never share the screen, so there
+       is nothing to tell apart. Which field is drawing is said by the layer
+       switcher, by the legend key, and by the attribution — three places,
+       none of them a colour a reader has to have learned. */
+    colours: palette.currents,
+    reads: 'from',
+  });
 
   /* ---- sea-surface temperature ---------------------------------------
 
@@ -1329,6 +1398,32 @@ export async function createOceanMap(
     map.on('overlayadd overlayremove moveend zoomend', showKey);
     for (const entry of ssts) entry.layer.on('rangechange', showKey);
     showKey();
+  }
+
+  /* The particle key names whichever animated field is on.
+
+     It has to, because all three share one ramp — the colour space that
+     clears both bathymetries and every marker is nearly empty, so wind
+     reuses the currents' amber rather than taking a second gated colour.
+     They are mutually exclusive, so exactly one is ever drawing and this
+     line is unambiguous; without it the key would say "Surface current"
+     over a wind field, which is the failure this project keeps meeting. */
+  {
+    const flowKey = find<HTMLElement>('[data-flow-key]');
+    if (flowKey) {
+      const FLOW_KEYS: [L.Layer, string][] = [
+        [flow, 'Surface current'],
+        [flowDeep, 'Current at 60 m'],
+        [wind, 'Wind at 10 m'],
+      ];
+      const showFlowKey = () => {
+        const on = FLOW_KEYS.find(([layer]) => map.hasLayer(layer));
+        flowKey.hidden = !on;
+        if (on) flowKey.textContent = on[1];
+      };
+      map.on('overlayadd overlayremove', showFlowKey);
+      showFlowKey();
+    }
   }
 
   /* Reader control over the colour scale. Three things, all per field and
@@ -2121,6 +2216,7 @@ export async function createOceanMap(
   const overlays: Record<string, L.Layer> = {
     'Currents at 0m (ESPC)': flow,
     'Currents at 60m (ESPC)': flowDeep,
+    'Wind at 10m (ECMWF)': wind,
     'SST (OISST analysis)': sstOisst,
     'SST (ESPC)': sstNavy,
     'SSS (ESPC)': sssNavy,
@@ -2439,7 +2535,7 @@ export async function createOceanMap(
      control, so the choice still survives the saved view, which records
      overlays by name. */
   const EXCLUSIVE: L.Layer[][] = [
-    [flow, flowDeep],                    // two particle fields cannot be told apart
+    [flow, flowDeep, wind],              // particle fields cannot be told apart
     // Every scalar raster: they share a pane, so the upper one simply
     // hides the lower and the map would name two fields while showing one.
     [sstOisst, sstNavy, sssNavy],
@@ -2750,8 +2846,11 @@ export async function createOceanMap(
          60 m field on, and calling that "surface current" would be wrong
          in a way nothing on screen would give away. */
       (water
-        ? `<dt>Current at ${water.depth ? `${water.depth} m` : 'surface'}</dt>` +
-          `<dd>${water.speed.toFixed(2)} m/s toward ${water.toward.toFixed(0)}°T</dd>`
+        ? `<dt>${water.reads === 'from'
+              ? `Wind at ${water.height ?? 10} m`
+              : `Current at ${water.depth ? `${water.depth} m` : 'surface'}`}</dt>` +
+          `<dd>${water.speed.toFixed(water.reads === 'from' ? 1 : 2)} m/s ` +
+          `${water.reads} ${water.bearing.toFixed(0)}°T</dd>`
         : `<dt>Current</dt><dd>no data here</dd>`) +
       /* Only when a temperature layer is on. With none loaded there is no
          grid to miss, and "no data" would claim something untrue about the
@@ -3170,7 +3269,8 @@ export async function createOceanMap(
   };
 
   const currentAt = (ll: L.LatLng) => {
-    const shown = flows.find((f) => map.hasLayer(f.group))?.layer;
+    const entry = flows.find((f) => map.hasLayer(f.group));
+    const shown = entry?.layer;
     const grid = (shown as unknown as { options?: { data?: VectorGrid } })?.options?.data;
     const head = grid?.[0]?.header;
     if (!head) return null;
@@ -3181,11 +3281,18 @@ export async function createOceanMap(
     const u = grid[0].data[k];
     const v = grid[1].data[k];
     if (typeof u !== 'number' || typeof v !== 'number') return null;
+    const toward = (Math.atan2(u, v) / rad + 360) % 360;
     return {
       speed: Math.hypot(u, v),
-      toward: (Math.atan2(u, v) / rad + 360) % 360,
+      toward,
+      // Meteorological convention for wind, oceanographic for current — see
+      // FlowKind.reads. The bearing itself is the same measurement; which
+      // end of it gets reported is the whole difference.
+      bearing: entry?.kind.reads === 'from' ? (toward + 180) % 360 : toward,
+      reads: entry?.kind.reads ?? 'toward',
       deg: head.dx,
       depth: head.depth ?? 0,
+      height: head.height,
     };
   };
 

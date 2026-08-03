@@ -159,10 +159,10 @@ contrast, the rendered map, two maps on a page, and the clock.
   forecast** — ERA5T runs about five days behind, and CDS requests are
   queued rather than answered, which does not fit an hourly build. It is
   also atmosphere, not ocean, so it is not a fallback for anything on this
-  map; it would be a new quantity. If wind is what is wanted, **ECMWF open
-  data** is the one to use — live, no credentials, verified today at
-  `data.ecmwf.int/forecasts/20260803/00z/`. That is a feature, not
-  resilience, and should be argued on its own.
+  map; it would be a new quantity. **That new quantity has since been
+  built** — ECMWF open data, 10 m wind, `scripts/fetch-wind.py` — and it was
+  argued on its own rather than as resilience, which is what this paragraph
+  asked for. ERA5 remains a no for the reasons above.
 
   *How it would work, if it goes ahead.* The pipelines already have the
   shape: `PRODUCTS` in `fetch-ocean-fields.py` and `BASE`/`LEVELS` in

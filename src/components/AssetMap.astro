@@ -63,7 +63,10 @@ const {
       <span class="om-key usv">NOAA USV</span>
       <span class="om-key glider">Ocean glider</span>
       <span class="om-key argo">Argo float</span>
-      <span class="om-key current">Surface current</span>
+      <!-- Named by the module, not fixed here: the wind and the two current
+           depths share one particle ramp and are mutually exclusive, so this
+           key is what says which of them is drawing. -->
+      <span class="om-key current" data-flow-key>Surface current</span>
       <span class="om-key sst" data-sst-key hidden>Sea surface temp</span>
       <span class="om-field-controls" data-field-controls hidden>
         <label>

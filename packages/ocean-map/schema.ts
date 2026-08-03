@@ -168,6 +168,11 @@ export interface GridHeader {
   units?: string;
   /** Metres below the surface. */
   depth?: number;
+  /** Metres **above** the surface, for an atmospheric field — the wind's
+      analogue of `depth`, and deliberately a separate name. One signed
+      number for both would make 10 m of air and 10 m of water differ by a
+      minus sign nobody would notice reading a header. */
+  height?: number;
   /** Hours after the model run this frame is for; absent for an analysis,
       which has no run to count from. Read from here rather than inferred
       from the filename, for the same reason `depth` is: a mislabelled frame

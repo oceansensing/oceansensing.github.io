@@ -162,7 +162,9 @@ for (const name of ['sst-oisst', 'sst-navy', 'sss-navy']) {
   gridBody(f, g.header, g.data);
 }
 
-for (const name of ['currents', 'currents-60m']) {
+/* Every published vector pair, wind included: it is the same shape off a
+   different model, so it earns the same checks rather than a special case. */
+for (const name of ['currents', 'currents-60m', 'wind']) {
   const g = read(`${name}.json`);
   if (!g) continue;
   checked++;
@@ -181,6 +183,13 @@ for (const name of ['currents', 'currents-60m']) {
   const h = g[0].header;
   if (Math.abs(h.nx * h.dx - 360) > h.dx) {
     fail(f, `spans ${(h.nx * h.dx).toFixed(2)}° of longitude; a global grid must span 360°`);
+  }
+  /* Every grid here starts at the prime meridian. ECMWF's own wind grid does
+     not — it starts at 180°E — so the pipeline rolls it, and this is what
+     says the roll happened. Without it a grid half a world out of place
+     would draw a complete, plausible, entirely wrong wind field. */
+  if (Math.abs(h.lo1) > 1e-6) {
+    fail(f, `starts at ${h.lo1}°E; every published grid starts at 0°E`);
   }
 }
 

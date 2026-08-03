@@ -227,14 +227,26 @@ if (mapPages.length) {
     if (name) credits.add(name);
   }
 
+  /* The animated fields name their publisher in a `source:` field rather
+     than in the attribution literal, because one `buildFlow` serves the two
+     ESPC depths and the ECMWF wind. Reading only the literals silently
+     stopped seeing those layers the moment that refactor landed — the guard
+     went on saying `ok` while it had nothing to check them against, which is
+     the failure mode it exists to prevent in the docs. */
+  for (const m of moduleSource.matchAll(/^\s*source:\s*'([^']+)'/gm)) {
+    credits.add(m[1]);
+  }
+
   // The sources the pipelines write, which the map credits at runtime.
   const readJson = (f) => (fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null);
   const assetsFile = readJson('public/map/ocean-assets.json');
   for (const v of Object.values(assetsFile?.sources ?? {})) credits.add(v);
   const argoFile = readJson('public/map/argo.json');
   if (argoFile?.source) credits.add(argoFile.source);
-  for (const n of ['sst-oisst', 'sst-navy', 'sss-navy']) {
-    const src = readJson(`public/map/${n}.json`)?.header?.source;
+  for (const n of ['sst-oisst', 'sst-navy', 'sss-navy', 'wind']) {
+    // Vector files are a [u, v] pair; scalar files are a single object.
+    const file = readJson(`public/map/${n}.json`);
+    const src = (Array.isArray(file) ? file[0] : file)?.header?.source;
     if (src) credits.add(src);
   }
 

@@ -8,7 +8,7 @@
     "argoEdge": "#3d3000",
     "measure": "#1b2028"
   },
-  "_currents": "Warm pale amber, slow to fast. Amber rather than blue because the two bathymetries are opposite in tone \u2014 Esri Ocean is light, GEBCO dark \u2014 and no blue clears both: any blue pale enough to show on GEBCO's navy lands inside Esri's ocean, and GEBCO's own water runs blue through cyan to the pale mint it paints shallow banks. Amber sits outside that whole range, so one ramp serves both maps and there is no basemap switching to get wrong. Kept pale rather than saturated so the particles are not mistaken for the orange USV markers.",
+  "_currents": "The particle ramp, slow to fast, and it serves **both animated fields** — the ESPC currents and the ECMWF wind. Warm pale amber rather than blue because the two bathymetries are opposite in tone (Esri Ocean light, GEBCO dark) and no blue clears both: any blue pale enough to show on GEBCO's navy lands inside Esri's ocean, and GEBCO's own water runs blue through cyan to the pale mint it paints shallow banks. Amber sits outside that whole range, so one ramp serves both maps and there is no basemap switching to get wrong. Kept pale rather than saturated so the particles are not mistaken for the orange USV markers. Wind reuses it rather than taking a second colour: a search over hue, chroma and lightness found only four ramps clearing every background and every feature, all of them pink — the glider's hue — and the best cleared the features by 24.4 against this ramp's 24.2. The two fields are mutually exclusive, so they never share the screen and there is nothing to tell apart; the legend key names whichever is drawing.",
   "currents": [
     "#ecd7ab",
     "#f1dfbb",
@@ -16,7 +16,7 @@
     "#f9edd9",
     "#fcf2e3"
   ],
-  "_colormaps": "Colour scales the reader can choose, in two groups, and the split is measured rather than editorial. Whichever map is on becomes the water beneath every marker and particle, so scripts/test-contrast.mjs measures every stop of every map against every feature colour by CIEDE2000. The five in markerSafe clear 22 everywhere along their length; nothing else does, and that is not a flaw in the others \u2014 a full-gamut colormap sweeps through the whole wheel, so somewhere along it it passes close to a marker. Measured worst clearance: cmo.haline 11.2, hsv 7.5, jet 6.4, viridis 6.2, grey 5.5, turbo 4.2, inferno 3.0. The five safe ones exist because they were built to dodge the feature gamut, which is exactly why they look less like the standard maps. The standard set is offered anyway \u2014 it is the reader's map and these are the scales oceanography actually speaks \u2014 but the picker groups them apart and the defaults stay in the safe set. The markers keep their dark outlines, which is what carries them on a background the fill contrast does not. The cmo.* and matplotlib entries are ten-stop samples of the published maps, close enough to be recognisable, not the exact tables.",
+  "_colormaps": "Colour scales the reader can choose, in two groups, and the split is measured rather than editorial. Whichever map is on becomes the water beneath every marker and particle, so scripts/test-contrast.mjs measures every stop of every map against every feature colour by CIEDE2000. The five in markerSafe clear 22 everywhere along their length; nothing else does, and that is not a flaw in the others — a full-gamut colormap sweeps through the whole wheel, so somewhere along it it passes close to a marker. Measured worst clearance: cmo.haline 11.2, hsv 7.5, jet 6.4, viridis 6.2, grey 5.5, turbo 4.2, inferno 3.0. The five safe ones exist because they were built to dodge the feature gamut, which is exactly why they look less like the standard maps. The standard set is offered anyway — it is the reader's map and these are the scales oceanography actually speaks — but the picker groups them apart and the defaults stay in the safe set. The markers keep their dark outlines, which is what carries them on a background the fill contrast does not. The cmo.* and matplotlib entries are ten-stop samples of the published maps, close enough to be recognisable, not the exact tables.",
   "colormaps": {
     "thermal": [
       "#880772",
@@ -326,7 +326,7 @@
     "earth",
     "mono"
   ],
-  "_defaultColormap": "Which map each field starts on. A reader can change it; this is the opening choice, and both are the scales oceanography actually reads these fields with \u2014 jet for temperature, cmo.haline for salinity. Neither is in markerSafe: measured, jet's worst clearance from a marker is 6.4 and cmo.haline's is 11.2, against the bar of 22. So a platform sitting on the wrong stop of the opening view has less separation than the gate demands everywhere else. That is a deliberate trade of familiarity against separation \u2014 the markers keep their dark outlines, which is what carries them on a background the fill contrast does not, and the five markerSafe scales stay one click away in the picker.",
+  "_defaultColormap": "Which map each field starts on. A reader can change it; this is the opening choice, and both are the scales oceanography actually reads these fields with — jet for temperature, cmo.haline for salinity. Neither is in markerSafe: measured, jet's worst clearance from a marker is 6.4 and cmo.haline's is 11.2, against the bar of 22. So a platform sitting on the wrong stop of the opening view has less separation than the gate demands everywhere else. That is a deliberate trade of familiarity against separation — the markers keep their dark outlines, which is what carries them on a background the fill contrast does not, and the five markerSafe scales stay one click away in the picker.",
   "defaultColormap": {
     "sst": "jet",
     "sss": "cmo.haline"
@@ -336,7 +336,7 @@
     "sst",
     "sss"
   ],
-  "_separation": "Argo dots are gold, which sits about \u0394E 18 from the current particles \u2014 under the bar the gate applies elsewhere. No yellow clears them: the particles are pale amber because that is the one hue reading on both bathymetries, and paling the ramp far enough to make room drops its own water contrast to 79%. The dots are therefore given a dark outline, which separates a discrete dot from a drifting trail whatever the fill does. Recorded as a named exemption rather than by lowering the threshold, so the compromise stays visible.",
+  "_separation": "Argo dots are gold, which sits about ΔE 18 from the current particles — under the bar the gate applies elsewhere. No yellow clears them: the particles are pale amber because that is the one hue reading on both bathymetries, and paling the ramp far enough to make room drops its own water contrast to 79%. The dots are therefore given a dark outline, which separates a discrete dot from a drifting trail whatever the fill does. Recorded as a named exemption rather than by lowering the threshold, so the compromise stays visible.",
   "separationExempt": [
     "argo"
   ],

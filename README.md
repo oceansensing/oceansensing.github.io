@@ -10,8 +10,8 @@ shuffle and lightbox on observation pages, the asset map, and the UTC clock.
 The map is the one heavyweight: gliders from four national data centres,
 NOAA saildrones, the Argo array, animated currents at two depths,
 sea-surface temperature and salinity, isobaths, a detailed coastline and EEZ
-boundaries — with the colour scale, its range, the isobath opacity and every
-layer under the reader's control. The model fields are a **forecast**, T+36
+boundaries, and ECMWF 10 m wind — with the colour scale, its range, the
+isobath opacity and every layer under the reader's control. The model fields are a **forecast**, T+36
 from the newest ESPC run, and the map's attribution says which hour they are
 valid for and how far ahead of now that is.
 
@@ -92,12 +92,18 @@ npm run data           # storms, gliders (four regional ERDDAPs), USVs, Argo flo
 npm run data:currents  # global + regional current grids, surface and 60 m
 npm run data:tiles     # the 1/12° current tiles (~92 MB per depth, per forecast hour built)
 npm run data:fields      # global + regional sea-surface temperature and salinity grids
+npm run data:wind        # ECMWF 10 m wind — the one pipeline with a Python dependency
 npm run data:field-tiles # native-resolution Navy field tiles (OISST needs none — its regions already are native)
 npm run data:basemaps  # re-sample basemap ocean colours (slow; GEBCO's WMS)
 ```
 
 The tiles are gitignored, so a fresh clone has none and the map simply uses
 the coarser grids until you build them.
+
+`data:wind` is the exception to "no Python dependencies": ECMWF packs its open
+GRIB2 with CCSDS/AEC, which the standard library cannot decode. Install it
+with `pip install -r scripts/requirements-wind.txt` — binary wheels, no system
+packages. Everything else runs on a bare Python 3.
 
 ## Deployment
 

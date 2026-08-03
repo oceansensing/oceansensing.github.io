@@ -14,6 +14,7 @@ npm run data         # storms, gliders (4 regional ERDDAPs), USVs, Argo floats
 npm run data:currents # the global + regional current grids, both depths
 npm run data:tiles   # the 1/12° current tiles (~92 MB per depth, several minutes)
 npm run data:fields  # global + regional SST and salinity grids, all products
+npm run data:wind    # ECMWF 10 m wind (needs eccodes — see below)
 npm run data:field-tiles # the Navy field tiles (OISST needs none — see below)
 npm run data:basemaps # re-sample basemap ocean colours (needs Pillow; slow, GEBCO's WMS)
 npm run data:bathymetry # contour GEBCO into the isobath layer (needs a local grid; once)
@@ -1281,6 +1282,80 @@ The legend key follows it (`Ocean glider`, singular, as the other keys are),
 and so does the hurricane page's preset — a preset naming a layer that no
 longer exists silently switches nothing on, which is why `check:docs` reads
 the names out of `overlays` and fails on a mismatch.
+
+### Wind, and the one Python dependency
+
+`scripts/fetch-wind.py`, `npm run data:wind`, from **ECMWF's open IFS
+forecast** at 0.25°. It is the only atmospheric field on the map and the only
+pipeline here that is not standard library only.
+
+**The dependency is the format, not the effort.** ECMWF packs its open GRIB2
+with data representation template **5.42, CCSDS/AEC** — an adaptive entropy
+coder. Simple packing would have been forty lines of `struct`, the way the
+shapefile reader in `fetch-coastline.py` was; AEC is a few hundred lines of
+bit-level decoding against a format nobody here controls, where a silent
+mis-decode looks exactly like plausible wind. So `eccodes`, pinned in
+`scripts/requirements-wind.txt`, which ships binary wheels with the library
+bundled — a `pip install`, not an `apt` one. Every other pipeline still needs
+nothing, and should stay that way.
+
+**The fetch is a byte range, not a file.** Each step publishes a ~300 MB
+GRIB2 next to a `.index` sidecar giving `_offset` and `_length` per message.
+Reading the sidecar and asking for just `10u` and `10v` takes this from
+300 MB to about **1.5 MB**.
+
+**It is a nowcast, where the ESPC fields are T+36 — and the difference is the
+model's, not a preference.** IFS runs four times a day and lands within
+hours, so its own early steps really are about the present; ESPC runs once
+and lands 24–33 hours later, which is why its lead is counted from its run.
+Measured on 2026-08-03 23:10Z, the 18z run had not published and the 12z run
+was 11 hours old, so the step nearest now was its +12h, valid 00Z — an hour
+ahead. `pick_step()` walks runs freshest-first and takes each one's own
+nearest step, so a run still publishing degrades to a three-hour-older
+complete field rather than to a 404.
+
+**The grid starts at 180°E**, where every other grid here starts at 0. It is
+rolled on the way out rather than passed through with its own `lo1`: one
+convention for every published grid means the next person to write a sampling
+loop cannot get it wrong. `test:schema` fails any published grid whose `lo1`
+is not 0, which is what makes the roll checked rather than assumed — mutation
+-tested by stamping 180 back on.
+
+**Wind is not masked to the ocean, deliberately.** The currents are eroded
+back from the coastline because a current over land is a lie. A wind over
+land is a fact, and a hurricane crossing a coast is exactly when someone
+wants to see it.
+
+Two things on the map side are easy to get wrong and both are silent:
+
+- **A current is named for where it goes; a wind for where it comes from.**
+  A southwesterly blows towards the northeast. `FlowKind.reads` carries which
+  convention a field is reported in, and the readout flips the bearing by 180°
+  for wind. Getting it backwards would be exactly wrong and entirely
+  plausible on screen. `test:map` blows the fixture due east and requires the
+  readout to say **from 270°T**.
+- **Speed needs its own calibration.** Measured on the published grids, the
+  median 10 m wind is 5.97 m/s against the median surface current's 0.22 —
+  **26.7×**. Sharing one `DRIFT` would streak the wind across the map, the
+  same runaway the zoom scaling already has a note about. `DRIFT` is per
+  field, and `test:map` measures both at one view and fails if they diverge
+  by more than 4×; it currently reads p90 1.41 px/frame against 1.59.
+
+**It joins the animated fields' exclusivity group** — one particle field at a
+time. Wind and current particles are told apart by nothing but their motion,
+so two sets over the same water read as one confused field, which is the same
+reason the two current depths exclude each other.
+
+**It reuses the currents' amber ramp**, and that is measured rather than
+lazy. A search over hue, chroma and lightness for a ramp clearing both
+bathymetries, every colormap a reader can switch on, and every marker found
+**four** candidates, all of them pink — the glider's own hue — and the best
+cleared the features by 24.4 against the amber's 24.2. No gain, in a worse
+place, for a second colour to gate forever. It costs nothing because the
+fields are exclusive, so the two ramps never share a screen. Which field is
+drawing is said by the switcher, the attribution, and the legend key, which
+names it — `[data-flow-key]`, seeded with the wrong text in the harness so a
+key that merely happens to be right proves nothing.
 
 ### Sea-surface temperature and salinity
 

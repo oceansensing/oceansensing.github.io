@@ -51,6 +51,7 @@ Colour scale, range and contour opacity are yours to set.
 
 - [US Navy ESPC-D-V02](https://tds.hycom.org/thredds/) — 1/12° global forecast, via HYCOM's OPeNDAP: currents at the surface and at 60 m, sea-surface temperature, and salinity
 - [NOAA PSL OISST v2.1](https://psl.noaa.gov/data/gridded/data.noaa.oisst.v2.highres.html) — observed sea-surface temperature, 1/4° daily
+- [ECMWF IFS](https://www.ecmwf.int/en/forecasts/datasets/open-data) — 10 m wind, 1/4° open forecast data, licensed CC BY 4.0
 
 **Seafloor and shoreline**
 

@@ -1,0 +1,14 @@
+# The one Python dependency in this repository, and only the wind pipeline
+# needs it.
+#
+# ECMWF packs its open GRIB2 with data representation template 5.42 —
+# CCSDS/AEC, an adaptive entropy coder. Nothing in the standard library can
+# unpick that, and a pure-Python decoder would be a few hundred lines of
+# bit-twiddling against a format we do not control, where a silent
+# mis-decode looks exactly like plausible wind. So: eccodes, which ships
+# binary wheels with the library bundled — no apt, no libaec, no compiler.
+#
+# Every other pipeline here is standard library only and should stay that
+# way; see the header of scripts/fetch-wind.py.
+eccodes>=2.43
+numpy>=1.26
