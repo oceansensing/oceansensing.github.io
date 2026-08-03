@@ -1242,18 +1242,25 @@ on a preset naming one that does not exist, and a saved view records them. A
 rename is a small migration — and it costs every reader holding a saved view
 the on/off state of that layer, once.
 
-**Surface gets the acronym; depth gets spelled out.** SST and SSS are special
-cases of quantities that also exist at depth, the same way `Surface currents`
-is a special case of the flow field:
+**Depth is a dimension, so the name carries it.** Every ESPC layer is a
+quantity at a depth:
 
 | | |
 | --- | --- |
-| surface | the standard acronym where there is one — `SST (ESPC)`, `SSS (ESPC)` |
-| at depth | `<Quantity> at <N> m` — `Currents at 60 m`, and `Salinity at 60 m` when it arrives |
+| quantity at depth | `<Quantity> at <N>m` — `Currents at 0m (ESPC)`, `Currents at 60m (ESPC)` |
+| surface scalars | the standard acronym — `SST (ESPC)`, `SSS (ESPC)` |
 
-That keeps the idiomatic name where an oceanographer expects it and still
-leaves room for the depth variants. Full symmetry (`Surface salinity`) was
-the alternative and costs the acronym everyone uses.
+The currents are spelled out because the surface is not special for them:
+0m is one sample of a field that runs all the way down, and `Currents at 0m`
+belongs beside `Currents at 60m` as an equal rather than as `Surface
+currents`. SST and SSS keep their acronyms because those are the names an
+oceanographer reaches for — and when temperature or salinity at depth
+arrives it takes the spelled-out form, `Salinity at 60m (ESPC)`, leaving the
+acronym to mean the surface case it already means.
+
+`(animated)` came off the current layers with this. It separated them from a
+static speed raster that no longer exists (`MERCATOR_RASTER` is false), so it
+was drawing a contrast the reader cannot see.
 
 **The source in parentheses names the product, not the agency** — `(ESPC)`,
 not `(Navy forecast)`. Those two layers said "Navy forecast" while the

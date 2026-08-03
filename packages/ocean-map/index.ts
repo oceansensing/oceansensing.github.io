@@ -2079,19 +2079,23 @@ export async function createOceanMap(
      saved view holding the old name loses that layer's on/off state and
      falls back to the default, once.
 
-     **The naming rule, because depth is coming.** SST and SSS are *surface*
-     temperature and salinity — special cases of quantities that also exist
-     at depth, exactly as `Surface currents` is a special case of the flow
-     field. So the rule the currents already follow applies to the scalars
-     too:
+     **The naming rule, because depth is a dimension here.** Every ESPC layer
+     is a quantity at a depth, so the name says both:
 
-       surface       the standard acronym, if there is one: SST, SSS
-       at depth      `<Quantity> at <N> m`: Temperature at 60 m, Salinity at 60 m
+       quantity at depth   `<Quantity> at <N>m`: Currents at 0m, Currents at 60m
+       surface scalars     the standard acronym: SST, SSS
 
-     which keeps the idiomatic name where oceanographers expect it and still
-     leaves somewhere for `Salinity at 60 m (ESPC)` to go. The alternative —
-     `Surface salinity` for symmetry with the depth form — was considered and
-     costs the acronym everyone actually uses.
+     The currents are spelled out because the surface is not special for
+     them — 0m is one sample of a field that exists all the way down, and
+     `Currents at 0m` sits beside `Currents at 60m` as an equal. SST and SSS
+     keep their acronyms because those are the names an oceanographer
+     reaches for; when temperature or salinity at depth arrives it takes the
+     spelled-out form, `Salinity at 60m (ESPC)`, and the acronym stays
+     reserved for the surface special case.
+
+     `(animated)` is gone from the current layers. It distinguished them
+     from a static speed raster that no longer exists — `MERCATOR_RASTER` is
+     false — so it was describing a contrast the reader cannot see.
 
      The **source** goes in parentheses and names the product, not the
      agency: `(ESPC)`, not `(Navy forecast)`. Two ESPC layers were called
@@ -2102,8 +2106,8 @@ export async function createOceanMap(
      rather than the layer, used by the readout and the colour bar, where
      "Salinity: 34.2 psu" reads better than the acronym would. */
   const overlays: Record<string, L.Layer> = {
-    'Surface currents (animated)': flow,
-    'Currents at 60 m (animated)': flowDeep,
+    'Currents at 0m (ESPC)': flow,
+    'Currents at 60m (ESPC)': flowDeep,
     'SST (OISST analysis)': sstOisst,
     'SST (ESPC)': sstNavy,
     'SSS (ESPC)': sssNavy,

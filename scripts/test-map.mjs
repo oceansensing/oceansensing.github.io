@@ -432,7 +432,7 @@ const SEEDED_VIEW = {
   // prove nothing.
   base: 'Bathymetry (Esri Ocean)',
   overlays: [
-    'Surface currents (animated)',
+    'Currents at 0m (ESPC)',
     'Current speed (Mercator)',
     'Hurricanes',
     'NOAA USVs',
@@ -876,13 +876,13 @@ await new Promise((r) => setTimeout(r, 200));
 const surfaceRead = host.querySelector('.om-point-readout .leaflet-popup-content')?.textContent ?? '';
 
 const overlayLabels = [...host.querySelectorAll('.leaflet-control-layers-overlays label')];
-const deepToggle = overlayLabels.find((l) => /60 m/.test(l.textContent));
+const deepToggle = overlayLabels.find((l) => /60m/.test(l.textContent));
 deepToggle?.querySelector('input')?.click();
 await new Promise((r) => setTimeout(r, 600));
 const labelled = (re) =>
   [...host.querySelectorAll('.leaflet-control-layers-overlays label')].find((l) => re.test(l.textContent));
 // The control rebuilds its inputs on redraw, so re-find rather than reuse.
-const surfaceOffWithDeepOn = labelled(/Surface currents/)?.querySelector('input')?.checked === false;
+const surfaceOffWithDeepOn = labelled(/Currents at 0m/)?.querySelector('input')?.checked === false;
 host._map.closePopup();
 host._map.fire('contextmenu', { latlng: window.L.latLng(11, -51) });
 await new Promise((r) => setTimeout(r, 200));
@@ -964,7 +964,7 @@ const navyRead = host.querySelector('.om-point-readout .leaflet-popup-content')?
    same reading taken at the end says nothing about the case this checks. */
 const sharedSourceAttribution =
   host.querySelector('.leaflet-control-attribution')?.textContent ?? '';
-const currentsOnWithNavy = [/Surface currents/, /Currents at 60 m/].some(
+const currentsOnWithNavy = [/Currents at 0m/, /Currents at 60m/].some(
   (label) => overlayLabelled(label)?.querySelector('input')?.checked === true
 );
 
