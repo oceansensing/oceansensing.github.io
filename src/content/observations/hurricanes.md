@@ -39,7 +39,7 @@ Colour scale, range and contour opacity are yours to set.
 
 **Platforms**
 
-- [NOAA National Hurricane Center](https://www.nhc.noaa.gov/) — storm positions, forecast tracks and cones, and the observed track over the past five days
+- [NOAA National Hurricane Center](https://www.nhc.noaa.gov/) — storm positions, forecast tracks and cones, and the observed track over the past ten days
 - [US IOOS Glider DAC](https://gliders.ioos.us/erddap) — glider positions, United States
 - [NOC / BODC](https://linkedsystems.uk/erddap) — glider positions, United Kingdom
 - [Ocean Tracking Network](https://erddap.oceantrack.org/erddap) — glider positions, Canada

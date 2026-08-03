@@ -417,11 +417,16 @@ three decisions:
   both bathymetries in `test:contrast`.
 - **Its own window, and this is the one thing here that is not a taste
   call.** `ARGO_DAYS = max(HISTORY_DAYS, 12)` — a float cycle plus slack. The
-  shared five-day window suits a glider reporting hourly; applied to Argo it
+  shared window suits a glider reporting hourly; applied to Argo it
   silently meant "half the fleet is mid-dive, so leave it off the map".
   Measured against Ifremer on 2026-08-02: **1,992 floats in 5 days, 3,881 in
   10, 4,138 in 15, 4,293 in 30**. The fleet is about 4,200 and five days was
   showing half of it, with no sign on screen that anything was missing.
+
+  `HISTORY_DAYS` has since gone to 10, which narrows the gap but does not
+  close it — 3,881 floats against 4,027 at twelve — so the floor still
+  earns its place. The `max()` is what makes that safe: raise the shared
+  window past twelve and Argo simply follows it up.
   Twelve rather than the nominal ten because floats run late — ice
   avoidance, a missed satellite pass — and a window set exactly to the cycle
   clips whichever tail of the fleet is behind: 3,881 at 10 days against

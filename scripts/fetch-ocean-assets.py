@@ -80,7 +80,18 @@ GLIDER_SOURCES = [
 # map draws: how much glider and USV track is fetched, how far back a storm's
 # observed path is drawn, and how recently a dataset must have reported to
 # count as active. Change it here and the whole map follows.
-HISTORY_DAYS = 5
+#
+# Ten rather than five since 2026-08-03. Five days of a glider flying at
+# half a knot is a short line — long enough to say where it is, too short to
+# show where it has been working — and a mission runs for weeks. Ten gives a
+# track with shape to it without reaching back into water the reader is no
+# longer looking at.
+#
+# It moves storms as well, and that is the point of the knob being single:
+# the NHC best track carries weeks and is trimmed to this window, so a storm
+# now draws ten days of observed path instead of five. Nothing else had to
+# change for that, which is the property worth keeping.
+HISTORY_DAYS = 10
 
 # Argo is the one platform this window does not suit, and the reason is the
 # platform rather than the window. A glider reports hourly and a storm every
