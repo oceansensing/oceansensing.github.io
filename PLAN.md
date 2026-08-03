@@ -114,15 +114,60 @@ contrast, the rendered map, two maps on a page, and the clock.
   it holds. Its field names for last-known position were not obvious on a
   first pass.
 
-- **No layer on the map is Mercator any more.** Mercator was the original ask.
-  The animation never could be — particles need numeric u/v and Copernicus
-  publishes those only behind credentials — so it runs on the US Navy
-  ESPC-D-V02 forecast via HYCOM, open and the same 1/12°. The static Mercator
-  speed raster was the one genuinely Mercator layer, and it is now switched
-  off at your request (`MERCATOR_RASTER = false`), scaffolding left in place.
-  If Mercator matters again, either flip that flag back, or add Copernicus
-  Marine credentials as GitHub secrets and the pipeline can pull numeric u/v
-  from the toolbox for the animation too. Both need a Copernicus account.
+- **A second ocean model, because ESPC stalls.** Probed 2026-08-03, and the
+  question splits in two.
+
+  *What is actually wrong.* ESPC is flaky in two unrelated ways, and only one
+  of them is already handled. Per-request failures — index 70 fine, index 76
+  a 500 "Stale file handle" minutes apart — are covered by `usable_step()`
+  and the tile retries. The other is that the **run itself goes late**: on
+  2026-08-03 the HYCOM aggregation held nine runs, daily from 07-24 12Z to
+  08-01 12Z, then nothing for ~40 hours. No amount of retrying fixes that.
+  Only a different model does.
+
+  *Mercator: yes, and it is the only like-for-like option.* Same 1/12°,
+  currents, temperature and salinity together. Re-checked today and the
+  access story has not changed: the product's STAC record advertises a
+  thumbnail and no data asset, and the ARCO S3 bucket answers **403**
+  unsigned. So it needs a Copernicus account, two GitHub secrets, and the
+  `copernicusmarine` toolbox — which would be the first Python dependency in
+  CI, where today there are none. That is the whole cost, and it buys the
+  only real answer to a stalled run.
+
+  *The open alternatives have thinned, which is worth knowing before
+  reaching for one.* NOAA retired NOMADS' OPeNDAP in 2025 (SCN 25-81), so
+  RTOFS is no longer reachable the way HYCOM is. OSCAR on CoastWatch ERDDAP
+  is stale since **2014-10-06**. Neither is a fallback.
+
+  *ERA5: no, and not for effort reasons.* It is a **reanalysis, not a
+  forecast** — ERA5T runs about five days behind, and CDS requests are
+  queued rather than answered, which does not fit an hourly build. It is
+  also atmosphere, not ocean, so it is not a fallback for anything on this
+  map; it would be a new quantity. If wind is what is wanted, **ECMWF open
+  data** is the one to use — live, no credentials, verified today at
+  `data.ecmwf.int/forecasts/20260803/00z/`. That is a feature, not
+  resilience, and should be argued on its own.
+
+  *How it would work, if it goes ahead.* The pipelines already have the
+  shape: `PRODUCTS` in `fetch-ocean-fields.py` and `BASE`/`LEVELS` in
+  `fetch-currents.py` are descriptors, so a source becomes a list tried in
+  order rather than a constant. Three things decide whether it is honest:
+
+  - **The published contract already carries `source` and `modelRun`**, and
+    the map already shows both. So a fallback is visible on screen the
+    moment it happens, with no new mechanism — which is the difference
+    between resilience and a map that quietly shows another model.
+  - **Fall back as a set, or not at all.** Currents from ESPC beside SST
+    from Mercator at a different hour is two oceans on one map. Either both
+    switch or neither does.
+  - `check:docs` currently *fails* if the page credits Copernicus while
+    `MERCATOR_RASTER` is false. That guard is the right way round and would
+    then require the page to name it — leave it alone.
+
+  The old Mercator raster scaffolding is still there (`MERCATOR_RASTER =
+  false`, the `currents-raster` pane, the tile definition, the blend CSS), so
+  a picture-only Mercator layer remains one flag. It is not a fallback,
+  though: it is WMTS imagery, and the particles need numeric u/v.
 - **Payload.** Currents come in three tiers per depth: a 0.96° global grid
   with the page, 0.24°/0.12° regional grids on zooming in, and 1/12° tiles
   per view at zoom 7+ (79–144 KB each). SST is two tiers — OISST has no tile
