@@ -1148,10 +1148,33 @@ measured, the tiles are RGBA and **97.7% fully transparent** across the Gulf,
 
 Three fields, `npm run data:fields`, built by `scripts/fetch-ocean-fields.py`:
 
-- **OISST** (NOAA/NCEI, 1/4°, daily) — an *analysis*: observations blended
-  onto a grid, so it is what happened. Uses the **preliminary** product, not
-  the final: final was 15 days behind on 2026-08-01 against 4 for
-  preliminary, and a fortnight-old field has no business beside a live storm.
+- **OISST** (NOAA PSL, 1/4°, daily) — an *analysis*: observations blended
+  onto a grid, so it is what happened.
+
+  **From NOAA PSL rather than NCEI's ERDDAP**, and the reason is measured:
+  on 2026-08-03 PSL's newest day was 2026-08-01 against NCEI preliminary's
+  2026-07-28. Four days, on the one product whose job is to say what the
+  ocean is doing now. Three incidental gains — it is THREDDS, the dialect
+  this file already speaks, so it shares the slab logic instead of ERDDAP's;
+  its longitudes run 0–360 like the model grids; and it avoids
+  `www.ncei.noaa.gov`, the host whose AAAA record refuses connections and
+  cost 120 s a request against 0.9 until `_ipv4_first` went in.
+
+  Two things it needs that the Navy products do not. Its time axis counts
+  **days from 1800**, not hours from a run, so the unit is read from the
+  `.das` rather than assumed — getting that wrong would place the field
+  centuries away and still parse. And the file is **per year**, so
+  `base_url()` fills in the year and falls back to the previous one when
+  January's is not there yet.
+
+  **Its "no forecast" is now a stated property, not an inferred one, and
+  this is where the switch drew blood.** The pipeline used to decide an
+  analysis had no frames by looking at its transport — `kind == 'erddap'`
+  meant OISST meant analysis — which held only by coincidence. Moving the
+  product to THREDDS broke it the same minute: the pipeline started asking a
+  daily analysis for forecast hours, failed on its time axis, and fell back
+  to the previous file, so the map went on serving the *old NCEI data* while
+  the log reported the new source. `'analysis': True` says it outright.
 - **Navy ESPC-D-V02** (1/12°, hourly) — a *forecast*, and the same model the
   currents come from, so temperature and flow are one ocean rather than two.
 - **Navy ESPC-D-V02 salinity** — the same variable file, so temperature and

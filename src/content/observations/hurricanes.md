@@ -50,7 +50,7 @@ Colour scale, range and contour opacity are yours to set.
 **Ocean fields**
 
 - [US Navy ESPC-D-V02](https://tds.hycom.org/thredds/) — 1/12° global forecast, via HYCOM's OPeNDAP: currents at the surface and at 60 m, sea-surface temperature, and salinity
-- [NOAA NCEI OISST v2.1](https://www.ncei.noaa.gov/products/optimum-interpolation-sst) — observed sea-surface temperature, 1/4° daily, preliminary product
+- [NOAA PSL OISST v2.1](https://psl.noaa.gov/data/gridded/data.noaa.oisst.v2.highres.html) — observed sea-surface temperature, 1/4° daily
 
 **Seafloor and shoreline**
 

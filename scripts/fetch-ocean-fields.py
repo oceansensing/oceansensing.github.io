@@ -135,13 +135,39 @@ PRODUCTS = [
         # temperature of 40 is a fill value.
         'valid': (-5.0, 45.0),
         'label': 'SST (OISST analysis)',
-        'source': 'NOAA/NCEI OISST v2.1 preliminary',
-        # Preliminary rather than final: final runs about a fortnight behind,
-        # which is too stale to sit beside a live storm track. Measured on
-        # 2026-08-01 — final was 15 days back, preliminary 4.
-        'base': ('https://www.ncei.noaa.gov/erddap/griddap/'
-                 'ncdc_oisst_v2_avhrr_prelim_by_time_zlev_lat_lon'),
-        'kind': 'erddap',
+        'source': 'NOAA PSL OISST v2.1',
+        # NOAA PSL rather than NCEI's ERDDAP, and the reason is freshness
+        # measured rather than assumed: on 2026-08-03 PSL's newest day was
+        # 2026-08-01 against NCEI preliminary's 2026-07-28. Four days, on a
+        # product whose whole job is to say what the ocean is doing now.
+        #
+        # Three incidental gains. It is THREDDS, the dialect the current
+        # pipeline already speaks, so it shares this file's slab logic
+        # instead of ERDDAP's. Its longitudes run 0-360 like the model
+        # grids. And it avoids www.ncei.noaa.gov altogether — the host
+        # advertising an AAAA record that refuses connections, which cost
+        # 120 s a request against 0.9 until _ipv4_first went in.
+        #
+        # **The file is per year**, hence the placeholder: PSL publishes
+        # sst.day.mean.2026.nc and starts a new one each January. See
+        # base_url(), which falls back to last year's file when this year's
+        # is missing or empty — for the first days of January it is.
+        'base': ('https://psl.noaa.gov/thredds/dodsC/Datasets/'
+                 'noaa.oisst.v2.highres/sst.day.mean.{year}.nc'),
+        # Its own dialect: THREDDS like the Navy products, but the time axis
+        # counts days from 1800 rather than hours from the run, and there is
+        # no zlev dimension to index past.
+        'kind': 'psl',
+        # **An analysis, so it has no forecast to publish.** Stated rather
+        # than inferred, and that is the point: this used to be read off the
+        # transport — 'erddap' meant OISST meant analysis — which was a
+        # proxy that held only by coincidence. Moving this product from
+        # NCEI's ERDDAP to PSL's THREDDS broke it instantly, and the way it
+        # broke is the reason to be explicit: the pipeline started asking a
+        # daily analysis for forecast hours, failed on its time axis, and
+        # fell back to the previous file, so the map went on showing the old
+        # source while the log said the new one was fine.
+        'analysis': True,
         'var': 'sst',
         # Its own grid: 1/4 degree, longitude 0-360 like the Navy model's.
         'lat0': -89.875, 'dlat': 0.25, 'nlat': 720,
@@ -204,6 +230,28 @@ PRODUCTS = [
         'tiles': True,
     },
 ]
+
+
+def base_url(product: dict) -> str:
+    """The dataset URL, with the year filled in for products published yearly.
+
+    PSL starts a new file each January, so on the 1st the current year's file
+    may not exist yet or may hold nothing usable. Rather than let one day a
+    year fail, fall back to the previous year — its last days are the ones
+    anybody wants at that point anyway.
+    """
+    base = product['base']
+    if '{year}' not in base:
+        return base
+    year = datetime.now(timezone.utc).year
+    this_year = base.replace('{year}', str(year))
+    try:
+        if time_axis(this_year) > 0:
+            return this_year
+    except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError):
+        pass
+    print(f'  {year} file not usable yet — falling back to {year - 1}', file=sys.stderr)
+    return base.replace('{year}', str(year - 1))
 
 
 def encode(query: str) -> str:
@@ -320,7 +368,7 @@ def newest(product: dict) -> list[tuple[str, str, str]]:
     last step is not the one anybody wants.
     """
     if product['kind'] == 'erddap':
-        body = get(encode(f"{product['base']}.asc?time[last]"), timeout=90)
+        body = get(encode(f'{base_url(product)}.asc?time[last]'), timeout=90)
         seconds = None
         for line in body.splitlines():
             token = line.strip().rstrip(',')
@@ -339,24 +387,29 @@ def newest(product: dict) -> list[tuple[str, str, str]]:
             ('last-1', (stamp - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ'), ''),
         ]
 
-    das = get(f"{product['base']}.das", timeout=60)
-    marker = 'hours since '
+    das = get(f'{base_url(product)}.das', timeout=60)
+    unit = 'days' if product['kind'] == 'psl' else 'hours'
+    marker = f'{unit} since '
     at = das.find(marker, das.find('time {'))
     epoch = datetime.strptime(
-        das[at + len(marker):at + len(marker) + 19], '%Y-%m-%d %H:%M:%S'
+        das[at + len(marker):at + len(marker) + 19].strip(), '%Y-%m-%d %H:%M:%S'
     ).replace(tzinfo=timezone.utc)
+    # PSL counts days from 1800; the Navy products count hours from the run.
+    # Read the unit rather than assume it: getting this wrong would place the
+    # field centuries away and still parse cleanly.
+    scale = 24.0 if unit == 'days' else 1.0
 
-    last = time_axis(product['base']) - 1
-    body = get(encode(f"{product['base']}.ascii?time[0:1:{last}]"), timeout=90)
+    last = time_axis(base_url(product)) - 1
+    body = get(encode(f'{base_url(product)}.ascii?time[0:1:{last}]'), timeout=90)
     tail = [line for line in body.splitlines() if line.strip()][-1]
-    hours = [float(t) for t in tail.split(',') if t.strip()]
+    hours = [float(t) * scale for t in tail.split(',') if t.strip()]
     if not hours:
         raise RuntimeError('no time axis')
     # Which daily run each step came from. Optional: a dataset without a
     # time_run axis still works, it just cannot say.
     runs: list[float] = []
     try:
-        body = get(encode(f"{product['base']}.ascii?time_run[0:1:{last}]"), timeout=90)
+        body = get(encode(f'{base_url(product)}.ascii?time_run[0:1:{last}]'), timeout=90)
         tail = [line for line in body.splitlines() if line.strip()][-1]
         runs = [float(t) for t in tail.split(',') if t.strip()]
     except (urllib.error.URLError, TimeoutError, ValueError, OSError):
@@ -381,9 +434,14 @@ def fetch(product: dict, when: str, y0: int, y1: int, x0: int, x1: int,
     if product['kind'] == 'erddap':
         # ERDDAP wants the surface level named; the dataset carries a single
         # zlev, so index 0 is it.
-        url = f"{product['base']}.asc?{var}[{when}][0]{span}"
+        url = f'{base_url(product)}.asc?{var}[{when}][0]{span}'
+    elif product['kind'] == 'psl':
+        # sst[time][lat][lon] — no zlev. Indexing one past the end of the
+        # dimensions would not error, it would read the latitude axis as if
+        # it were the level and return a grid of the wrong shape.
+        url = f'{base_url(product)}.ascii?{var}[{when}]{span}'
     else:
-        url = f"{product['base']}.ascii?{var}[{when}][0]{span}"
+        url = f'{base_url(product)}.ascii?{var}[{when}][0]{span}'
     width = (x1 - x0) // stride_lon + 1
     low, high = product.get('valid', (-5.0, 45.0))
     grid = rows(get(encode(url)), width, low, high)
@@ -588,19 +646,19 @@ def lead_steps(product: dict, leads: list[int]) -> list[tuple[int, str, str, str
     aggregation is dropped rather than clamped, since a clamped +48h file
     would hold some other hour under the right name.
     """
-    das = get(f"{product['base']}.das", timeout=60)
+    das = get(f'{base_url(product)}.das', timeout=60)
     marker = 'hours since '
     at = das.find(marker, das.find('time {'))
     epoch = datetime.strptime(
         das[at + len(marker):at + len(marker) + 19], '%Y-%m-%d %H:%M:%S'
     ).replace(tzinfo=timezone.utc)
 
-    last = time_axis(product['base']) - 1
-    body = get(encode(f"{product['base']}.ascii?time[0:1:{last}]"), timeout=90)
+    last = time_axis(base_url(product)) - 1
+    body = get(encode(f'{base_url(product)}.ascii?time[0:1:{last}]'), timeout=90)
     hours = [float(t) for t in [l for l in body.splitlines() if l.strip()][-1].split(',') if t.strip()]
     runs: list[float] = []
     try:
-        body = get(encode(f"{product['base']}.ascii?time_run[0:1:{last}]"), timeout=90)
+        body = get(encode(f'{base_url(product)}.ascii?time_run[0:1:{last}]'), timeout=90)
         runs = [float(t) for t in [l for l in body.splitlines() if l.strip()][-1].split(',') if t.strip()]
     except (urllib.error.URLError, TimeoutError, ValueError, OSError):
         pass
@@ -668,7 +726,7 @@ def build_product(product: dict, tiles_only: bool) -> None:
     # An analysis has no forecast, so it publishes the one step it has. That
     # is why the lead control offers nothing when OISST is the field showing:
     # the absence is in the data, not a special case in the map.
-    frames = ([(0, when, valid, run)] if product['kind'] == 'erddap'
+    frames = ([(0, when, valid, run)] if product.get('analysis')
               else lead_steps(product, LEADS))
 
     for lead, step, lead_valid, lead_run in frames:

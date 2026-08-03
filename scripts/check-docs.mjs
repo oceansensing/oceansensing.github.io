@@ -197,7 +197,7 @@ const WORDED_AS = {
   'GEBCO Compilation Group': 'GEBCO',
   'NOAA PMEL ERDDAP': 'NOAA PMEL',
   'Argo GDAC via Ifremer ERDDAP': 'Ifremer Argo GDAC',
-  'NOAA/NCEI OISST v2.1 preliminary': 'NOAA NCEI OISST v2.1',
+  'NOAA PSL OISST v2.1': 'NOAA PSL OISST v2.1',
 };
 
 /* Scaffolding, not a live layer: MERCATOR_RASTER is false, so nothing is
