@@ -240,6 +240,11 @@ files['tiles-60m/index'] = { ...files['tiles/index'], depth: 60 };
    "something got drawn" — the bug the 60 m current layer shipped with when
    its tile path was hardcoded. */
 const bathyFetched = [];
+/* The offline basemap weighs 4.2 MB — eleven times what it did when it
+   loaded with the page. It must cost nothing at all until someone selects
+   it, which is the only reason it can be published at a resolution worth
+   having. */
+const coastlineFetched = [];
 const ring = (lon, lat) => [
   [lon, lat], [lon + 2, lat], [lon + 2, lat + 2], [lon, lat + 2], [lon, lat],
 ];
@@ -278,6 +283,7 @@ const bathyIndex = {
 let identifyUrl = null;
 let gazetteerUrl = null;
 globalThis.fetch = async (u) => {
+  if (String(u).includes('coastline.json')) coastlineFetched.push(String(u));
   if (String(u).includes('/map/bathy')) {
     bathyFetched.push(String(u));
     if (String(u).includes('bathy-deep')) return { json: async () => bathyDeepGeo };
@@ -792,7 +798,6 @@ const surfaceRead = host.querySelector('.om-point-readout .leaflet-popup-content
 
 const overlayLabels = [...host.querySelectorAll('.leaflet-control-layers-overlays label')];
 const deepToggle = overlayLabels.find((l) => /60 m/.test(l.textContent));
-const surfaceToggle = overlayLabels.find((l) => /Surface currents/.test(l.textContent));
 deepToggle?.querySelector('input')?.click();
 await new Promise((r) => setTimeout(r, 600));
 const labelled = (re) =>
@@ -1403,6 +1408,29 @@ const bathyPaneZ = (name) =>
   Number(host.querySelector(`.leaflet-${name}-pane`)?.style.zIndex ?? NaN);
 const bathyRequestsBeforeSwitchOn = bathyFetched.length;
 
+/* The offline basemap, exercised the way a reader reaches it: it must have
+   asked for nothing up to here, and drawn land once selected. */
+const coastlineRequestsBeforeSwitchOn = coastlineFetched.length;
+const coastlineBase = [...host.querySelectorAll('.leaflet-control-layers-base label')]
+  .find((l) => /Coastline only/.test(l.textContent));
+coastlineBase?.querySelector('input')?.click();
+await new Promise((r) => setTimeout(r, 600));
+const coastlineRequestsAfterSwitchOn = coastlineFetched.length;
+const landDrawn = Object.values(host._map._layers).filter(
+  (l) => /map-land/.test(l.options?.className ?? '')
+).length;
+/* Back to GEBCO, and switching away and back must not fetch it twice: the
+   latch is what keeps a 4.2 MB file from being re-read on every toggle. */
+[...host.querySelectorAll('.leaflet-control-layers-base label')]
+  .find((l) => /GEBCO/.test(l.textContent))?.querySelector('input')?.click();
+await new Promise((r) => setTimeout(r, 300));
+coastlineBase?.querySelector('input')?.click();
+await new Promise((r) => setTimeout(r, 400));
+const coastlineRequestsAfterToggling = coastlineFetched.length;
+[...host.querySelectorAll('.leaflet-control-layers-base label')]
+  .find((l) => /GEBCO/.test(l.textContent))?.querySelector('input')?.click();
+await new Promise((r) => setTimeout(r, 300));
+
 const bathyToggle = overlayLabelled(/^\s*Isobaths/);
 bathyToggle?.querySelector('input')?.click();
 await new Promise((r) => setTimeout(r, 400));
@@ -1559,6 +1587,16 @@ const checks = [
   // ---- isobaths
   ['isobaths fetch nothing until the layer is switched on',
     bathyRequestsBeforeSwitchOn === 0],
+  /* Same rule for the offline basemap, and here it is what makes the file
+     affordable: rebuilt from Natural Earth 10m it is 4.2 MB against 0.3, so
+     loading it with the page for a basemap most readers never pick would be
+     a poor trade for all of them. */
+  ['the offline basemap is offered', !!coastlineBase],
+  ['and fetches nothing until it is selected', coastlineRequestsBeforeSwitchOn === 0],
+  ['selecting it fetches the file once and draws land',
+    coastlineRequestsAfterSwitchOn === 1 && landDrawn > 100],
+  ['switching away and back does not fetch it again',
+    coastlineRequestsAfterToggling === 1],
   ['switching them on fetches the global deep file once',
     bathyDeepAsked === 1],
   ['at zoom >= 6 the fine tiles draw and the coarse global set stands down',

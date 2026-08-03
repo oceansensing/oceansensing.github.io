@@ -28,11 +28,10 @@ const {
 
 /* Data comes from /map/*.json, refreshed on every deploy by the scripts in
    scripts/ (see .github/workflows/deploy.yml). Leaflet is bundled from npm
-   rather than a CDN. Every basemap is a third-party tile service, so a page
-   carrying this map requests tiles from one of them. The offline
-   coastline-only option that used to be the alternative was removed: it was
-   the only basemap making no outside request, and it was also too coarsely
-   simplified to be worth looking at. */
+   rather than a CDN. The default basemap is GEBCO's bathymetry, so a page
+   carrying this map does request tiles; readers who would rather not can
+   switch to "Coastline only", drawn from a file shipped with the site. That
+   file is fetched only when they do. */
 ---
 
 <figure class="map-figure" data-ocean-map>

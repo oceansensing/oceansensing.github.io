@@ -18,6 +18,7 @@ npm run data:field-tiles # the Navy field tiles (OISST needs none — see below)
 npm run data:basemaps # re-sample basemap ocean colours (needs Pillow; slow, GEBCO's WMS)
 npm run data:bathymetry # contour GEBCO into the isobath layer (needs a local grid; once)
 npm run data:bathy-tiles # just the 20-100 m tiles of that
+npm run data:coastline # rebuild the offline coastline basemap (Natural Earth; once)
 npm run test:units   # the map's renderer-independent modules, directly
 npm run test:schema  # every published file against the contract in schema.ts
 npm run test:multimap # two maps on one page stay out of each other's way
@@ -304,9 +305,9 @@ with.
 Leaflet, self-hosted from npm. Reads, from `public/map/`: `ocean-assets.json`
 (storms, gliders, USVs), `argo.json`, the current grids (`currents.json`,
 `currents-atlantic.json`, `currents-arctic.json`, `tiles/`), and
-`boundaries.json` (Natural Earth, RDP-simplified). All are committed except
-the tiles. `coastline.json` is still published but nothing fetches it — see
-Basemaps.
+`coastline.json` + `boundaries.json` (Natural Earth, RDP-simplified). All are
+committed except the current tiles. `coastline.json` is fetched only when its
+basemap is chosen — see Basemaps.
 
 Vector layers carry a **`className`, never a colour** — CSS owns their stroke and
 fill so a theme switch restyles every path with no redraw. Adding a hardcoded
@@ -521,18 +522,43 @@ fetched hourly (see below).
 
 ### Basemaps
 
-GEBCO is the default; Esri Ocean and OpenStreetMap are the alternatives.
+GEBCO is the default. Esri Ocean, OpenStreetMap and an offline coastline-only
+layer are the alternatives; the coastline one is the no-tracking option and
+ships with the site.
 
-**There is no longer a no-tracking basemap, and that is a deliberate
-trade.** A fourth option, "Coastline only", drew `coastline.json` from the
-site's own files and was the only basemap making no third-party request. It
-was removed at the author's call for the reason it was never much use:
-Natural Earth is simplified hard enough to commit, so at any working zoom it
-drew a blocky line, and a basemap nobody wants to look at is not a choice.
-Every basemap now means tile requests off site. The file stays published for
-anyone reading `dataBase`, and there is **no pipeline in this repo that
-regenerates it** — it was built once by hand — so restoring the option at a
-usable fidelity means writing one and committing a much larger file.
+**That one was briefly removed for being blocky, and the fix was to build it
+properly.** It had no generator — it was made once by hand and committed at
+1,012 rings, 20,086 vertices, coordinates rounded to *two decimals*, so the
+rounding alone was coarser than the zoom it was read at. Measured, its
+segments ran to a median of **33.7 screen pixels at zoom 7** and 94.8 at p90.
+
+`scripts/fetch-coastline.py` (`npm run data:coastline`) now builds it from
+Natural Earth 10m physical land and minor islands, taken from Natural Earth's
+own S3 rather than a GeoJSON mirror — the authoritative copy, and 3.3 MB of
+shapefile against 18.3 MB of the same data as GeoJSON. **Standard library
+only, including the shapefile reader**: a `.shp` polygon record is a box, a
+part count, a point count, the offsets and then pairs of little-endian
+doubles, which is forty lines and less than a dependency costs.
+
+The tolerance is set from the screen, not from the source's fidelity — the
+same lesson the isobaths learned, and for the same reason:
+
+| tolerance | vertices | median @z7 | p90 | raw | gzipped |
+| --- | --- | --- | --- | --- | --- |
+| 0.010° | 163,777 | 6.35 px | 18.8 | 3.08 MB | 1.02 MB |
+| **0.006°** | **223,005** | **4.63 px** | **13.9** | **4.19 MB** | **1.36 MB** |
+| 0.003° | 309,015 | 3.24 px | 9.8 | 5.80 MB | 1.83 MB |
+
+0.006 is the knee: a third more bytes below it buys 1.4 px, which is not
+something an eye picks out of filled land, and above it the p90 climbs back
+towards what was rejected.
+
+**It is fetched only when a reader selects that basemap**, and that is what
+makes 4.2 MB affordable — it is eleven times the file it replaces, and it
+used to load with every page. `whenChosen()` in the module is the latch, and
+it fires once: switching away and back does not refetch. `test:map` holds all
+three of those — nothing requested before selection, one request and land
+drawn after it, still one after toggling.
 
 Tone matters, because dark mode dims the tile pane and that was written when
 the light Esri basemap was the default — GEBCO's deep ocean sits near 0.10
@@ -918,9 +944,10 @@ alternative and is on a host already trusted here for the EEZ lines, but it
 renders **bright green with about half the ink**; EMODnet comes out neutral
 grey, so CSS tints it the way it tints the EEZ tiles.
 
-`coastline.json` is no longer drawn anywhere. It was the offline basemap
-until that option was removed, and the same coarseness is why: the
-simplification that let it be committed is what made it blocky.
+`coastline.json` stays exactly where it was — it is still the offline
+no-tracking basemap, and it has since been rebuilt at eleven times the detail
+(see Basemaps). It is not drawn *here*, though: this is the shoreline overlay,
+which is EMODnet's, and the two are different layers for different jobs.
 
 **Its tint follows the basemap, not the theme, and it shipped following the
 theme.** EMODnet serves a neutral `#808080` line, so CSS decides which way it

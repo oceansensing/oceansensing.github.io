@@ -232,13 +232,17 @@ export async function createOceanMap(
      platforms sit relative to the ocean floor. GEBCO leads; Esri's ocean
      basemap is the lighter alternative.
 
-     There used to be a fourth, "Coastline only (no tracking)", drawn from
-     `coastline.json` shipped with the site — the one basemap that made no
-     third-party request. It is gone at the author's call: Natural Earth is
-     simplified hard enough to fit in the repo, so at any working zoom it
-     drew a blocky line, and a basemap nobody wants to look at is not a
-     choice. **Every basemap now means tile requests off site.** The file
-     stays published for anyone reading `dataBase`; nothing here fetches it. */
+     "Coastline only (no tracking)" is the fourth, drawn from
+     `coastline.json` shipped with the site, and the only basemap that makes
+     no third-party request at all. It was briefly removed for being blocky
+     — the file was built once by hand with no generator, at a median
+     segment of 33.7 screen pixels at zoom 7 — and is back because
+     `scripts/fetch-coastline.py` now builds it properly, at 4.6 px.
+
+     **It is fetched only when a reader picks it**, which is what makes 4.2
+     MB affordable: it is eleven times the file it replaces, and loading
+     that with the page for a basemap almost nobody selects would be a poor
+     trade for everybody else. `whenChosen` below is that latch. */
   const bathymetry = L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
     { attribution: 'Esri — GEBCO, NOAA, National Geographic', maxZoom: 13 }
@@ -1560,6 +1564,14 @@ export async function createOceanMap(
     attribution: 'GEBCO Compilation Group',
   });
 
+  /* The offline basemap. Empty until someone selects it — see `whenChosen`
+     at the bottom of the file, which fills it on first add and never again.
+     Attribution is declared here rather than per-polygon: 7,720 rings would
+     otherwise register the same credit 7,720 times. */
+  const coastline = L.layerGroup([], {
+    attribution: '<a href="https://www.naturalearthdata.com/">Natural Earth</a> — land',
+  });
+
   const bases: Record<string, L.Layer> = {
     'Bathymetry (GEBCO)': gebco,
     'Bathymetry (Esri Ocean)': bathymetry,
@@ -1567,6 +1579,7 @@ export async function createOceanMap(
       attribution: '© OpenStreetMap contributors',
       maxZoom: 19,
     }),
+    'Coastline only (no tracking)': coastline,
   };
   gebco.addTo(map);
 
@@ -2669,8 +2682,46 @@ export async function createOceanMap(
     if (allBounds && allBounds.isValid()) map.fitBounds(allBounds.pad(0.1));
   };
 
-  // ---- borders (overlay) ----
+  // ---- coastline (the offline basemap) and borders (overlay) ----
   const flip = (line: number[][]) => line.map(([x, y]) => [y, x] as [number, number]);
+
+  /* Fetch a layer's data the first time it is switched on, once.
+
+     `coastline.json` is 4.2 MB — eleven times what it was when it loaded
+     with the page, which it can no longer afford to do for a basemap most
+     readers never pick. The isobaths hold to the same rule for the same
+     reason, and it is the reason the file could be rebuilt at a resolution
+     worth having: what a reader pays is only what they asked to see. */
+  const whenChosen = (layer: L.Layer, load: () => void) => {
+    let asked = false;
+    const once = () => {
+      if (asked) return;
+      asked = true;
+      load();
+    };
+    if (map.hasLayer(layer)) once();
+    /* Registered per event rather than as one space-separated string: the
+       combined form falls through to Leaflet's generic overload, which types
+       the argument as a bare LeafletEvent with no `layer` on it. */
+    const chosen = (e: L.LayersControlEvent) => {
+      if (e.layer === layer) once();
+    };
+    map.on('baselayerchange', chosen);
+    map.on('overlayadd', chosen);
+  };
+
+  whenChosen(coastline, () => {
+    fetch(`${DATA}coastline.json`)
+      .then((r) => r.json())
+      .then(({ rings }) => {
+        /* One polygon per ring, as before. 7,720 of them is well inside what
+           SVG carries — the isobaths draw 235,000 points across ten paths —
+           and they are what the theme restyles, so no canvas here. */
+        const style = { weight: 0.8, className: 'map-land' };
+        for (const ring of rings as number[][][]) L.polygon(flip(ring), style).addTo(coastline);
+      })
+      .catch(() => {});
+  });
 
   fetch(`${DATA}boundaries.json`)
     .then((r) => r.json())
