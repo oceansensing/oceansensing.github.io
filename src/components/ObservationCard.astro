@@ -1,6 +1,8 @@
 ---
-import { Image } from 'astro:assets';
+import { getImage } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
 import type { CollectionEntry } from 'astro:content';
+import { HAB_DATA, HAB_WIDTHS } from '../config';
 
 interface Props {
   observation: CollectionEntry<'observations'>;
@@ -13,11 +15,42 @@ const { title, short, cover, surveys } = observation.data;
    Order and starting photo are randomized per page load by the inline
    script below; without JavaScript it still cycles, just in file order. */
 const newest = [...surveys].sort((a, b) => b.date.valueOf() - a.date.valueOf());
-const all = [...(cover ? [cover] : []), ...newest.flatMap((s) => s.photos)];
-// The cover usually also appears among the survey photos; show it once.
-const unique = all.filter(
-  (photo, i) => all.findIndex((other) => other.src.src === photo.src.src) === i
+
+/* Two sources, one shape. The cover is a local file this repository still
+   optimises through astro:assets; the survey photographs live in
+   hab-data-repo and were optimised there, so they arrive as filenames and
+   their derivatives are addressed by width. Normalising here is what keeps
+   the rotation markup below from having to know which is which. */
+const stem = (name: string) => name.replace(/\.[a-z0-9]+$/i, '');
+const slide = async (photo: { src: string | ImageMetadata; alt: string }) => {
+  if (typeof photo.src === 'string') {
+    const url = (w: number) => `${HAB_DATA}w${w}/${stem(photo.src as string)}.webp`;
+    return {
+      key: photo.src,
+      url: url(HAB_WIDTHS[0]),
+      srcset: HAB_WIDTHS.map((w) => `${url(w)} ${w}w`).join(', '),
+      alt: photo.alt,
+    };
+  }
+  const [small, large] = await Promise.all([
+    getImage({ src: photo.src, width: 500, format: 'webp' }),
+    getImage({ src: photo.src, width: 1000, format: 'webp' }),
+  ]);
+  return {
+    key: photo.src.src,
+    url: small.src,
+    srcset: `${small.src} 500w, ${large.src} 1000w`,
+    alt: photo.alt,
+  };
+};
+
+const all = await Promise.all(
+  [...(cover ? [cover] : []), ...newest.flatMap((s) => s.photos)].map(slide)
 );
+// The cover usually also appears among the survey photos; show it once. It
+// is compared by key rather than by URL, since the two sources build theirs
+// differently and the same photograph would otherwise slip through twice.
+const unique = all.filter((photo, i) => all.findIndex((o) => o.key === photo.key) === i);
 
 /* Every slide downloads when the page loads, so the rotation takes a
    capped, evenly spaced sample rather than the whole bank — the card stays
@@ -32,7 +65,7 @@ const sampled =
         (_, i) => unique[Math.round((i * (unique.length - 1)) / (MAX_SLIDES - 1))]!
       );
 const photos = sampled.filter(
-  (photo, i) => sampled.findIndex((other) => other.src.src === photo.src.src) === i
+  (photo, i) => sampled.findIndex((other) => other.key === photo.key) === i
 );
 
 /* Photo bank rotates with a pure-CSS crossfade — no JavaScript. Each photo
@@ -68,12 +101,13 @@ const keyframes =
     >
       {
         photos.map((photo, i) => (
-          <Image
+          <img
             class="slide"
-            src={photo.src}
-            alt={i === 0 ? photo.alt : ''}
-            widths={[500, 1000]}
+            src={photo.url}
+            srcset={photo.srcset}
             sizes="(max-width: 40rem) 100vw, 540px"
+            alt={i === 0 ? photo.alt : ''}
+            decoding="async"
             style={`animation-name:${anim};animation-duration:${cycle}s;animation-delay:calc(${i * HOLD}s - ${FADE}s)`}
           />
         ))

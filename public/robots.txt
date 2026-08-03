@@ -8,4 +8,9 @@ Allow: /
 # gained by indexing it and a crawler would pay for all of it.
 Disallow: /ocean-data-repo/
 
+# The bloom photographs, for the same reason and one more: they are lab
+# observations with people and effort behind them, not stock imagery. The
+# page that presents them is indexable; the image store is not.
+Disallow: /hab-data-repo/
+
 Sitemap: https://oceansensing.org/sitemap-index.xml

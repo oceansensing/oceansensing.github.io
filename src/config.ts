@@ -73,3 +73,36 @@ export const HIGHLIGHT_AUTHORS = [
  * change — which is what made the move a one-line commit rather than a sweep.
  */
 export const MAP_DATA = 'https://oceansensing.org/ocean-data-repo/map/';
+
+/**
+ * Where the harmful-algal-bloom photographs are.
+ *
+ * Their own repository, for the same reason the map's data has one: a website
+ * should not carry 27 MB of binaries to show a page. The reasoning is weaker
+ * here than it was there, and worth saying so — those grids were rewritten
+ * hourly and banked every version forever, while these photographs were
+ * committed once and never touched again. What this buys is weight and a
+ * clean separation, not an escape from churn.
+ *
+ * It costs the build-time image pipeline. Astro resized these through
+ * `astro:assets`; it cannot now, and should not — this site rebuilds hourly,
+ * and re-encoding 95 photographs every hour to emit last hour's bytes is work
+ * nobody sees. hab-data-repo makes the webp derivatives once, at the widths
+ * `HAB_WIDTHS` names, and this site links them.
+ *
+ * Served from oceansensing.org because project pages inherit the
+ * organisation's custom domain — so robots.txt disallows the path, and that
+ * repository's README says the rest.
+ */
+export const HAB_DATA = 'https://oceansensing.org/hab-data-repo/photos/';
+
+/**
+ * The widths hab-data-repo publishes, and the ones the page may ask for.
+ *
+ * Both halves have to agree: this list builds the `srcset`, and that
+ * repository's workflow builds the files. Add a width in one place only and
+ * the page asks for a photograph that is not there — a broken image rather
+ * than a smaller one, since there is no negotiation in a `srcset`.
+ */
+export const HAB_WIDTHS = [800, 1400, 1600] as const;
+

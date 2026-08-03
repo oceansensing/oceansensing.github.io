@@ -56,7 +56,12 @@ const observations = defineCollection({
             photos: z
               .array(
                 z.object({
-                  src: image(),
+                  /* A bare filename in hab-data-repo, not a local file —
+                     see HAB_DATA in src/config.ts. `image()` cannot be used
+                     for something this repository does not have, and the
+                     derivatives are made over there rather than at build
+                     time here. */
+                  src: z.string(),
                   alt: z.string(),
                   caption: z.string().optional(),
                   // local time of exposure, from the photo's own metadata

@@ -1,6 +1,7 @@
 ---
 import { getCollection, render } from 'astro:content';
-import { Image, getImage } from 'astro:assets';
+import { Image } from 'astro:assets';
+import { HAB_DATA, HAB_WIDTHS } from '../../config';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SurveyPanel from '../../components/SurveyPanel.astro';
 import AssetMap from '../../components/AssetMap.astro';
@@ -17,6 +18,10 @@ export async function getStaticPaths() {
 
 const { observation } = Astro.props;
 const { title, summary, cover, surveys, links, map } = observation.data;
+
+/** hab-2026-07-31-01.jpg -> hab-2026-07-31-01, which is what the derivatives
+    are named. The originals keep their extension; the webp do not. */
+const stem = (name: string) => name.replace(/\.[a-z0-9]+$/i, '');
 const { Content } = await render(observation);
 
 /* Survey photos are shown as panels: grouped by year (newest first), then
@@ -46,10 +51,17 @@ const panels = await Promise.all(
     note: survey.note,
     photos: await Promise.all(
       survey.photos.map(async (photo) => ({
-        src: photo.src,
+        /* Resolved here rather than in the markdown, so the host is one
+           constant and the frontmatter stays a list of filenames. The
+           `srcset` is written out because astro:assets cannot make it —
+           these files are not in this repository. */
+        src: `${HAB_DATA}w${HAB_WIDTHS[0]}/${stem(photo.src)}.webp`,
+        srcset: HAB_WIDTHS.map(
+          (w) => `${HAB_DATA}w${w}/${stem(photo.src)}.webp ${w}w`
+        ).join(', '),
         alt: photo.alt,
         caption: photo.caption,
-        full: (await getImage({ src: photo.src, width: 1600, format: 'webp' })).src,
+        full: `${HAB_DATA}w${HAB_WIDTHS[HAB_WIDTHS.length - 1]}/${stem(photo.src)}.webp`,
         when: [
           photo.time
             ? `${day(survey.date)}, ${photo.time}${survey.timezone ? ` ${survey.timezone}` : ''}`

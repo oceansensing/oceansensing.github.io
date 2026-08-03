@@ -1,17 +1,22 @@
 ---
-import { Image } from 'astro:assets';
-import type { ImageMetadata } from 'astro';
-
 /* One dated survey: heading, optional note, and its photo grid. Photos
-   arrive pre-prepared by the page — `full` is the lightbox-sized variant,
-   `when`/`where` the metadata lines the lightbox shows. */
+   arrive pre-prepared by the page — `src` and `srcset` point at
+   hab-data-repo, `full` is the lightbox-sized variant, and `when`/`where`
+   are the metadata lines the lightbox shows.
+
+   No <Image> here any more. These files are not in this repository, so
+   astro:assets has nothing to optimise; the derivatives are made where the
+   photographs live and this is a plain <img> with the srcset the page
+   assembled. Width and height are carried so the grid does not reflow as
+   they load — <Image> used to supply those from the file itself. */
 interface Props {
   survey: {
     heading: string;
     location?: string | undefined;
     note?: string | undefined;
     photos: Array<{
-      src: ImageMetadata;
+      src: string;
+      srcset: string;
       alt: string;
       caption?: string | undefined;
       full: string;
@@ -43,11 +48,13 @@ const { survey } = Astro.props;
             data-when={photo.when}
             data-where={photo.where}
           >
-            <Image
+            <img
               src={photo.src}
-              alt={photo.alt}
-              widths={[500, 1000]}
+              srcset={photo.srcset}
               sizes="(max-width: 40rem) 100vw, 460px"
+              alt={photo.alt}
+              loading="lazy"
+              decoding="async"
             />
           </a>
           {photo.caption && <figcaption>{photo.caption}</figcaption>}
