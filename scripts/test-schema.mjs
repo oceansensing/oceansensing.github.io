@@ -239,8 +239,16 @@ if (bathy) {
    +48h field from the field for now is the stamp on it. These checks are
    what make that stamp trustworthy.
 
-   The frames are gitignored and built in CI, so a local run legitimately
-   finds none — the loop simply does nothing then, like the tiles above. */
+   The frames are gitignored and built in CI, so a clean checkout has the
+   committed snapshot *advertising* frames that are not on disk. That is the
+   normal state before the refresh step, not a fault — and the first version
+   of this failed the whole gate on it, having passed locally only because
+   the author's own working copy had the frames in it.
+
+   So: none present is fine, and all present is checked. **Some present is a
+   failure**, which is the case that matters — a run that wrote three frames
+   of five leaves the map offering an hour it cannot draw, and that is
+   invisible from anywhere else. */
 for (const name of ['currents', 'currents-60m', 'sst-navy', 'sss-navy']) {
   const root = read(`${name}.json`);
   if (!root) continue;
@@ -265,10 +273,24 @@ for (const name of ['currents', 'currents-60m', 'sst-navy', 'sss-navy']) {
     }
   }
 
+  /* Lead 0 is the committed base file and is always there, so it says
+     nothing about whether a forecast run happened — count only the frames
+     ahead of it. Getting this wrong reported "1 of 5" on a clean checkout,
+     which is the very state this was meant to allow. */
+  const ahead = frames.filter((frame) => frame.lead > 0);
+  const onDisk = ahead
+    .map((frame) => frame.url?.replace(/^.*\/map\//, ''))
+    .filter((file) => file && fs.existsSync(path.join(MAP, file)));
+  // Nothing built yet: the state of every clean checkout before the refresh.
+  if (!onDisk.length) continue;
+  if (onDisk.length !== ahead.length) {
+    fail(at, `${onDisk.length} of ${ahead.length} forecast frames are on disk — a short run leaves the map offering an hour it cannot draw`);
+  }
+
   for (const frame of frames) {
     const file = frame.url?.replace(/^.*\/map\//, '');
     const g = read(file);
-    if (!g) { fail(at, `${file} is listed but missing`); continue; }
+    if (!g) continue;
     checked++;
     const h = Array.isArray(g) ? g[0]?.header : g?.header;
     if (!h) { fail(file, 'missing header'); continue; }
