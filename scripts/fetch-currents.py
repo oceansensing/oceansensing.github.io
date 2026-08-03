@@ -139,22 +139,27 @@ LEVELS = [
 UA = {'User-Agent': 'oceansensing.org current map (github.com/oceansensing)'}
 
 
-# How far ahead to publish, in hours from now. Each run carries eight days,
-# so the forecast is already paid for upstream; what it costs here is one
-# more pass over the global and regional grids per lead, and one more request
-# to a server that fails per-request.
+# How far ahead to publish, in hours from now, and **every lead gets the full
+# tier chain including 1/12 deg tiles**. Override with --leads=0,12,24,36,48.
 #
-# 12-hourly to +48 rather than 3-hourly to +24, which was the other candidate:
-# same five frames either way, and at 0.96 and 0.24 deg the 3-hourly detail
-# is below what the grid resolves, while two days ahead is the horizon
-# somebody planning a deployment actually asks about.
+# This started as five coarse frames, 12-hourly to +48, with tiles at lead 0
+# only. Measured on the published files, that was the wrong trade: over 48
+# hours the *median* SST change is 0.1 degC on a ramp spanning 20, and the
+# median salinity change is 0.00 psu. Half the ocean moved by a two-hundredth
+# of the colour range — the control looked broken because there was nothing
+# to see, and the frames that showed anything were the ones the coarse grid
+# blurred away.
 #
-# **The tiles are deliberately not in this.** 92 MB per depth times five is
-# 460 MB, against 0.55 MB gzipped for five frames of the global grid. So the
-# 1/12 deg tier exists for now and nothing else, and above lead 0 the map
-# falls back to the regional grids — which it must say, or the model looks
-# like it went blurry.
-LEADS = [0, 12, 24, 36, 48]
+# So: fewer hours, at the resolution that makes them worth looking at. One
+# forecast frame at full detail beats four at a resolution that hides what
+# changed.
+#
+# The cost is real and worth stating: a second tile set is another 92 MB per
+# depth, and the published site goes from ~634 MB to ~904 MB against a 1 GB
+# GitHub Pages cap. That is 90%, and it is why moving the data to its own
+# repository stops being an improvement and becomes the next necessary
+# thing — see PLAN.md.
+LEADS = [0, 24]
 
 
 def at_depth(name: str, suffix: str) -> str:
@@ -503,7 +508,7 @@ def build(spec: dict, t: int, level: dict, valid: str, run: str,
 
 
 def build_tile(t: int, level: dict, valid: str, run: str,
-               south: float, west: float) -> str | None:
+               south: float, west: float, lead: int = 0) -> str | None:
     """One full-resolution tile. Returns its key, or None if it is all land."""
     north = min(south + TILES['size'], TILES['north'])
     east = west + TILES['size']
@@ -553,14 +558,25 @@ def build_tile(t: int, level: dict, valid: str, run: str,
         {'header': header(3), 'data': [x for row in reversed(v) for x in row]},
     ]
     key = f'{south:g}_{west:g}'
-    out = MAP_DIR / (TILES['dir'] + level['suffix']) / f'{key}.json'
+    out = MAP_DIR / tile_dir_name(level, lead) / f'{key}.json'
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, separators=(',', ':')) + '\n')
     return key
 
 
-def build_tiles(t: int, level: dict, valid: str, run: str) -> None:
-    """Every tile covering ocean at one depth, plus an index the map reads."""
+def tile_dir_name(level: dict, lead: int) -> str:
+    """tiles, tiles-60m, tiles-f24h, tiles-60m-f24h.
+
+    Each lead keeps its own directory rather than suffixing the tiles inside
+    one, so the map follows a single `tileIndex` link per frame and cannot
+    mix an hour's tiles with another's — the same reason each depth has its
+    own directory.
+    """
+    return at_lead(TILES['dir'] + level['suffix'] + '.json', lead)[:-len('.json')]
+
+
+def build_tiles(t: int, level: dict, valid: str, run: str, lead: int = 0) -> None:
+    """Every tile covering ocean at one depth and lead, plus its index."""
     from concurrent.futures import ThreadPoolExecutor
 
     corners = [
@@ -569,15 +585,16 @@ def build_tiles(t: int, level: dict, valid: str, run: str) -> None:
         for west in frange(TILES['west'], 180.0, TILES['size'])
     ]
     dx, dy = DLON * TILES['stride'][0], DLAT * TILES['stride'][1]
-    tile_dir = MAP_DIR / (TILES['dir'] + level['suffix'])
-    print(f"  {len(corners)} tiles at {dx:g} x {dy:g} deg, {level['label']}")
+    tile_dir = MAP_DIR / tile_dir_name(level, lead)
+    ahead = f' +{lead}h' if lead else ''
+    print(f"  {len(corners)} tiles at {dx:g} x {dy:g} deg, {level['label']}{ahead}")
 
     # The worker count is per depth, not shared across them: the levels are
     # built one after another, so the request rate this puts on a public
     # research server is the same as it was with one depth. Only the wall
     # clock doubles.
     with ThreadPoolExecutor(max_workers=TILES['workers']) as pool:
-        keys = list(pool.map(lambda c: build_tile(t, level, valid, run, *c), corners))
+        keys = list(pool.map(lambda c: build_tile(t, level, valid, run, *c, lead=lead), corners))
 
     available = sorted(k for k in keys if k)
     index = tile_dir / 'index.json'
@@ -586,7 +603,7 @@ def build_tiles(t: int, level: dict, valid: str, run: str) -> None:
         'south': TILES['south'], 'north': TILES['north'],
         'minZoom': TILES['minZoom'],
         'deg': round(min(DLON * TILES['stride'][0], DLAT * TILES['stride'][1]), 4),
-        'modelRun': run, 'refTime': valid, 'depth': level['metres'],
+        'modelRun': run, 'refTime': valid, 'depth': level['metres'], 'lead': lead,
         # Tiles that are entirely land are never written, so the map can skip
         # a request it knows would 404.
         'available': available,
@@ -630,6 +647,20 @@ def detail_links(level: dict, lead: int) -> list[dict]:
     ]
 
 
+def leads_wanted() -> list[int]:
+    """LEADS, or whatever --leads=0,12,24 asked for.
+
+    The extra hours are optional rather than gone: five frames are still one
+    flag away if the fields ever move enough to be worth them, and the same
+    flag is how a deployment with more room than a 1 GB Pages site can have
+    the whole set.
+    """
+    for arg in sys.argv[1:]:
+        if arg.startswith('--leads='):
+            return sorted({int(v) for v in arg.split('=', 1)[1].split(',') if v.strip()})
+    return LEADS
+
+
 def main() -> int:
     tiles_only = '--tiles' in sys.argv
     try:
@@ -647,11 +678,15 @@ def main() -> int:
         # global file for a depth advertises that depth's regions and tiles,
         # so the map follows one chain of links per layer and cannot end up
         # drawing 60 m particles over a surface grid.
-        frames = pick_leads(LEADS)
+        frames = pick_leads(leads_wanted())
         for level in LEVELS:
             print(f"{level['label']}:")
             if tiles_only:
-                build_tiles(t, level, valid, run)
+                # Every lead, so a forecast hour is drawn at the same 1/12°
+                # as the present rather than falling back to the regional
+                # grid — which was what made the small changes invisible.
+                for lead, ti, lead_valid, lead_run in frames:
+                    build_tiles(ti, level, lead_valid, lead_run, lead=lead)
                 continue
             # The global file advertises the finer grids, so the map learns
             # the regions and their zoom thresholds from the data rather than
@@ -660,16 +695,11 @@ def main() -> int:
                 extra: dict = {
                     'details': detail_links(level, lead),
                 }
+                # Where this frame's full-resolution tiles live. Every lead
+                # has its own set now: one forecast hour at native detail is
+                # worth more than four at a resolution that hides the change.
+                extra['tileIndex'] = f'/map/{tile_dir_name(level, lead)}/index.json'
                 if lead == 0:
-                    # Where the full-resolution tiles live, if a tile run has
-                    # happened. They are rebuilt only when the model does, so
-                    # the hourly build leaves them alone.
-                    #
-                    # Lead 0 only, and that is the whole shape of this
-                    # feature: five frames of 92 MB tiles is 460 MB per
-                    # depth. Above lead 0 the regional grids are the finest
-                    # there is, and the map has to say so.
-                    extra['tileIndex'] = f'/map/{TILES["dir"]}{level["suffix"]}/index.json'
                     # What frames exist, so the map learns the lead times from
                     # the data the way it already learns the regions and the
                     # tile index — not from a list repeated in the component,

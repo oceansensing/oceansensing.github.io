@@ -27,6 +27,12 @@ public/map/tiles-60m/
 public/map/tiles-sst-oisst/
 public/map/tiles-sst-navy/
 public/map/tiles-sss-navy/
+# One tile set per forecast hour. This is the bulk of the site's weight and
+# the reason the data wants a repository of its own — see PLAN.md.
+public/map/tiles-f[0-9]*h/
+public/map/tiles-60m-f[0-9]*h/
+public/map/tiles-sst-navy-f[0-9]*h/
+public/map/tiles-sss-navy-f[0-9]*h/
 
 # Forecast frames. Built in CI beside the tiles and for the same reason: the
 # committed snapshot exists so a local or offline build works, and lead 0 is

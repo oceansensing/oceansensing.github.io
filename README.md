@@ -88,7 +88,7 @@ need it locally when working on the map:
 ```sh
 npm run data           # storms, gliders (four regional ERDDAPs), USVs, Argo floats
 npm run data:currents  # global + regional current grids, surface and 60 m
-npm run data:tiles     # the 1/12° current tiles (~92 MB per depth, a few minutes)
+npm run data:tiles     # the 1/12° current tiles (~92 MB per depth per forecast hour)
 npm run data:fields      # global + regional sea-surface temperature and salinity grids
 npm run data:field-tiles # native-resolution Navy field tiles (OISST needs none — its regions already are native)
 npm run data:basemaps  # re-sample basemap ocean colours (slow; GEBCO's WMS)

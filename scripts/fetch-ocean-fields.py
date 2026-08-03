@@ -516,8 +516,15 @@ def build(product: dict, when: str, valid: str, out: pathlib.Path,
     return header
 
 
+def tile_dir_name(product: dict, lead: int = 0) -> str:
+    """tiles-sst-navy, tiles-sst-navy-f24h. One directory per product and
+    lead, so a frame's tileIndex cannot lead the map into another hour's."""
+    stem = f"tiles-{product['prefix']}-{product['key']}"
+    return f'{stem}-f{lead}h' if lead else stem
+
+
 def build_tile(product: dict, when: str, valid: str, run: str,
-               south: float, west: float) -> tuple[str | None, str]:
+               south: float, west: float, lead: int = 0) -> tuple[str | None, str]:
     """One native-resolution tile.
 
     Returns (key, outcome) where outcome is 'written', 'empty' or 'failed'.
@@ -535,7 +542,7 @@ def build_tile(product: dict, when: str, valid: str, run: str,
     north = min(south + TILES['size'], TILES['north'])
     east = west + TILES['size']
     key = f'{south:g}_{west:g}'
-    out = MAP_DIR / f"tiles-{product['prefix']}-{product['key']}" / f'{key}.json'
+    out = MAP_DIR / tile_dir_name(product, lead) / f'{key}.json'
 
     last = None
     backoff = [0, 3, 8, 20]
@@ -563,7 +570,7 @@ def build_tile(product: dict, when: str, valid: str, run: str,
     return key, 'written' 
 
 
-def build_tiles(product: dict, when: str, valid: str, run: str = '') -> None:
+def build_tiles(product: dict, when: str, valid: str, run: str = '', lead: int = 0) -> None:
     from concurrent.futures import ThreadPoolExecutor
 
     corners = [
@@ -571,14 +578,15 @@ def build_tiles(product: dict, when: str, valid: str, run: str = '') -> None:
         for south in frange(TILES['south'], TILES['north'], TILES['size'])
         for west in frange(TILES['west'], 180.0, TILES['size'])
     ]
-    print(f"  {len(corners)} tiles, {product['label']}")
+    ahead = f' +{lead}h' if lead else ''
+    print(f"  {len(corners)} tiles, {product['label']}{ahead}")
     with ThreadPoolExecutor(max_workers=TILES['workers']) as pool:
-        results = list(pool.map(lambda c: build_tile(product, when, valid, run, *c), corners))
+        results = list(pool.map(lambda c: build_tile(product, when, valid, run, *c, lead=lead), corners))
 
     available = sorted(k for k, _ in results if k)
     failed = sum(1 for _, why in results if why == 'failed')
     empty = sum(1 for _, why in results if why == 'empty')
-    tile_dir = MAP_DIR / f"tiles-{product['prefix']}-{product['key']}"
+    tile_dir = MAP_DIR / tile_dir_name(product, lead)
     tile_dir.mkdir(parents=True, exist_ok=True)
     (tile_dir / 'index.json').write_text(json.dumps({
         'size': TILES['size'], 'west': TILES['west'],
@@ -586,7 +594,7 @@ def build_tiles(product: dict, when: str, valid: str, run: str = '') -> None:
         'minZoom': TILES['minZoom'],
         'deg': round(min(product['dlon'] * product['strides']['tile'][0],
                          product['dlat'] * product['strides']['tile'][1]), 4),
-        'refTime': valid,
+        'refTime': valid, 'lead': lead,
         **({'modelRun': run} if run else {}),
         'available': available,
     }, separators=(',', ':')) + '\n')
@@ -625,12 +633,20 @@ def usable_step(product: dict) -> tuple[str, str, str]:
     raise RuntimeError(f'no usable time step in {len(candidates)} candidates')
 
 
-# How far ahead to publish, in hours. Mirrors LEADS in fetch-currents.py and
-# has to: currents and the scalar fields come off the same model at the same
-# hour, and a map showing +24h flow over +12h temperature would be two oceans
-# again. Only the forecast products get these — an analysis has none, which
-# is why OISST is absent from the control rather than greyed out in it.
-LEADS = [0, 12, 24, 36, 48]
+# How far ahead to publish, in hours, and every lead gets its own tile set.
+# Mirrors LEADS in fetch-currents.py and has to: currents and the scalar
+# fields come off the same model at the same hour, and a map showing +24h
+# flow over +12h temperature would be two oceans again.
+#
+# Cut from five 12-hourly frames to one, at full resolution, because the
+# measurement said so: over 48 hours the median SST change is 0.1 degC on a
+# 20 degC ramp and the median salinity change is 0.00 psu, so four extra
+# coarse hours showed a reader nothing while the coarseness hid the fronts
+# that did move. --leads=0,12,24,36,48 brings them back.
+#
+# Only the forecast products get these — an analysis has none, which is why
+# OISST is absent from the control rather than greyed out in it.
+LEADS = [0, 24]
 
 
 def lead_steps(product: dict, leads: list[int]) -> list[tuple[int, str, str, str]]:
@@ -692,6 +708,14 @@ def lead_steps(product: dict, leads: list[int]) -> list[tuple[int, str, str, str
     return out
 
 
+def leads_wanted() -> list[int]:
+    """LEADS, or whatever --leads=0,12,24 asked for. Mirrors fetch-currents."""
+    for arg in sys.argv[1:]:
+        if arg.startswith('--leads='):
+            return sorted({int(v) for v in arg.split('=', 1)[1].split(',') if v.strip()})
+    return LEADS
+
+
 def build_product(product: dict, tiles_only: bool) -> None:
     when, valid, run = usable_step(product)
     print(f"{product['label']} — valid {valid}" + (f", from the {run} run" if run else ''))
@@ -700,7 +724,11 @@ def build_product(product: dict, tiles_only: bool) -> None:
         if not product.get('tiles'):
             print('  no tile tier — the region grid is already native resolution')
             return
-        build_tiles(product, when, valid)
+        for lead, step, lead_valid, lead_run in (
+            [(0, when, valid, run)] if product.get('analysis')
+            else lead_steps(product, leads_wanted())
+        ):
+            build_tiles(product, step, lead_valid, lead_run, lead=lead)
         return
 
     name = f"{product['prefix']}-{product['key']}"
@@ -727,16 +755,17 @@ def build_product(product: dict, tiles_only: bool) -> None:
     # is why the lead control offers nothing when OISST is the field showing:
     # the absence is in the data, not a special case in the map.
     frames = ([(0, when, valid, run)] if product.get('analysis')
-              else lead_steps(product, LEADS))
+              else lead_steps(product, leads_wanted()))
 
     for lead, step, lead_valid, lead_run in frames:
         extra: dict = {'details': region_links(lead)}
+        # Only advertised where a tile tier exists; the map follows this
+        # link, so a product without one must not offer it. Every lead has
+        # its own set now — one forecast hour at the model's own resolution
+        # beats four at a resolution that hides what changed.
+        if product.get('tiles'):
+            extra['tileIndex'] = f'/map/{tile_dir_name(product, lead)}/index.json'
         if lead == 0:
-            # Only advertised where a tile tier exists; the map follows this
-            # link, so a product without one must not offer it. And only at
-            # lead 0 — five frames of the Navy SST tiles would be ~195 MB.
-            if product.get('tiles'):
-                extra['tileIndex'] = f'/map/tiles-{product["prefix"]}-{product["key"]}/index.json'
             if len(frames) > 1:
                 extra['forecast'] = [
                     {'lead': l, 'valid': v, 'url': f'/map/{at_lead(name, l)}.json'}

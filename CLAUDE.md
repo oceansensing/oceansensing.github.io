@@ -1387,21 +1387,32 @@ that the log says so.
 #### The forecast hour
 
 Each ESPC run carries eight days and the map used to show one hour of it.
-Five frames are published per product — now and **+12/24/36/48 h** — for
-currents at both depths, Navy SST and Navy salinity. `LEADS` in each
-pipeline is the one knob.
+**Two frames — now and +24 h — at full resolution**, for currents at both
+depths, Navy SST and Navy salinity. `LEADS` in each pipeline is the knob and
+`--leads=0,12,24,36,48` brings the rest back.
 
-**Why 12-hourly to +48 rather than 3-hourly to +24**: the same five frames
-either way, but at 0.96° and 0.24° the 3-hourly detail is below what the
-grid resolves, and two days out is the horizon somebody planning a
-deployment actually asks about.
+**It started as five coarse frames and the measurement killed them.** With
+tiles at lead 0 only, the forecast hours came from the 0.96°/0.24° grids —
+and over 48 hours the *median* Navy SST change is **0.1 °C on a ramp
+spanning 20**, the median salinity change **0.00 psu**. Half the ocean moved
+by a two-hundredth of the colour range, which is under one step of an 8-bit
+channel: the control looked broken because there was nothing to see. Worse,
+the places that *did* move — p99 1.7 °C, max 6.9 °C, all of them fronts and
+shelves — are exactly the fine structure the coarse grid smooths away. Four
+extra hours at a resolution that hides the change is a worse deal than one
+hour at the resolution that shows it.
 
-**The tiles get no frames, and that is the whole shape of the feature.**
-92 MB per depth × 5 is 460 MB, against 0.55 MB gzipped for five frames of
-the global grid — three orders of magnitude apart. So the 1/12° tier serves
-*now* and nothing else, and above lead 0 the regional grids are the finest
-there is. The control marks those hours, because a coarser field that says
-nothing reads as a broken one.
+So every lead now carries its own tile set, in its own directory
+(`tiles-f24h/`, `tiles-sst-navy-f24h/`), and each frame's header points at
+its own index. **This is expensive and it is the reason the data needs to
+move.** A second tile set is another 92 MB per depth for currents and ~43 MB
+each for the two Navy fields: the published site goes from ~634 MB to ~904
+MB against GitHub Pages' **1 GB cap**, or 90% of it. One more layer would
+not fit. See the data-repository item in `PLAN.md`.
+
+Verified end to end on the live site rather than argued: reading the same
+point (Newfoundland shelf, the largest 48-hour change in the grid) through
+the map's own readout gave **12.5 °C at one hour and 8.1 °C at another**.
 
 **The frame shown by default is the one nearest the reader's clock, not lead
 0.** Those are the same thing on a healthy day and part on exactly the bad

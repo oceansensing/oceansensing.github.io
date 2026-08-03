@@ -84,7 +84,12 @@ jobs:
           path: |
             public/map/tiles
             public/map/tiles-60m
-          key: currents-tiles-v2-${{ steps.model.outputs.run }}
+            public/map/tiles-f24h
+            public/map/tiles-60m-f24h
+          # v3: a tile set per forecast hour joins the cache, so a v2 hit
+          # would restore only the present and leave the +24h layer coarse
+          # while every check stayed green.
+          key: currents-tiles-v3-${{ steps.model.outputs.run }}
 
       - name: Build full-resolution current tiles
         if: steps.model.outputs.run != '' && steps.tiles.outputs.cache-hit != 'true'
@@ -102,11 +107,14 @@ jobs:
           path: |
             public/map/tiles-sst-navy
             public/map/tiles-sss-navy
+            public/map/tiles-sst-navy-f24h
+            public/map/tiles-sss-navy-f24h
           # v2: the tile geometry is unchanged but the index's minZoom is not,
           # and a cache hit would keep publishing the old threshold.
           # v3: salinity tiles join the set, so a v2 hit would restore an
           # incomplete one and skip building the new half.
-          key: field-tiles-v3-${{ steps.model.outputs.run }}
+          # v4: same reason as the currents cache above.
+          key: field-tiles-v4-${{ steps.model.outputs.run }}
 
       - name: Build Navy field tiles
         if: steps.model.outputs.run != '' && steps.ssttiles.outputs.cache-hit != 'true'

@@ -302,10 +302,14 @@ for (const name of ['currents', 'currents-60m', 'sst-navy', 'sss-navy']) {
     if (h.refTime !== frame.valid) fail(file, `valid ${h.refTime}, listed as ${frame.valid}`);
 
     if (frame.lead === 0) continue;
-    /* Above lead 0 there are no tiles — five frames of them would be 460 MB
-       per depth — so a tileIndex here would send the map to the field for
-       now and it would draw it as the forecast. */
-    if (h.tileIndex) fail(file, 'carries a tileIndex, but tiles are lead 0 only');
+    /* Every lead has its own tile set now, so the question is no longer
+       whether a frame has a tileIndex but whether it is **its own**. A frame
+       pointing at lead 0's tiles would draw the present at 1/12° and call it
+       the forecast — the failure that looks most like success, since the
+       field would be sharp, plausible and wrong. */
+    if (h.tileIndex && !h.tileIndex.includes(`-f${frame.lead}h`)) {
+      fail(file, `tileIndex ${h.tileIndex} is not the +${frame.lead}h set`);
+    }
     if (h.forecast) fail(file, 'lists frames; only the lead 0 file does');
     /* Its regions must be its own. Pointing at the regions for now would
        step back in time on zooming in, with nothing on screen to say so. */

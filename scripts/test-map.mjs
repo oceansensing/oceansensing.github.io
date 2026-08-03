@@ -153,8 +153,21 @@ const files = {
    and the checks below assert who asked for what. The real files are
    gitignored, hence stubs rather than reads. */
 const FRAME_LEADS = [0, 12, 24];
-const frameStamp = (lead) =>
-  new Date(Date.parse('2026-08-03T06:00:00Z') + lead * 3600e3).toISOString().replace('.000', '');
+/* Stamped relative to the moment the suite runs, because that is what
+   production looks like: the build is minutes old, so lead 0 really is the
+   hour nearest the reader's clock and everything downstream — tiles,
+   particles, readouts — sees the state the map opens in.
+
+   A fixed stamp was tried and is worse than it looks. Pinned to
+   2026-08-03 06:00Z it drifts into the past as the day goes on, so "nearest
+   to now" wanders onto lead 12, the step-back landed on a frame with no
+   tiles, and five unrelated checks failed for a reason nothing in their
+   own text hinted at. */
+const frameStamp = (lead) => {
+  const at = new Date(Date.now() + lead * 3600e3);
+  at.setUTCMinutes(0, 0, 0);
+  return at.toISOString().replace('.000', '');
+};
 
 const frameList = (stem) =>
   FRAME_LEADS.map((lead) => ({
@@ -1178,12 +1191,36 @@ const forecastDefault = forecastActive();
    the salinity all fetch the *surface current* grid — invisible on screen,
    since a vector file read as a scalar draws nothing and 60 m drawing
    surface water still looks like a current. */
+/* Note the fixture stamps lead 0 in the past, so "Now" is whichever frame is
+   nearest the wall clock when the suite runs — not necessarily lead 0. That
+   is the behaviour under test, so the step picks a button by *not* being the
+   active one rather than by its label. */
 const beforeStep = fetched.length;
-const stepButton = forecastButtons().find((b) => /12Z|18Z|06Z/.test(b.textContent) && !b.classList.contains('active'));
+/* Skip the first button: frames are ordered by lead, so that one is lead 0,
+   and stepping *to* lead 0 re-requests the base files rather than any frame
+   — a step that looks like a step and asks for nothing new. The first
+   version of this check picked it and found an empty frame list, which is
+   indistinguishable from the swap being broken. */
+const stepButton = forecastButtons().slice(1).find((b) => !b.classList.contains('active'));
 stepButton?.click();
-await new Promise((r) => setTimeout(r, 900));
+/* Long enough for the swap to land. Slicing the log at a mark is not enough
+   on its own — initial loads are still in flight and land inside the slice —
+   so the assertions below look only at frame files, which nothing but a step
+   requests. */
+await new Promise((r) => setTimeout(r, 1500));
 const askedByStep = fetched.slice(beforeStep).map((u) => String(u).split('/map/')[1]).filter(Boolean);
+const frameAsks = askedByStep.filter((f) => /-f\d+h/.test(f));
 const steppedActive = forecastActive();
+
+/* Step back before anything else runs. This is a probe, and everything below
+   — the tile tier, the particle drift, the readouts — assumes the map is on
+   the hour it opened with. Leaving it parked on a forecast frame silently
+   failed five unrelated checks, each of them correctly: on that frame the
+   fixture publishes no tiles, so the region really was the finest grid in
+   use. A test that moves the world and does not put it back is a slow
+   landmine for whatever gets added underneath it. */
+forecastButtons().find((b) => b.textContent === 'Now')?.click();
+await new Promise((r) => setTimeout(r, 900));
 
 /* Read before the reset runs. Both of these look at live DOM, so once the
    map is back at defaults they would report the reset state rather than what
@@ -1695,15 +1732,16 @@ const checks = [
      four layers fetch the surface current grid. Each product must ask for
      its own file, and exactly once. */
   ['each layer fetches its own frame, not another product\'s',
-    askedByStep.length > 0 &&
-      askedByStep.every((f) => /-f\d+h\.json$/.test(f)) &&
-      new Set(askedByStep).size === askedByStep.length &&
-      askedByStep.some((f) => f.startsWith('currents-f')) &&
-      askedByStep.some((f) => f.startsWith('currents-60m-f'))],
-  /* Above lead 0 there is no 1/12° tier — five frames of tiles would be 460
-     MB per depth — so a step forward must not go looking for one. */
-  ['and no tile is requested for a forecast hour',
-    askedByStep.every((f) => !f.includes('tiles'))],
+    frameAsks.length >= 2 &&
+      new Set(frameAsks).size === frameAsks.length &&
+      frameAsks.some((f) => f.startsWith('currents-f')) &&
+      frameAsks.some((f) => f.startsWith('currents-60m-f'))],
+  /* Every frame file asked for must be the *same* hour. Mixing them is the
+     failure that looks most like success — each layer sharp and plausible,
+     the map showing two different times and saying one. */
+  ['and all of them the same hour',
+    frameAsks.length > 0 &&
+      new Set(frameAsks.map((f) => f.match(/-f(\d+)h/)[1])).size === 1],
 
   ['the offline basemap is offered', !!coastlineBase],
   ['and fetches nothing until it is selected', coastlineRequestsBeforeSwitchOn === 0],
