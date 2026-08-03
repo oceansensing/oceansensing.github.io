@@ -399,7 +399,9 @@ export async function createOceanMap(
        file. Each layer resolves the lead against its own list. */
     swap: ((lead: number) => void)[];
     render: (() => void)[];
-  } = { frames: [], lead: null, swap: [], render: [] };
+    /** The run these frames came from, for the labels — see `draw()`. */
+    run: string | null;
+  } = { frames: [], lead: null, swap: [], render: [], run: null };
 
   /** Whichever published frame is closest to now, by absolute valid time. */
   const nearestFrame = (frames: Frame[]) => {
@@ -413,10 +415,15 @@ export async function createOceanMap(
      first layer to report wins: every ESPC product is built from the same
      aggregation at the same hours, so they agree, and a layer switched on
      later adopts the hour already showing rather than resetting it. */
-  const offerFrames = (frames: Frame[] | undefined, load: (frame: Frame) => void) => {
+  const offerFrames = (
+    frames: Frame[] | undefined,
+    load: (frame: Frame) => void,
+    run?: string
+  ) => {
     if (!frames?.length) return;
     if (!forecast.frames.length) {
       forecast.frames = frames;
+      forecast.run = run ?? null;
       forecast.lead = nearestFrame(frames).lead;
       forecast.render.forEach((r) => r());
     }
@@ -779,6 +786,7 @@ export async function createOceanMap(
               .then((loaded) => { tiles = loaded; applyView(false); })
               .catch(() => applyView(false));
           })
+        , coarse?.[0]?.header?.modelRun
       );
     })
     .catch(() => {
@@ -1267,6 +1275,7 @@ export async function createOceanMap(
                 .then((loaded: TileIndexFile) => { tiles = loaded; applyView(); })
                 .catch(() => applyView());
             })
+          , coarse.header?.modelRun
         );
       })
       .catch(() => {
@@ -1343,6 +1352,22 @@ export async function createOceanMap(
       forecastControls.append(label);
 
       const nearest = nearestFrame(forecast.frames);
+      /* Two anchors, named, because "+24h" means different things to
+         different readers and the difference is not small here.
+
+         A lead in this map is measured from **now**: +24h is the step
+         nearest this time tomorrow. In forecasting it conventionally means
+         T+24 from the model's own initialisation — and with a run two days
+         late, that would be a field valid *yesterday*. Anchoring to the run
+         would put a forecast behind the reader, which is precisely what the
+         nearest-to-now default exists to prevent.
+
+         So the button says the valid time, which is unambiguous, and the
+         title says how far ahead of now it is *and* the model's own
+         forecast hour from the run. Whichever convention the reader has in
+         mind, the number they are looking for is there. */
+      const stamp = (iso: string) => `${iso.slice(0, 16).replace('T', ' ')}Z`;
+      const runAt = forecast.run ? Date.parse(forecast.run) : null;
       for (const frame of forecast.frames) {
         const button = document.createElement('button');
         button.type = 'button';
@@ -1350,9 +1375,15 @@ export async function createOceanMap(
         const day = at.toUTCString().slice(0, 3);
         const hour = String(at.getUTCHours()).padStart(2, '0');
         button.textContent = frame === nearest ? 'Now' : `${day} ${hour}Z`;
-        button.title = frame === nearest
-          ? `${frame.valid.slice(0, 16).replace('T', ' ')}Z — nearest to now`
-          : `${frame.valid.slice(0, 16).replace('T', ' ')}Z — forecast, +${frame.lead}h from the build`;
+        const ahead = Math.round((at.getTime() - Date.now()) / 3600e3);
+        const fromRun = runAt === null
+          ? null
+          : Math.round((at.getTime() - runAt) / 3600e3);
+        button.title = [
+          `Valid ${stamp(frame.valid)}`,
+          frame === nearest ? 'nearest to now' : `${ahead >= 0 ? '+' : ''}${ahead} h from now`,
+          fromRun === null ? null : `T+${fromRun} from the ${stamp(forecast.run!)} run`,
+        ].filter(Boolean).join(' · ');
         if (frame.lead === forecast.lead) button.classList.add('active');
         button.setAttribute('aria-pressed', String(frame.lead === forecast.lead));
         /* Above lead 0 there is no tile tier, so the finest grid is the
