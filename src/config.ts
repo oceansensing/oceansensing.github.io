@@ -103,6 +103,14 @@ export const HAB_DATA = 'https://oceansensing.org/hab-data-repo/photos/';
  * repository's workflow builds the files. Add a width in one place only and
  * the page asks for a photograph that is not there — a broken image rather
  * than a smaller one, since there is no negotiation in a `srcset`.
+ *
+ * Grid tiers only, and it stops at 1400 deliberately. The largest thing on
+ * offer is the source file, and that is **not one size**: the 2026 frames
+ * were re-exported from camera originals at 2000 px, while the 2017 ones are
+ * 1600 px web exports whose originals are lost. A fixed top tier would have
+ * to either upscale the smaller ones or tell the browser a 1600 px file is
+ * 2000 px wide. So the lightbox and the download link point at the file
+ * itself, whatever size it happens to be.
  */
-export const HAB_WIDTHS = [800, 1400, 1600] as const;
+export const HAB_WIDTHS = [800, 1400] as const;
 

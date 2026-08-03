@@ -61,7 +61,10 @@ const panels = await Promise.all(
         ).join(', '),
         alt: photo.alt,
         caption: photo.caption,
-        full: `${HAB_DATA}w${HAB_WIDTHS[HAB_WIDTHS.length - 1]}/${stem(photo.src)}.webp`,
+        /* The lightbox gets the source file, not a derivative: it is the
+           largest thing published, and above 1400 px there is no derivative
+           to get. */
+        full: `${HAB_DATA}${photo.src}`,
         /* The full-size file, carrying its own copyright metadata — see the
            attribution step in hab-data-repo's workflow.
 
