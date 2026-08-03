@@ -518,9 +518,13 @@ def build(product: dict, when: str, valid: str, out: pathlib.Path,
 
 def tile_dir_name(product: dict, lead: int = 0) -> str:
     """tiles-sst-navy, tiles-sst-navy-f24h. One directory per product and
-    lead, so a frame's tileIndex cannot lead the map into another hour's."""
+    lead, so a frame's tileIndex cannot lead the map into another hour's.
+
+    The base lead keeps the bare directory for the same reason its grid keeps
+    the bare filename — see `at_lead`.
+    """
     stem = f"tiles-{product['prefix']}-{product['key']}"
-    return f'{stem}-f{lead}h' if lead else stem
+    return f'{stem}-f{lead}h' if lead != min(leads_wanted()) else stem
 
 
 def build_tile(product: dict, when: str, valid: str, run: str,
@@ -633,12 +637,33 @@ def usable_step(product: dict) -> tuple[str, str, str]:
     raise RuntimeError(f'no usable time step in {len(candidates)} candidates')
 
 
-# How far ahead to publish, in hours from now. **Nowcast only by default.**
-# Override with --leads=0,24 or --leads=0,12,24,36,48 — every frame the rest
-# of this file can build is still one flag away, and nothing downstream
-# needed changing to turn them off.
+# How far ahead to publish, as **T+N from the model run** — the forecasting
+# convention, not hours from the reader's clock. One frame by default.
 #
-# The forecast frames were measured and then dropped, and both halves matter.
+# T+36 rather than T+0, and the reason is what ESPC actually does. It runs
+# daily at 12Z and the aggregation ingests it 24-33 hours later, so its T+0
+# is a field for yesterday lunchtime: measured on 2026-08-03, the newest run
+# was 08-02 12Z and its analysis hour was already 33 hours old. Asking that
+# same run for T+36 gets 08-04 00Z — a few hours ahead of now — from the
+# freshest run there is. The lateness that makes T+0 stale is exactly what
+# brings T+36 to the present.
+#
+# It also removes a trap the now-anchored version had. Anchored to the clock,
+# a longer lead reached into an *older* run, because the newest was only
+# ingested out to its own T+36: lead 0 came from 08-02 while lead 36 fell
+# back to 08-01. Stepping forward in time stepped backward in run freshness.
+#
+# The consequence to keep in mind: the valid time now moves with the ingest
+# delay rather than with the clock. If a run ever lands promptly, this same
+# T+36 sits a day and a half out instead of a few hours. That is the
+# convention behaving as asked — and it is why the map labels every frame
+# with its valid time in UTC and not with the lead.
+#
+# Override with --leads=0,36 or --leads=0,12,24,36,48; the lowest lead takes
+# the bare filenames. Every frame the rest of this file can build is still
+# one flag away, and nothing downstream needed changing to turn them off.
+#
+# The extra frames were measured and then dropped, and both halves matter.
 # Over 48 hours the median Navy SST change is 0.1 degC on a ramp spanning 20
 # and the median salinity change is 0.00 psu, so at the tier a reader
 # actually sees, most of the ocean did not move. Serving them at full
@@ -646,25 +671,26 @@ def usable_step(product: dict) -> tuple[str, str, str]:
 # ~700 MB — which is a great deal of storage for a difference that is mostly
 # below one step of an 8-bit channel.
 #
-# So the scaffolding stays and the frames go, which leaves room for products
-# that will show a reader something new. Set LEADS back and it all returns:
-# the map builds its control from whatever the data advertises, and with one
-# frame it advertises nothing and the control does not appear.
-LEADS = [0]
+# So the scaffolding stays and the extra frames go, which leaves room for
+# products that will show a reader something new. Set LEADS back and it all
+# returns: the map builds its control from whatever the data advertises, and
+# with one frame it advertises nothing and the control does not appear.
+LEADS = [36]
 
 
 def lead_steps(product: dict, leads: list[int]) -> list[tuple[int, str, str, str]]:
-    """(lead, step token, valid time, model run) for each lead that works.
+    """(lead, step token, valid time, model run) for each lead, as **T+N from
+    the model run** — see the long note on `pick_leads` in fetch-currents.py
+    for why that is anchored to the run rather than to the clock.
 
     Keeps the per-step probing that `usable_step` exists for: HYCOM fails per
-    member file rather than as a whole, so each lead walks outward from its
-    own nearest step until one actually serves data. Without that a single
-    bad file would take a whole frame out, and the frame either side is fine.
+    member file rather than as a whole. The walk goes **backwards through
+    runs** rather than outwards through hours, though, since a neighbouring
+    hour is a different lead: if the newest run cannot serve its T+36, the
+    honest substitute is the run before it at *its* T+36, not this run at
+    T+33 relabelled.
 
-    A lead is matched by time, never by adding `lead / spacing` to an index —
-    see the same note in fetch-currents.py. Anything past the end of the
-    aggregation is dropped rather than clamped, since a clamped +48h file
-    would hold some other hour under the right name.
+    An analysis has no run and no leads at all; that case never reaches here.
     """
     das = get(f'{base_url(product)}.das', timeout=60)
     marker = 'hours since '
@@ -690,23 +716,25 @@ def lead_steps(product: dict, leads: list[int]) -> list[tuple[int, str, str, str
     y, x = product['nlat'] // 2, product['nlon'] // 2
     out = []
     for lead in leads:
-        target = now + lead
-        order = sorted(range(len(hours)), key=lambda i: abs(hours[i] - target))
+        # Exactly this far past its own run, newest run first. Exact rather
+        # than nearest: T+36 is a step the model either published or did not.
+        order = sorted(
+            (i for i in range(min(len(hours), len(runs)))
+             if abs((hours[i] - runs[i]) - lead) < 0.5),
+            key=lambda i: runs[i], reverse=True,
+        )
         for i in order[:4]:
-            # Half a step of slack. Nearest-match silently returns the last
-            # step for anything past the end of the axis, so the gap is the
-            # only thing that catches a lead the model does not reach.
-            if abs(hours[i] - target) > 2:
-                continue
             try:
                 fetch(product, str(i), y, y + 4, x, x + 4, 2, 2)
             except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:
-                print(f'  +{lead}h step {i} unusable: {exc}', file=sys.stderr)
+                print(f'  T+{lead} step {i} unusable: {exc}', file=sys.stderr)
                 continue
-            out.append((lead, str(i), stamp(hours[i]), stamp(runs[i]) if i < len(runs) else ''))
+            print(f'  T+{lead}: valid {stamp(hours[i])} from the '
+                  f'{stamp(runs[i])} run ({now - runs[i]:.0f} h old)')
+            out.append((lead, str(i), stamp(hours[i]), stamp(runs[i])))
             break
         else:
-            print(f'  ! +{lead}h has no usable step — skipped', file=sys.stderr)
+            print(f'  ! no run carries T+{lead} usably — skipped', file=sys.stderr)
     if not out:
         raise RuntimeError('no usable time step at any lead')
     return out
@@ -721,25 +749,45 @@ def leads_wanted() -> list[int]:
 
 
 def build_product(product: dict, tiles_only: bool) -> None:
-    when, valid, run = usable_step(product)
-    print(f"{product['label']} — valid {valid}" + (f", from the {run} run" if run else ''))
+    # An analysis has no run and no leads: its own newest day is the answer,
+    # so `usable_step` is the whole story for it. A forecast resolves its
+    # frames from the run instead, and asking for the step nearest *now*
+    # would cost a probe and print an hour nothing is published at — which
+    # is exactly what it did for a while, logging "valid 21:00Z" above three
+    # files all valid at 00:00Z.
+    if product.get('analysis'):
+        when, valid, run = usable_step(product)
+        print(f"{product['label']} — valid {valid}")
+        frames = [(0, when, valid, run)]
+    else:
+        print(f"{product['label']}:")
+        frames = lead_steps(product, leads_wanted())
 
     if tiles_only:
         if not product.get('tiles'):
             print('  no tile tier — the region grid is already native resolution')
             return
-        for lead, step, lead_valid, lead_run in (
-            [(0, when, valid, run)] if product.get('analysis')
-            else lead_steps(product, leads_wanted())
-        ):
+        for lead, step, lead_valid, lead_run in frames:
             build_tiles(product, step, lead_valid, lead_run, lead=lead)
         return
 
     name = f"{product['prefix']}-{product['key']}"
 
+    # An analysis has no lead — its own date is the answer — so its single
+    # file keeps the bare name whatever the forecast leads are set to. Read
+    # from LEADS instead, OISST would be published as sst-oisst-f0h.json the
+    # moment the base lead stopped being 0, and the map would find nothing
+    # at the name it asks for.
+    base = 0 if product.get('analysis') else min(leads_wanted())
+
     def at_lead(stem: str, lead: int) -> str:
-        """sst-navy-atlantic -> sst-navy-atlantic-f24h. Lead 0 keeps its name."""
-        return f'{stem}-f{lead}h' if lead else stem
+        """sst-navy-atlantic -> sst-navy-atlantic-f24h, bar the base lead.
+
+        The lowest lead being built keeps the bare name, so something is
+        always published where an older build of the map looks — see the
+        same note in fetch-currents.py.
+        """
+        return f'{stem}-f{lead}h' if lead != base else stem
 
     def region_links(lead: int) -> list[dict]:
         return [
@@ -755,11 +803,9 @@ def build_product(product: dict, tiles_only: bool) -> None:
             for region in REGIONS
         ]
 
-    # An analysis has no forecast, so it publishes the one step it has. That
-    # is why the lead control offers nothing when OISST is the field showing:
-    # the absence is in the data, not a special case in the map.
-    frames = ([(0, when, valid, run)] if product.get('analysis')
-              else lead_steps(product, leads_wanted()))
+    # `frames` was resolved above: one step for an analysis, which is why the
+    # lead control offers nothing when OISST is the field showing — the
+    # absence is in the data, not a special case in the map.
 
     for lead, step, lead_valid, lead_run in frames:
         extra: dict = {'details': region_links(lead)}
@@ -769,7 +815,7 @@ def build_product(product: dict, tiles_only: bool) -> None:
         # beats four at a resolution that hides what changed.
         if product.get('tiles'):
             extra['tileIndex'] = f'/map/{tile_dir_name(product, lead)}/index.json'
-        if lead == 0:
+        if lead == base:
             if len(frames) > 1:
                 extra['forecast'] = [
                     {'lead': l, 'valid': v, 'url': f'/map/{at_lead(name, l)}.json'}

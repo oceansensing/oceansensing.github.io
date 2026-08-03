@@ -1509,13 +1509,57 @@ fields". Neither change makes a stale map fail the build, deliberately: an
 outage should degrade to stale rather than block a deploy. What changed is
 that the log says so.
 
-#### The forecast hour
+#### The forecast hour, and what a lead is counted from
 
-Each ESPC run carries eight days and the map used to show one hour of it.
-**Nowcast only, and the scaffolding kept.** `LEADS = [0]` in each pipeline;
-`--leads=0,24` or `--leads=0,12,24,36,48` brings the frames back and nothing
-else has to change — the map builds its control from whatever the data
-advertises, and with one frame it advertises nothing and no control appears.
+Each ESPC run carries eight days and the map shows one hour of it.
+**`LEADS = [36]` in each pipeline, and the number is T+36 from the model
+run** — the forecasting convention, not hours from the reader's clock.
+`--leads=0,36` or `--leads=0,12,24,36,48` brings the other frames back and
+nothing else has to change: the map builds its control from whatever the
+data advertises, and with one frame it advertises nothing and no control
+appears.
+
+**Anchoring to the run rather than the clock is the whole point of the
+number, and it was measured before it was chosen.** ESPC runs daily at 12Z
+and the aggregation ingests it 24–33 hours later, so its *own* T+0 is a
+field for yesterday lunchtime. Measured on 2026-08-03 21:09Z:
+
+| | valid | from run | = |
+| --- | --- | --- | --- |
+| clock-anchored lead 0 | 2026-08-03 21Z | 08-02 12Z | T+33 |
+| clock-anchored lead 36 | 2026-08-05 09Z | **08-01 12Z** | T+93 |
+| **run-anchored T+36** | 2026-08-04 00Z | **08-02 12Z** | T+36 |
+
+Two things in that table. The newest run was only ingested out to its own
+T+36, so **a longer clock-anchored lead reached into an older run** — asking
+for more time ahead stepped backwards in run freshness, which is the
+opposite of useful. And the lateness that makes T+0 stale is exactly what
+brings T+36 to about now: three hours ahead on that day, off the freshest
+run there is.
+
+The consequence to hold on to: **the valid time now moves with the ingest
+delay rather than with the clock.** If a run ever lands promptly, this same
+T+36 sits a day and a half out instead of a few hours. That is the
+convention behaving as asked — and it is why nothing on screen is labelled
+with a lead.
+
+**The base lead takes the bare filenames**, `currents.json` and the rest —
+not lead 0, which was hardcoded and would have published nothing at the name
+every existing reader asks for the moment the nowcast went away. It is
+`min(leads_wanted())`, so it is still 0 whenever 0 is among the leads. An
+analysis is exempt and keeps its bare name unconditionally: OISST has no run
+to count leads from, and reading the base from `LEADS` would have suffixed
+it `-f0h` the moment the forecast leads moved, leaving the map asking for a
+file nothing writes.
+
+**The map has to say the field is ahead of the reader**, and with one frame
+there is no lead control to say it. The attribution carries the valid time
+and the offset — `US Navy ESPC-D-V02 — valid 2026-08-04 00Z (+2 h),
+2026-08-02 12Z run` — because a field labelled only with its run reads as
+the present, which is this project's oldest failure shape: a render that is
+wrong and says nothing. `hoursAhead()` and `hourStamp()` live in `geo.ts`
+with the rest of the renderer-independent formatting, and `test:map` fails
+if the valid time leaves that line.
 
 The frames were built, measured, and then dropped on the numbers. Over 48
 hours the median Navy SST change is **0.1 °C on a ramp spanning 20** and the
@@ -1548,17 +1592,22 @@ Verified end to end on the live site rather than argued: reading the same
 point (Newfoundland shelf, the largest 48-hour change in the grid) through
 the map's own readout gave **12.5 °C at one hour and 8.1 °C at another**.
 
-**The frame shown by default is the one nearest the reader's clock, not lead
-0.** Those are the same thing on a healthy day and part on exactly the bad
-one this was asked for: when a run lands 40 hours late, lead 0 is a field
-for 40 hours ago while +48h is valid about now. Picking by absolute valid
-time means a late run degrades into a forecast that is still about the
-present rather than into a confidently-labelled past.
+**With several frames, the one shown by default is the one nearest the
+reader's clock**, not the lowest lead. Those are the same thing on a healthy
+day and part on exactly the bad one this was asked for: when a run lands 40
+hours late, its T+0 is a field for 40 hours ago while its T+48 is valid
+about now. Picking by absolute valid time means a late run degrades into a
+forecast that is still about the present rather than into a
+confidently-labelled past. With `LEADS = [36]` there is one frame and
+nothing to pick, but the run-anchored lead is doing the same job in the
+pipeline: it is what makes a late run land near the present instead of
+behind it.
 
 **The buttons are labelled by valid time in UTC, not by lead.** A lead is
-measured from a *build*, and the run behind that build can be two days old,
-so "+24h" is counted from a moment the reader knows nothing about. A clock
-time is unambiguous. They are buttons rather than a slider for a mechanical
+measured from the *model run*, and that run can be a day and a half old, so
+"T+36" is counted from a moment the reader knows nothing about. A clock time
+is unambiguous. Same reasoning as the attribution above, and the same
+formatter. They are buttons rather than a slider for a mechanical
 reason too: stepping calls `setOptions({data})` on the particle layer, which
 tears the animation down and restarts it, and a dragged slider would do that
 five times with each restart cancelling a redraw still in flight.
@@ -1573,8 +1622,8 @@ asks for its own file, exactly once, and mutation-testing that check against
 the shared-frame version fails it.
 
 The lead rides in the saved view as a **lead, not a valid time** — a reader
-who steps to +24h and comes back after the hourly reload wants
-tomorrow-from-now, not the absolute hour that meant an hour ago. Reset
+who steps a day ahead and comes back after the hourly reload wants a day
+ahead of the new run, not the absolute hour that used to mean that. Reset
 returns to the frame nearest now, which is where the map opens.
 
 OISST publishes no frames because an analysis has no forecast, and that

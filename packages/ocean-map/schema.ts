@@ -120,19 +120,26 @@ export interface RegionLink {
   deg: number;
 }
 
-/** One published frame of a forecast, listed by the lead-0 global file.
+/** One published frame of a forecast, listed by the base global file.
 
     The map learns which lead times exist from the data, the way it already
     learns the regions and the tile index — a list restated in the component
     would be a second source of truth for something the pipeline decides.
 
-    Only the lead-0 file carries this. Following a frame's `url` gets a file
-    that knows its own `lead` and points at its own regions, and stops there;
-    there is no chain to walk and no way to end up a frame off. */
+    Only the base file carries this — the one at the bare filename, whose own
+    `lead` is the lowest published. Following a frame's `url` gets a file that
+    knows its own `lead` and points at its own regions, and stops there; there
+    is no chain to walk and no way to end up a frame off. */
 export interface ForecastFrame {
-  /** Hours ahead of the build. 0 is the field for now. */
+  /** Hours after the **model run**, not after the build — T+36 is the step
+      the run itself labels +36, whenever that run happens to have landed.
+      Anchoring to the clock instead made a longer lead reach into an older
+      run, since the newest is only ingested a day or so out. */
   lead: number;
-  /** What that lead resolved to on the model's own time axis. */
+  /** What that lead resolved to on the model's own time axis. This is the
+      only number that answers "when is this field for", and it is what the
+      map labels a frame with: a lead is counted from a run the reader knows
+      nothing about. */
   valid: Timestamp;
   /** Resolved against the map's dataBase, not fetched as given. */
   url: string;
@@ -161,22 +168,26 @@ export interface GridHeader {
   units?: string;
   /** Metres below the surface. */
   depth?: number;
-  /** Hours ahead of the build this frame is for; 0 or absent is the field for
-      now. Read from here rather than inferred from the filename, for the same
-      reason `depth` is: a mislabelled frame then shows on screen as the wrong
-      hour rather than as the right hour over the wrong water. */
+  /** Hours after the model run this frame is for; absent for an analysis,
+      which has no run to count from. Read from here rather than inferred
+      from the filename, for the same reason `depth` is: a mislabelled frame
+      then shows on screen as the wrong hour rather than as the right hour
+      over the wrong water.
+
+      Note this says nothing about how far ahead of *now* the field is —
+      `refTime` against the reader's clock is the only thing that does, since
+      a run can land a day and a half late. */
   lead?: number;
-  /** Link to the tile index for this product, if it has a tile tier.
-      **Lead 0 only.** Five frames of the 1/12° tiles would be 460 MB per
-      depth, so above lead 0 the regional grids are the finest tier there is
-      and the map has to say so. */
+  /** Link to the tile index for this product, if it has a tile tier. Each
+      frame's own — a frame pointing at another lead's tiles would draw a
+      different hour at 1/12° and call it this one, which is the failure that
+      looks most like success. */
   tileIndex?: string;
-  /** Finer regional grids, coarsest first. At lead > 0 these are that lead's
-      own regions — a +24h global file pointing at the regions for now would
-      step back in time on zooming in, with nothing on screen to give it
-      away. */
+  /** Finer regional grids, coarsest first, and each frame's own: a global
+      file pointing at another lead's regions would step through time on
+      zooming in, with nothing on screen to give it away. */
   details?: RegionLink[];
-  /** The forecast frames this product publishes. Lead-0 global file only, and
+  /** The forecast frames this product publishes. Base global file only, and
       absent for an analysis, which has no forecast — which is why the lead
       control offers nothing for OISST rather than sitting there dead. */
   forecast?: ForecastFrame[];

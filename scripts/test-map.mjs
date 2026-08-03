@@ -296,11 +296,14 @@ files['tiles-60m/index'] = { ...files['tiles/index'], depth: 60 };
   files['sst-navy'] = {
     header: {
       nx, ny, lo1: 0.125, la1: 85.125, dx: 1, dy: 1,
-      refTime: '2026-08-01T12:00:00Z', source: 'US Navy ESPC-D-V02', units: 'degC',
-      /* Same run as the currents fixture, because in production it is: both
-         come from one aggregation at one hour. Without it here the two
-         credits differ for a reason production does not have, and the
-         shared-source check has nothing to catch. */
+      /* Same run **and same hour** as the currents fixture, because in
+         production it is: both come from one aggregation at one step. The
+         credit a layer contributes is its source, its valid time and its
+         run, so a stub disagreeing on any of the three splits the line for a
+         reason production does not have and the shared-source check has
+         nothing left to catch. The hour was 08-01 12Z here — the run time,
+         picked arbitrarily — until the valid time went into the credit. */
+      refTime: '2026-08-03T15:00:00Z', source: 'US Navy ESPC-D-V02', units: 'degC',
       modelRun: '2026-08-01T12:00:00Z',
       details: [], tileIndex: '/map/tiles-sst-navy/index.json',
     },
@@ -964,6 +967,7 @@ const navyRead = host.querySelector('.om-point-readout .leaflet-popup-content')?
    same reading taken at the end says nothing about the case this checks. */
 const sharedSourceAttribution =
   host.querySelector('.leaflet-control-attribution')?.textContent ?? '';
+
 const currentsOnWithNavy = [/Currents at 0m/, /Currents at 60m/].some(
   (label) => overlayLabelled(label)?.querySelector('input')?.checked === true
 );
@@ -2125,7 +2129,15 @@ const checks = [
   ['a source shared by two layers is credited once',
     (sharedSourceAttribution.match(/ESPC-D-V02/g) ?? []).length === 1],
   ['and the run it came from is still on screen',
-    /\d{4}-\d{2}-\d{2} \d{2}:\d{2}Z run/.test(sharedSourceAttribution)],
+    /\d{4}-\d{2}-\d{2} \d{2}(:\d{2})?Z run/.test(sharedSourceAttribution)],
+  /* The map publishes one forecast frame, so there is no lead control on
+     screen to say the field is ahead of the reader's clock — the credit is
+     the only thing that does. Without the valid time a T+36 field reads as
+     the present, which is this project's oldest failure shape: a render that
+     is wrong and says nothing. */
+  ['and the hour it is valid for, with how far off it is',
+    /valid \d{4}-\d{2}-\d{2} \d{2}(:\d{2})?Z \((now|[+-]\d+ h)\)/
+      .test(sharedSourceAttribution)],
   ['the Navy SST file records which run it came from',
     typeof files['sst-navy'].header.modelRun === 'string' ||
       typeof JSON.parse(fs.readFileSync('scripts/fixtures/map/sst-navy.json', 'utf8')).header.modelRun === 'string'],

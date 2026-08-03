@@ -69,6 +69,39 @@ export function stamp(t?: string): string {
   return t ? `${t.slice(0, 16).replace('T', ' ')}Z` : 'unknown';
 }
 
+/** "2026-08-04 00Z", and the minutes only when there are any.
+
+    Model runs and forecast steps both land on the hour, so `stamp()` spends
+    four characters printing `:00` on a line — the map's attribution — that
+    already wraps. Its own callers are platform fix times, which are not on
+    the hour and read better in a column with the minutes always present, so
+    this is a second formatter rather than a change to that one. */
+export function hourStamp(t?: string): string {
+  if (!t) return 'unknown';
+  return t.slice(14, 16) === '00'
+    ? `${t.slice(0, 10)} ${t.slice(11, 13)}Z`
+    : `${t.slice(0, 10)} ${t.slice(11, 16)}Z`;
+}
+
+/** "+3 h", "now", "-2 h" — how far a valid time is from the reader's clock.
+
+    This is the part a lead time cannot say. Leads are counted from the model
+    run, and ESPC's runs land 24-33 hours after their nominal hour, so T+36
+    is a field for about three hours from now today and would be a day and a
+    half out if a run ever landed promptly. With one frame published there is
+    no lead control on screen either, so without this a forecast field reads
+    as the present.
+
+    Rounded to whole hours, and `now` covers the half hour either side: the
+    map is redrawn hourly, so a number that claims more precision than that
+    would be stale before it was read. */
+export function hoursAhead(valid?: string, now: number = Date.now()): string {
+  if (!valid) return '';
+  const hours = Math.round((Date.parse(valid) - now) / 3.6e6);
+  if (!Number.isFinite(hours)) return '';
+  return hours === 0 ? 'now' : hours > 0 ? `+${hours} h` : `${hours} h`;
+}
+
 /** " · day 12" — how long a platform has been out at its last fix. */
 export function elapsed(from?: string, to?: string): string {
   if (!from || !to) return '';

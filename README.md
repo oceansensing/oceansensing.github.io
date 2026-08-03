@@ -10,8 +10,10 @@ shuffle and lightbox on observation pages, the asset map, and the UTC clock.
 The map is the one heavyweight: gliders from four national data centres,
 NOAA saildrones, the Argo array, animated currents at two depths,
 sea-surface temperature and salinity, isobaths, a detailed coastline and EEZ
-boundaries — with the colour scale, its range, the isobath opacity, the
-forecast hour, and every layer under the reader's control.
+boundaries — with the colour scale, its range, the isobath opacity and every
+layer under the reader's control. The model fields are a **forecast**, T+36
+from the newest ESPC run, and the map's attribution says which hour they are
+valid for and how far ahead of now that is.
 
 It carries two pages. [`/visualization/`](https://oceansensing.org/visualization/)
 is the general-purpose one and
@@ -88,7 +90,7 @@ need it locally when working on the map:
 ```sh
 npm run data           # storms, gliders (four regional ERDDAPs), USVs, Argo floats
 npm run data:currents  # global + regional current grids, surface and 60 m
-npm run data:tiles     # the 1/12° current tiles (~92 MB per depth per forecast hour)
+npm run data:tiles     # the 1/12° current tiles (~92 MB per depth, per forecast hour built)
 npm run data:fields      # global + regional sea-surface temperature and salinity grids
 npm run data:field-tiles # native-resolution Navy field tiles (OISST needs none — its regions already are native)
 npm run data:basemaps  # re-sample basemap ocean colours (slow; GEBCO's WMS)

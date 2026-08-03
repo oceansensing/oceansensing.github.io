@@ -266,9 +266,14 @@ for (const name of ['currents', 'currents-60m', 'sst-navy', 'sss-navy']) {
     fail(at, 'should be a non-empty array of frames');
     continue;
   }
-  /* Lead 0 is the field for now and has to be in the list, or a reader
-     stepping back from +12h would have nowhere to land. */
-  if (frames[0]?.lead !== 0) fail(at, 'the first frame must be lead 0');
+  /* The listing file must list itself, first. It is the one published under
+     the bare filename — the base lead — so a reader stepping back from the
+     furthest frame has somewhere to land. It used to be asserted as lead 0
+     outright, which was true only while the map was a nowcast; leads are
+     counted from the model run now and the base is T+36. */
+  if (frames[0]?.lead !== head.lead) {
+    fail(at, `the first frame is T+${frames[0]?.lead}, but this file is T+${head.lead}`);
+  }
   for (const [i, frame] of frames.entries()) {
     field(at, frame, 'lead', (v) => isNum(v) && v >= 0, 'a non-negative number');
     field(at, frame, 'valid', isTime, 'an ISO timestamp');
@@ -278,11 +283,11 @@ for (const name of ['currents', 'currents-60m', 'sst-navy', 'sss-navy']) {
     }
   }
 
-  /* Lead 0 is the committed base file and is always there, so it says
-     nothing about whether a forecast run happened — count only the frames
-     ahead of it. Getting this wrong reported "1 of 5" on a clean checkout,
-     which is the very state this was meant to allow. */
-  const ahead = frames.filter((frame) => frame.lead > 0);
+  /* The base frame is the file already open and is always there, so it says
+     nothing about whether the rest of the run happened — count only the
+     frames beyond it. Getting this wrong reported "1 of 5" on a clean
+     checkout, which is the very state this was meant to allow. */
+  const ahead = frames.filter((frame) => frame.lead !== head.lead);
   const onDisk = ahead
     .map((frame) => frame.url?.replace(/^.*\/map\//, ''))
     .filter((file) => file && fs.existsSync(path.join(MAP, file)));
@@ -306,7 +311,7 @@ for (const name of ['currents', 'currents-60m', 'sst-navy', 'sss-navy']) {
     if (h.lead !== frame.lead) fail(file, `header lead is ${h.lead}, listed as ${frame.lead}`);
     if (h.refTime !== frame.valid) fail(file, `valid ${h.refTime}, listed as ${frame.valid}`);
 
-    if (frame.lead === 0) continue;
+    if (frame.lead === head.lead) continue;
     /* Every lead has its own tile set now, so the question is no longer
        whether a frame has a tileIndex but whether it is **its own**. A frame
        pointing at lead 0's tiles would draw the present at 1/12° and call it
@@ -315,7 +320,7 @@ for (const name of ['currents', 'currents-60m', 'sst-navy', 'sss-navy']) {
     if (h.tileIndex && !h.tileIndex.includes(`-f${frame.lead}h`)) {
       fail(file, `tileIndex ${h.tileIndex} is not the +${frame.lead}h set`);
     }
-    if (h.forecast) fail(file, 'lists frames; only the lead 0 file does');
+    if (h.forecast) fail(file, 'lists frames; only the base file does');
     /* Its regions must be its own. Pointing at the regions for now would
        step back in time on zooming in, with nothing on screen to say so. */
     for (const region of h.details ?? []) {

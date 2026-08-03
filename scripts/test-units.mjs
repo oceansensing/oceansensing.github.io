@@ -21,6 +21,8 @@ import {
   coordText,
   ddm,
   elapsed,
+  hourStamp,
+  hoursAhead,
   initialBearing,
   spanText,
   stamp,
@@ -107,6 +109,24 @@ check('a missing stamp says so', stamp(undefined), 'unknown');
 check('elapsed days count from one', elapsed('2026-08-01T00:00:00Z', '2026-08-12T00:00:00Z'), ' · day 12');
 check('elapsed is empty without both ends', elapsed(undefined, '2026-08-02T00:00:00Z'), '');
 check('a fix before deployment is not reported', elapsed('2026-08-10T00:00:00Z', '2026-08-01T00:00:00Z'), '');
+
+/* hourStamp exists to drop `:00` from a line that already wraps, and to keep
+   the minutes whenever dropping them would lose something. Both halves, or
+   the second one rots into "always drop the minutes". */
+check('an hour stamp drops zero minutes', hourStamp('2026-08-04T00:00:00Z'), '2026-08-04 00Z');
+check('an hour stamp keeps real minutes', hourStamp('2026-08-04T00:30:00Z'), '2026-08-04 00:30Z');
+check('a missing hour stamp says so', hourStamp(undefined), 'unknown');
+
+/* The clock is passed in rather than taken from Date.now(), so these cases
+   are the same in a year's time — the frozen-fixture bug that took a
+   scheduled run down once already. */
+const NOW = Date.parse('2026-08-03T21:00:00Z');
+check('a field ahead of the clock is signed', hoursAhead('2026-08-04T00:00:00Z', NOW), '+3 h');
+check('a field behind the clock is signed', hoursAhead('2026-08-03T19:00:00Z', NOW), '-2 h');
+check('the half hour either side reads as now', hoursAhead('2026-08-03T21:20:00Z', NOW), 'now');
+check('rounding is to the nearest hour, not down', hoursAhead('2026-08-03T23:40:00Z', NOW), '+3 h');
+check('no valid time, nothing claimed', hoursAhead(undefined, NOW), '');
+check('an unparseable time claims nothing', hoursAhead('not a time', NOW), '');
 
 // ---- colour ramps --------------------------------------------------------
 

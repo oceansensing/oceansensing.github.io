@@ -5,7 +5,8 @@ import 'leaflet/dist/leaflet.css';
 import './ocean-map.css';
 /* The renderer-independent half. Nothing imported here touches Leaflet or the
    DOM, which is deliberate: these are the parts a native port keeps. */
-import { coordText, elapsed, initialBearing, spanText, stamp } from './geo';
+import { coordText, elapsed, hoursAhead, hourStamp, initialBearing, spanText, stamp }
+  from './geo';
 import { rampColour, rampStops } from './ramp';
 import { tileKeysFor } from './tiles';
 import { readKmz, summarise, type KmzDocument, type KmzFeature, type KmzOverlay } from './kmz';
@@ -220,8 +221,20 @@ export async function createOceanMap(
      fields and the currents are fetched by separate pipelines and can land
      on different runs, and that is exactly the thing the run stamp exists
      to show. */
-  const credit = (source: string, run?: string, at?: string) =>
-    source + (run ? ` — ${run}Z run` : at ? ` — ${at}` : '');
+  /* The valid time leads, because it is the one thing a reader needs and the
+     one thing that was missing. The map publishes a single forecast frame,
+     so there is no lead control on screen to say the water is ahead of the
+     clock — and a field labelled only with its run reads as the present.
+     The run stays, after it, because a step valid an hour from now is
+     worthless if it came from a run three days old. An analysis has neither
+     and shows its own date. */
+  const credit = (source: string, run?: string, at?: string, valid?: string) => {
+    if (run) {
+      const when = valid ? `valid ${hourStamp(valid)} (${hoursAhead(valid)}), ` : '';
+      return `${source} — ${when}${hourStamp(run)} run`;
+    }
+    return source + (at ? ` — ${at}` : '');
+  };
 
   /* Leaflet keeps no route from the element back to the map, so hang it
      here: the headless harness in scripts/test-map.mjs reads it, and it
@@ -546,10 +559,11 @@ export async function createOceanMap(
          Source and run, and deliberately nothing else — see `credit()`.
          The depth this layer draws is in its own name in the switcher, and
          repeating it here is what made the control say ESPC twice. */
-      const run = coarse?.[0]?.header?.modelRun?.slice(0, 16).replace('T', ' ');
+      const run = coarse?.[0]?.header?.modelRun;
       const flowReady = L.velocityLayer({
         data: coarse,
-        attribution: credit('US Navy ESPC-D-V02', run),
+        attribution: credit('US Navy ESPC-D-V02', run, undefined,
+                            coarse?.[0]?.header?.refTime),
         paneName: 'currents',
         displayValues: false,
         velocityScale: scaleForView(),
@@ -1129,12 +1143,11 @@ export async function createOceanMap(
            is nothing to tell the two apart — which is how the currents sat
            two days stale while looking current. An analysis has no run;
            its own date is the answer, so that is what it shows. */
-        const run = coarse.header?.modelRun?.slice(0, 16).replace('T', ' ');
-        const at = coarse.header?.refTime?.slice(0, 10);
         layer.options.attribution = credit(
           coarse.header?.source ?? 'unknown source',
-          run,
-          at
+          coarse.header?.modelRun,
+          coarse.header?.refTime?.slice(0, 10),
+          coarse.header?.refTime
         );
 
         group.addLayer(layer);
