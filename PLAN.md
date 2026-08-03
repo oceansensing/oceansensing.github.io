@@ -141,7 +141,7 @@ contrast, the rendered map, two maps on a page, and the clock.
 - **The isobaths are a reference layer, not a chart.** They are contoured
   from GEBCO 2026 at 15" but sampled at 0.008° (~925 m) for the tiles and
   0.033° for the global overview, so neither is survey resolution and
-  neither should be navigated on. At 107 MB raw they are also the largest
+  neither should be navigated on. At 123 MB raw they are also the largest
   thing in the repo; halving the sampling would halve that and roughly
   double the vertex spacing, from 2.0 screen pixels at zoom 7 to about 4. Contours smaller than 0.1° (200-1000 m) or 0.3° (2000 m
   and below) are dropped as sampling speckle, so small seamounts and abyssal

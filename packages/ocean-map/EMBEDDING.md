@@ -69,7 +69,7 @@ and you should ask before leaning on someone else's bandwidth.
 **Run the pipelines.** `../../scripts/*.py` produce everything; `../../README.md`
 lists the commands. Standard library only except for the two local tools. Two
 things to know before you start: the isobaths need a 7.5 GB GEBCO grid you
-download once, and the full data set is ~166 MB, of which 107 MB is isobath
+download once, and the full data set is ~186 MB, of which 123 MB is isobath
 tiles. `TILE_STRIDE` in `fetch-bathymetry.py` halves that for roughly 4 px
 vertex spacing instead of 2.
 

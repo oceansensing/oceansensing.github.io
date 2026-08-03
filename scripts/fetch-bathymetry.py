@@ -26,8 +26,8 @@ Two tiers, and the split is by *detail*, not by depth. A tile carries every
 level at stride 2 and a 0.004 deg tolerance — a 2.0 px vertex spacing at
 zoom 7, which is smooth — and there are 161 of them on the same 20 deg
 lattice the current and field tiles use, 99 MB raw and 20.6 MB gzipped, a
-median of 81 KB gzipped each. The global file carries only the deep levels
-at stride 8 and 0.04 deg, 2.0 MB gzipped, and exists for the zooms below the
+median of 127 KB gzipped each. The global file carries only the deep levels
+at stride 8 and 0.04 deg, 3.0 MB gzipped, and exists for the zooms below the
 tiles. A reader pays for the one global file plus the one to four tiles in
 view, never the set.
 
@@ -66,7 +66,7 @@ TILE_DIR = OUT / 'bathy-tiles'
 # carry *every* level at full detail, and the global file carries the deep
 # ones coarsely for the zooms the tiles do not cover.
 SHALLOW = [20, 40, 60, 80, 100]
-DEEP = [200, 400, 600, 800, 1000, 2000, 4000, 6000, 8000, 10000]
+DEEP = [200, 400, 600, 800, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000]
 ALL = SHALLOW + DEEP
 
 # 8000 and 10000 exist only in the trenches — the Mariana, Tonga, Kuril,

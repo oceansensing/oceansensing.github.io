@@ -872,16 +872,25 @@ array **contiguous and uncompressed** (7,464,960,000 bytes of data in a
 7,466,018,396-byte file), so a windowed read is a seek and no tile needs the
 whole grid in memory.
 
+**Seventeen levels**: 20, 40, 60, 80 and 100 m on the shelf, then 200, 400,
+600, 800, 1000, 2000, 3000, 4000, 5000, 6000, 8000 and 10000. 3000 and 5000
+were added late and are not free — they are abyssal levels, so they shatter
+the way 4000 does and survive the speckle filter in numbers: 3,653 and 4,711
+lines against 6,021 at 4000 m. They took the global file from 19,707 contours
+to 28,138 and 2.07 MB gzipped to 2.95, and the tile set from 107 MB to 123.
+8000 and 10000 stay cheap because they exist only in the trenches — 26 lines
+and 3.
+
 **Two tiers, and the split is by detail rather than by depth** — finest that
 fits, the same rule the current and field grids follow:
 
 | tier | levels | sampling | tolerance | size | fetched |
 | --- | --- | --- | --- | --- | --- |
-| `bathy-tiles/<s>_<w>.json` | **all 15** | stride 2 (0.008°) | 0.004° | 81 KB gz median, 747 KB max | per view, zoom ≥ 6 |
-| `bathy-deep.json` | 200–10000 m | stride 8 (0.033°) | 0.04° | 2.0 MB gz | on switch-on |
+| `bathy-tiles/<s>_<w>.json` | **all 17** | stride 2 (0.008°) | 0.004° | 127 KB gz median, 793 KB max | per view, zoom ≥ 6 |
+| `bathy-deep.json` | 200–10000 m | stride 8 (0.033°) | 0.04° | 3.0 MB gz | on switch-on |
 
-161 tiles of 162; the one missing is pure land. Whole layer **107 MB raw,
-22.6 MB gzipped** — the single largest thing in the repo, and the price of
+161 tiles of 162; the one missing is pure land. Whole layer **123 MB raw,
+26.9 MB gzipped** — the single largest thing in the repo, and the price of
 contours that read as curves. A reader pays the global file plus the one to
 four tiles in view, never the set, and nothing at all unless they switch the
 layer on: it is **off by default**.
@@ -987,8 +996,8 @@ see it, because it does not cascade custom properties.
 
 Every contour at one depth becomes a **single multi-line polyline** rather
 than one layer each. Leaflet renders that as one path element with many
-subpaths, so the global file's 19,707 contours are **ten DOM nodes instead of
-nineteen thousand**. That is what lets this stay SVG — and so stay themed in
+subpaths, so the global file's 28,138 contours are **twelve DOM nodes instead
+of twenty-eight thousand**. That is what lets this stay SVG — and so stay themed in
 CSS like the rest of the linework — instead of needing the canvas renderer
 Argo uses. Measured after: 21 paths, 2,243 rendered points and eight pans in
 33 ms at zoom 8.
