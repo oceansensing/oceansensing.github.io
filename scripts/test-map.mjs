@@ -926,7 +926,7 @@ host._map.setView([10, -50], 4, { animate: false });
 await new Promise((r) => setTimeout(r, 400));
 
 const sstOisstToggle = overlayLabelled(/OISST/);
-const sstNavyToggle = overlayLabelled(/Navy forecast/);
+const sstNavyToggle = overlayLabelled(/SST \(ESPC\)/);
 drawn.images.length = 0;
 sstOisstToggle?.querySelector('input')?.click();
 await new Promise((r) => setTimeout(r, 900));
@@ -1031,7 +1031,7 @@ await new Promise((r) => setTimeout(r, 900));
    the spacing of the grid the layer is actually holding, at a zoom inside
    the tile threshold. */
 const nativeSst = await (async () => {
-  overlayLabelled(/Navy forecast/)?.querySelector('input')?.click();
+  overlayLabelled(/SST \(ESPC\)/)?.querySelector('input')?.click();
   await new Promise((r) => setTimeout(r, 300));
   host._map.setView([10, -50], 5, { animate: false });   // inside the synthetic tiles
   await new Promise((r) => setTimeout(r, 1200));
@@ -1058,7 +1058,12 @@ const nativeSst = await (async () => {
    Open ocean spans only a few psu, so whole-unit rounding would leave a
    typical view in a corner of the ramp. */
 const salinity = await (async () => {
-  const toggle = overlayLabelled(/Salinity/);
+  /* By the layer's name in the switcher, which is "SSS (ESPC)". The readout
+     and the legend still say "Salinity" — that is FIELDS[...].label, the
+     quantity rather than the layer, and "Salinity: 34.2 psu" reads better
+     there than the acronym would. The two are deliberately not the same
+     string. */
+  const toggle = overlayLabelled(/SSS \(ESPC\)/);
   toggle?.querySelector('input')?.click();
   await new Promise((r) => setTimeout(r, 1200));
   host._map.setView([25, -55], 4, { animate: false });

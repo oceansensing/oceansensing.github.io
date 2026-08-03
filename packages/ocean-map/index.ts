@@ -2072,12 +2072,41 @@ export async function createOceanMap(
   const rehomeAll = () => wrapped.forEach(rehome);
   map.on('moveend zoomend', rehomeAll);
 
+  /* These strings are the layer's identity, not decoration. A page preset
+     names them, `check:docs` fails on a preset naming one that does not
+     exist, and a reader's saved view records them — so a rename is a small
+     migration, not a caption edit. The one cost that cannot be avoided: a
+     saved view holding the old name loses that layer's on/off state and
+     falls back to the default, once.
+
+     **The naming rule, because depth is coming.** SST and SSS are *surface*
+     temperature and salinity — special cases of quantities that also exist
+     at depth, exactly as `Surface currents` is a special case of the flow
+     field. So the rule the currents already follow applies to the scalars
+     too:
+
+       surface       the standard acronym, if there is one: SST, SSS
+       at depth      `<Quantity> at <N> m`: Temperature at 60 m, Salinity at 60 m
+
+     which keeps the idiomatic name where oceanographers expect it and still
+     leaves somewhere for `Salinity at 60 m (ESPC)` to go. The alternative —
+     `Surface salinity` for symmetry with the depth form — was considered and
+     costs the acronym everyone actually uses.
+
+     The **source** goes in parentheses and names the product, not the
+     agency: `(ESPC)`, not `(Navy forecast)`. Two ESPC layers were called
+     "Navy forecast" while the currents beside them, from the same model,
+     said nothing at all.
+
+     Note `FIELDS[...].label` is a different string on purpose — the quantity
+     rather than the layer, used by the readout and the colour bar, where
+     "Salinity: 34.2 psu" reads better than the acronym would. */
   const overlays: Record<string, L.Layer> = {
     'Surface currents (animated)': flow,
     'Currents at 60 m (animated)': flowDeep,
     'SST (OISST analysis)': sstOisst,
-    'SST (Navy forecast)': sstNavy,
-    'Salinity (Navy forecast)': sssNavy,
+    'SST (ESPC)': sstNavy,
+    'SSS (ESPC)': sssNavy,
     ...(MERCATOR_RASTER ? { 'Current speed (Mercator)': currents } : {}),
     'Hurricanes': storms,
     'NOAA USVs': usvs,

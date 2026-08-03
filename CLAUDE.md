@@ -1235,6 +1235,33 @@ would bury the field underneath it. Transparency is not a concern —
 measured, the tiles are RGBA and **97.7% fully transparent** across the Gulf,
 100% where no boundary falls.
 
+### Naming a layer
+
+The switcher's strings are identities: presets name them, `check:docs` fails
+on a preset naming one that does not exist, and a saved view records them. A
+rename is a small migration — and it costs every reader holding a saved view
+the on/off state of that layer, once.
+
+**Surface gets the acronym; depth gets spelled out.** SST and SSS are special
+cases of quantities that also exist at depth, the same way `Surface currents`
+is a special case of the flow field:
+
+| | |
+| --- | --- |
+| surface | the standard acronym where there is one — `SST (ESPC)`, `SSS (ESPC)` |
+| at depth | `<Quantity> at <N> m` — `Currents at 60 m`, and `Salinity at 60 m` when it arrives |
+
+That keeps the idiomatic name where an oceanographer expects it and still
+leaves room for the depth variants. Full symmetry (`Surface salinity`) was
+the alternative and costs the acronym everyone uses.
+
+**The source in parentheses names the product, not the agency** — `(ESPC)`,
+not `(Navy forecast)`. Those two layers said "Navy forecast" while the
+currents beside them, off the same model, said nothing.
+
+`FIELDS[...].label` is deliberately a different string: the quantity, for the
+readout and the colour bar, where "Salinity: 34.2 psu" beats the acronym.
+
 ### Sea-surface temperature and salinity
 
 Three fields, `npm run data:fields`, built by `scripts/fetch-ocean-fields.py`:
