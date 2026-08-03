@@ -31,6 +31,9 @@ const dom = new JSDOM(
   '<input type="number" data-field-max /><button type="button" data-field-auto></button></span>' +
   '<span class="bathy-controls" data-bathy-controls hidden>' +
   '<input type="range" data-bathy-opacity min="10" max="100" step="5" /></span>' +
+  '<span class="om-kmz-controls" data-kmz-controls><input type="file" data-kmz-file />' +
+  '<span data-kmz-list hidden></span></span>' +
+  '<span data-kmz-note></span>' +
   '<span class="status" id="map-status" data-map-status></span>' +
   '</figcaption></figure>' +
     // The storm-status block above carries deliberately wrong server-rendered
@@ -353,6 +356,9 @@ const SEEDED_VIEW = {
      a layer the reader turned off. */
 };
 window.sessionStorage.setItem('asset-map-view', JSON.stringify(SEEDED_VIEW));
+
+const KMZ_FIXTURE =
+  'UEsDBBQAAAAIAJqtAl2FC8lSbgIAACMGAAAHAAAAZG9jLmttbI1U204bMRB9z1dYW4knss6lJLQ4RqQIVAnaqMAHuMnsrhWvHXkdwv59x95LLiTQSLHH9pyZ4zOzZtdvuSKvYAtp9CTqx72IgJ6bhdTpJHp5vuteRte8w5bohZ66mESZc6vvlG42m9isQKeyiDU4ih50EA8izm7NfJ2DdgjTIgf+tLavUJKVEprRsNNhT65UQORiEilIEfMgNYQ9zuZGGcuTpIe/JGG0WrONXLiMDxmtDEa3kA4hbGZUuRdgnHh4r9cGSKRSvM9omJlZO4UBOJ43JqM7QWgdumL6KFYNWTSR70xIDLmEkmtjc6EY9TYrvPOLVfwLejLaLjG0BwSiLTKTaabw796BjcvAvofXpJAB8rozagG4FwR9gLRotPU5lJhDLuxye0z69TlbQDG3cuWw4PxMuau/Z6m7+vF8620aFsTLEY4s9ev+gBROeAAm2YVjLsy2d2kkt0O8cqgqZbGlfHGMxeYSDgreHV/EF+fDEQ490h1/jXvnwzEOfjHwJ2N/4gu4xTR1r6LR7U2P3fupYk1umrvPjMS+PEniMFXtvpuF0Vr4gwrcWBAflWBq3hoSJ5vEt1/ayoptCXZq1nohbPmzqL4RYf8ckXGE/L2A7XRJwmY9jY5J2ESih3mq7FLr/83e6BdKuG+Og3lxYKLDh4wOc3s9aSPOZzWf4sfTKP24Vk7eg8nB2bK+2NEWwMZ7R6ly/KyDPZJ0R99OqNw26j6VUy31C9zG2CUil0FxHDMLCfdvboGPLryJfKUgNjalSr5CjK8uo8El5EN/uhujw+6t1/E3vvBKlLVE80xY12hE9z2QTft+M/+o839QSwMEFAAAAAgAmq0CXVrM13MNAAAAMAAAAA4AAABmaWxlcy9pY29uLnBuZ+sM8HPn5ZLiYiASAABQSwECFAMUAAAACACarQJdhQvJUm4CAAAjBgAABwAAAAAAAAAAAAAAgAEAAAAAZG9jLmttbFBLAQIUAxQAAAAIAJqtAl1azNdzDQAAADAAAAAOAAAAAAAAAAAAAACAAZMCAABmaWxlcy9pY29uLnBuZ1BLBQYAAAAAAgACAHEAAADMAgAAAAA=';
 
 const bundle = fs.readdirSync('dist/_astro').find((f) => f.startsWith('AssetMap') && f.endsWith('.js'));
 if (!bundle) {
@@ -1156,6 +1162,35 @@ const globalReset = await (async () => {
 
 
 const status = document.getElementById('map-status').textContent;
+/* ---- a reader's own KMZ overlay -------------------------------------------
+
+   Uploaded through the real file input, so this exercises the decode, the
+   styling and the drawing rather than a shortcut into the renderer. */
+const kmzUpload = await (async () => {
+  const input = document.querySelector('[data-kmz-file]');
+  if (!input) return null;
+  const bytes = Uint8Array.from(atob(KMZ_FIXTURE), (c) => c.charCodeAt(0));
+  const file = new window.File([bytes], 'survey.kmz', { type: 'application/vnd.google-earth.kmz' });
+  // jsdom has no DataTransfer, so the FileList is stood up directly.
+  Object.defineProperty(input, 'files', {
+    value: Object.assign([file], { item: (i) => [file][i], length: 1 }),
+    configurable: true,
+  });
+  input.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 1200));
+  const drawn = [];
+  host._map.eachLayer((l) => {
+    if (l.options?.pane === 'user' && l.options?.color) drawn.push(l.options);
+  });
+  return {
+    drawn,
+    note: document.querySelector('[data-kmz-note]')?.textContent ?? '',
+    listed: document.querySelectorAll('[data-kmz-list] button').length,
+    inSwitcher: [...document.querySelectorAll('.leaflet-control-layers-overlays label')]
+      .filter((l) => /survey/i.test(l.textContent)).length,
+  };
+})();
+
 /* ---- isobaths -------------------------------------------------------------
 
    The layer is off by default and neither tier is fetched until it is
@@ -1310,6 +1345,25 @@ await new Promise((r) => setTimeout(r, 300));
 
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
+
+  // ---- a reader's own KMZ overlay
+  ['an uploaded KMZ is decoded and drawn',
+    !!kmzUpload && kmzUpload.drawn.length === 5],
+  ['it joins the layer switcher under its own name',
+    !!kmzUpload && kmzUpload.inSwitcher === 1 && kmzUpload.listed === 1],
+  ['and reports what it drew and skipped',
+    !!kmzUpload && /5 features/.test(kmzUpload.note) && /skipped/.test(kmzUpload.note)],
+  ['the file\'s own colours and widths reach the map',
+    !!kmzUpload && kmzUpload.drawn.some((o) => o.color === '#ff0000' && o.weight === 3)],
+  /* PolyStyle's `outline` governs a polygon's edge only. Applied to
+     everything it silently erases lines — the sample shares one style between
+     its legs and its unoutlined boxes, and every leg rendered stroke="none":
+     drawn, right colour in the options, invisible on screen. */
+  ['a polygon-only outline switch does not erase the lines',
+    !!kmzUpload &&
+      kmzUpload.drawn.some((o) => o.color === '#ff0000' && o.fill !== true && o.stroke !== false) &&
+      // the polygon sharing that style still honours its own outline: 0
+      kmzUpload.drawn.some((o) => o.color === '#ff0000' && o.fill === true && o.stroke === false)],
 
 
   // ---- isobaths

@@ -903,6 +903,56 @@ saved view like the colour scales, and resets with everything else. The floor
 is 10% rather than 0: a layer switched on but completely invisible reads as
 broken, and the layer switcher is already the way to turn it off.
 
+### A reader's own KMZ or KML overlay
+
+`packages/ocean-map/kmz.ts` decodes, `store.ts` keeps, and `index.ts` draws.
+It is deliberately **inert**: it joins no exclusivity group, feeds no readout
+and takes no part in re-homing. It is something to look at alongside the data,
+not another data layer.
+
+**No dependency.** A KMZ is a ZIP holding a KML. The central directory is a
+few `DataView` reads and `DecompressionStream('deflate-raw')` inflates
+natively, so jszip or fflate would buy about forty lines. The XML parser is
+**injected**, which is what keeps `kmz.ts` free of the DOM — it is testable in
+Node against real fixtures, and a native port keeps the ZIP reading, the
+geometry extraction and the colour conversion.
+
+**KML colours are `aabbggrr`** — alpha first, channels reversed from CSS. Read
+naively, the fixture's opaque red `ff0000ff` comes out blue, which is plausible
+enough to ship.
+
+**`outline` belongs to `PolyStyle` and governs a polygon's edge only.** Applied
+to everything it silently erases lines, and that shipped for one browser
+check: the sample plan shares a style between its legs and its unoutlined
+boxes, so every leg rendered `stroke="none"` — drawn, right colour in the
+options, invisible on screen. `test:map` holds the line and the polygon to
+their separate halves of that rule.
+
+**Descriptions are flattened to text, never markup.** A KML description
+carries arbitrary HTML, and a file from a colleague or a data portal is
+untrusted input even when the reader chose to open it. Stripped rather than
+filtered — a subset allow-list is a thing to get subtly wrong — and the popup
+is then built with `textContent`, so a second pair of hands cannot reintroduce
+it. A hostile fixture is in `scripts/fixtures/`.
+
+**IndexedDB, not localStorage**, and not a close call: localStorage holds
+strings, so a KMZ would have to be base64'd — a third larger — inside about
+5 MB. Records are scoped by the map's `storageKey`, so two maps keep separate
+overlays for the same reason they keep separate saved views. Every call
+resolves rather than rejects: a reader in private browsing gets a map that
+draws and forgets, not one that fails to start, and the note says so rather
+than replacing what was drawn.
+
+**What is skipped is counted, not dropped.** NetworkLink is refused on
+purpose as well as for effort — it fetches a URL chosen by the file. The map
+reports "5 features · skipped 1 NetworkLink", because a partial render that
+says nothing is the failure this project keeps meeting.
+
+Colours come from the reader's file, which is the one place the palette rule
+in `packages/ocean-map/BOUNDARIES.md` does not apply: the gate governs colours
+*we* choose and can say nothing about theirs. Unstyled features fall back to
+the measured line colour.
+
 ### Maritime boundaries
 
 EEZ lines from Marine Regions (VLIZ), as WMS images in their own pane at

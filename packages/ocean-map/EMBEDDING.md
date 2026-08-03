@@ -85,6 +85,10 @@ isobath opacity slider and status line are the host's markup**, found by
 | `[data-field-controls]` | colormap picker, min, max, Auto |
 | `[data-bathy-controls]` | isobath opacity slider |
 | `[data-storm-status]` | the active-storm line, if you render one |
+| `[data-kmz-controls]` | wrapper for the overlay upload |
+| `[data-kmz-file]` | `<input type="file">` for a reader's KMZ or KML |
+| `[data-kmz-list]` | where loaded overlays are listed, with a remove button each |
+| `[data-kmz-note]` | what the last upload drew and skipped |
 
 Every one is optional. Omit a hook and that control simply does not appear.
 

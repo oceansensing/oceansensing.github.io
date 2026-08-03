@@ -546,3 +546,73 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* A reader's own KMZ or KML overlay: the file input, the list of what is
+   loaded, and whatever the last upload had to say about itself. Same row and
+   same reasoning as the colour-scale controls — a file input inside a Leaflet
+   control is awkward on a touchscreen, and this is where the reader is
+   already looking. */
+.om-kmz-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs, 0.25rem);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--text-muted, #5b6672);
+}
+
+.om-kmz-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs, 0.25rem);
+}
+
+.om-kmz-controls input[type='file'] {
+  font: inherit;
+  max-width: 11rem;
+}
+
+.om-kmz-list[hidden] {
+  display: none;
+}
+
+.om-kmz-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-left: var(--space-2xs, 0.25rem);
+  padding: 0 0.2rem;
+  border: 1px solid var(--border, #d6dbe0);
+  border-radius: var(--radius, 4px);
+}
+
+.om-kmz-item button {
+  font: inherit;
+  line-height: 1;
+  color: var(--text-muted, #5b6672);
+  background: none;
+  border: 0;
+  padding: 0 0.1rem;
+  cursor: pointer;
+}
+
+.om-kmz-item button:hover {
+  color: var(--text, #12181f);
+}
+
+/* What the last upload reported — how much was drawn, and what was skipped.
+   On its own line because it is a sentence, not a control. */
+.om-kmz-note:empty {
+  display: none;
+}
+
+.om-kmz-note {
+  display: block;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--text-muted, #5b6672);
+}
+
+.om-kmz-folder {
+  color: var(--text-muted, #5b6672);
+}

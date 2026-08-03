@@ -8,6 +8,8 @@ import './ocean-map.css';
 import { coordText, elapsed, initialBearing, spanText, stamp } from './geo';
 import { rampColour, rampStops } from './ramp';
 import { tileKeysFor } from './tiles';
+import { readKmz, summarise, type KmzFeature } from './kmz';
+import { listOverlays, removeOverlay, saveOverlay } from './store';
 import type {
   IsobathFile,
   RegionLink,
@@ -258,6 +260,13 @@ export async function createOceanMap(
 
   /* Maritime boundaries go above the fields but below every platform: they
      are context for where a glider is working, not something to hide it. */
+  /* A reader's own overlays sit above every reference layer — they are the
+     thing they came to look at — but still below the platforms, because the
+     rule that nothing hides a glider applies to a reader's file as much as to
+     a boundary. */
+  const userPane = map.createPane('user');
+  userPane.style.zIndex = '280';
+
   const eezPane = map.createPane('eez');
   eezPane.style.zIndex = '270';
   eezPane.style.pointerEvents = 'none';
@@ -1810,7 +1819,169 @@ export async function createOceanMap(
     Object.keys(overlays).filter((name) => map.hasLayer(overlays[name]!))
   );
 
-  L.control.layers(bases, overlays).addTo(map);
+  const layerControl = L.control.layers(bases, overlays).addTo(map);
+
+  /* ---- the reader's own overlays --------------------------------------
+
+     A KMZ or KML the reader hands over, drawn as-is and kept between visits.
+     Deliberately inert: it does not join the exclusivity groups, feed the
+     point readout or take part in re-homing. It is something to look at
+     alongside the data, not another data layer.
+
+     Colours come from the file, which is the one place S5 in BOUNDARIES.md
+     does not apply — the contrast gate governs colours *we* choose, and it
+     can say nothing about a reader's own. Anything the file leaves unstyled
+     falls back to the measured line colour so it is at least legible. */
+  const kmzControls = find<HTMLElement>('[data-kmz-controls]');
+  const kmzInput = kmzControls?.querySelector<HTMLInputElement>('[data-kmz-file]');
+  const kmzList = kmzControls?.querySelector<HTMLElement>('[data-kmz-list]');
+  const kmzNote = find<HTMLElement>('[data-kmz-note]');
+  const loadedOverlays = new Map<string, L.LayerGroup>();
+
+  const parseXml = (xml: string) => new DOMParser().parseFromString(xml, 'application/xml');
+
+  const drawKmz = (features: KmzFeature[]): L.LayerGroup => {
+    const group = L.layerGroup([], { pane: 'user' });
+    const flip = (ring: [number, number][]) =>
+      ring.map(([x, y]) => [y, x] as [number, number]);
+    for (const feature of features) {
+      const style = feature.style ?? {};
+      const path: L.PathOptions = {
+        pane: 'user',
+        color: style.stroke ?? MEASURE,
+        opacity: style.strokeOpacity ?? 0.9,
+        weight: style.strokeWidth ?? 2,
+        fill: style.filled !== false && feature.kind === 'polygon',
+        fillColor: style.fill ?? style.stroke ?? MEASURE,
+        fillOpacity: style.fillOpacity ?? 0.2,
+        /* `outline` is a PolyStyle property and governs a polygon's edge only.
+           Applied to everything it silently erases lines: the sample plan
+           shares one style between its legs and its boxes, with the boxes
+           unoutlined, and every leg rendered stroke="none" — drawn, correct
+           colour in the options, invisible on screen. */
+        stroke: feature.kind !== 'polygon' || style.outlined !== false,
+      };
+      let layer: L.Layer | null = null;
+      if (feature.kind === 'point') {
+        const [lon, lat] = (feature.coordinates as [number, number][])[0]!;
+        layer = L.circleMarker([lat, lon], { ...path, radius: 5, fill: true, fillOpacity: 0.9 });
+      } else if (feature.kind === 'line') {
+        layer = L.polyline(flip(feature.coordinates as [number, number][]), path);
+      } else {
+        layer = L.polygon((feature.coordinates as [number, number][][]).map(flip), path);
+      }
+      /* Name and description as text nodes, never markup. kmz.ts has already
+         flattened the file's HTML; building the popup with textContent means
+         a second pair of hands cannot reintroduce it. */
+      if (layer && (feature.name || feature.description)) {
+        const box = document.createElement('div');
+        if (feature.name) {
+          const title = document.createElement('strong');
+          title.textContent = feature.name;
+          box.append(title);
+        }
+        if (feature.folder) {
+          const where = document.createElement('div');
+          where.className = 'om-kmz-folder';
+          where.textContent = feature.folder;
+          box.append(where);
+        }
+        if (feature.description) {
+          const body = document.createElement('p');
+          body.textContent = feature.description;
+          box.append(body);
+        }
+        layer.bindPopup(box);
+      }
+      if (layer) group.addLayer(layer);
+    }
+    return group;
+  };
+
+  const showKmzNote = (message: string) => {
+    if (kmzNote) kmzNote.textContent = message;
+  };
+
+  const listKmz = () => {
+    if (!kmzList) return;
+    kmzList.textContent = '';
+    for (const [id, group] of loadedOverlays) {
+      const row = document.createElement('span');
+      row.className = 'om-kmz-item';
+      const label = document.createElement('span');
+      label.textContent = (group as unknown as { _kmzName?: string })._kmzName ?? id;
+      const drop = document.createElement('button');
+      drop.type = 'button';
+      drop.setAttribute('aria-label', `Remove ${label.textContent}`);
+      drop.textContent = '×';
+      drop.addEventListener('click', async () => {
+        map.removeLayer(group);
+        layerControl.removeLayer(group);
+        loadedOverlays.delete(id);
+        await removeOverlay(id);
+        listKmz();
+        showKmzNote('');
+      });
+      row.append(label, drop);
+      kmzList.append(row);
+    }
+    kmzList.hidden = loadedOverlays.size === 0;
+  };
+
+  const addKmz = async (id: string, name: string, bytes: ArrayBuffer) => {
+    const doc = await readKmz(new Uint8Array(bytes), parseXml);
+    if (!doc.features.length) {
+      throw new Error(`${name} has nothing this map can draw — ${summarise(doc)}`);
+    }
+    const group = drawKmz(doc.features);
+    (group as unknown as { _kmzName?: string })._kmzName = name;
+    loadedOverlays.set(id, group);
+    layerControl.addOverlay(group, name);
+    group.addTo(map);
+    listKmz();
+    return summarise(doc);
+  };
+
+  /* Restored before anything is uploaded, so a returning reader finds their
+     overlays already on the map. Failures here are per file: one unreadable
+     record must not cost the others. */
+  void listOverlays(CONFIG.storageKey).then(async (saved) => {
+    for (const record of saved) {
+      try {
+        await addKmz(record.id, record.name, record.bytes);
+      } catch {
+        await removeOverlay(record.id);
+      }
+    }
+  });
+
+  kmzInput?.addEventListener('change', async () => {
+    const files = [...(kmzInput.files ?? [])];
+    kmzInput.value = '';
+    for (const file of files) {
+      const id = `kmz:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+      try {
+        const bytes = await file.arrayBuffer();
+        const drew = await addKmz(id, file.name, bytes);
+        const stored = await saveOverlay({
+          id,
+          mapKey: CONFIG.storageKey,
+          name: file.name,
+          bytes,
+          added: Date.now(),
+        });
+        /* One sentence, not two in sequence. Reporting the storage failure by
+           replacing the summary loses what was actually drawn — the file is
+           on the map either way, and only keeping it between visits is lost. */
+        showKmzNote(
+          `${file.name}: ${drew}${stored ? '' : ' · not kept — this browser refused storage'}`
+        );
+      } catch (error) {
+        showKmzNote(error instanceof Error ? error.message : `${file.name} could not be read`);
+      }
+    }
+  });
+
 
   /* The two animated fields are exclusive. Both at once is two sets of
      drifting lines over the same water with nothing to tell them apart,

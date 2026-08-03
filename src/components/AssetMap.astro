@@ -61,8 +61,21 @@
           />
         </label>
       </span>
+      <span class="om-kmz-controls" data-kmz-controls>
+        <label>
+          Overlay
+          <input
+            type="file"
+            data-kmz-file
+            accept=".kmz,.kml,application/vnd.google-earth.kmz,application/vnd.google-earth.kml+xml"
+            multiple
+          />
+        </label>
+        <span class="om-kmz-list" data-kmz-list hidden></span>
+      </span>
     </span>
     <span class="om-status" id="map-status" data-map-status>Loading…</span>
+    <span class="om-kmz-note" data-kmz-note aria-live="polite"></span>
   </figcaption>
 </figure>
 

@@ -28,6 +28,14 @@ import {
 } from '../packages/ocean-map/geo.ts';
 import { rampColour, rampStops } from '../packages/ocean-map/ramp.ts';
 import { tileKeysFor } from '../packages/ocean-map/tiles.ts';
+import {
+  kmlColour,
+  parseCoordinates,
+  readKmz,
+  summarise,
+} from '../packages/ocean-map/kmz.ts';
+import fs from 'node:fs';
+import { JSDOM } from 'jsdom';
 
 let failures = 0;
 const check = (what, got, want) => {
@@ -168,6 +176,74 @@ check('and one far past it',
 const wide = tileKeysFor(INDEX, 7, box(-10, -400, 10, 400));
 check('a view spanning more than one turn lists each tile once',
   wide.length, new Set(wide).size);
+
+// ---- KMZ ------------------------------------------------------------------
+
+/* KML writes colours **aabbggrr** — alpha first, channels reversed from CSS.
+   Read naively the sample's opaque red comes out blue, which is plausible
+   enough to ship. */
+check('an opaque KML red is red, not blue', kmlColour('ff0000ff'), { hex: '#ff0000', opacity: 1 });
+check('a half-transparent green', kmlColour('7f00ff00'), { hex: '#00ff00', opacity: 127 / 255 });
+check('a malformed colour is simply absent', kmlColour('nope'), undefined);
+check('and so is a missing one', kmlColour(undefined), undefined);
+
+// "lon,lat[,alt]" — altitude is read and dropped, and latitude is sanity-checked.
+check('coordinates drop altitude', parseCoordinates('-75.5,36.5,0 -74,37,0'), [[-75.5, 36.5], [-74, 37]]);
+check('an impossible latitude is refused', parseCoordinates('10,200 1,2'), [[1, 2]]);
+check('empty coordinates are empty', parseCoordinates(undefined), []);
+
+const parseXml = (text) => new (new JSDOM('').window.DOMParser)().parseFromString(text, 'application/xml');
+const load = (f) => readKmz(new Uint8Array(fs.readFileSync(`scripts/fixtures/${f}`)), parseXml);
+
+const survey = await load('survey.kmz');
+check('the document keeps its name', survey.name, 'Survey plan');
+check('every geometry is found', survey.features.length, 5);
+check('geometry kinds', survey.features.map((f) => f.kind).sort(),
+  ['line', 'line', 'point', 'point', 'polygon']);
+check('folders are carried through',
+  [...new Set(survey.features.map((f) => f.folder))].sort(), ['Areas', 'Legs']);
+
+const leg = survey.features.find((f) => f.name === 'Leg 1');
+/* Its styleUrl points at a StyleMap, whose "normal" pair points at the real
+   style — following only the first hop leaves it unstyled. */
+check('a StyleMap resolves to the normal style', leg.style.stroke, '#ff0000');
+check('and carries the width', leg.style.strokeWidth, 3);
+check('description markup is flattened to text', leg.description, 'CTD line\n12 stations');
+
+const ring = survey.features.find((f) => f.name === 'Box');
+check('a polygon keeps its holes', ring.coordinates.length, 2);
+check('PolyStyle fill and outline switches are read',
+  [ring.style.filled, ring.style.outlined], [true, false]);
+
+/* MultiGeometry needs no special case, but each part has to become its own
+   feature while keeping the placemark's name. */
+check('MultiGeometry splits into its parts',
+  survey.features.filter((f) => f.name === 'Both').map((f) => f.kind).sort(), ['line', 'point']);
+
+/* Not drawn, and counted rather than dropped in silence — a partial render
+   that says nothing is the failure this project keeps meeting. */
+check('what cannot be drawn is counted',
+  [survey.skipped.NetworkLink, survey.skipped.GroundOverlay], [1, 1]);
+check('embedded resources are counted too', survey.skipped['embedded resource'], 1);
+check('and summarised for the reader',
+  summarise(survey).startsWith('5 features · skipped'), true);
+
+// Stored rather than deflated, and not called doc.kml.
+const stored = await load('stored.kmz');
+check('an uncompressed entry reads too', stored.features.length, 5);
+check('and a .kml under any name is found', stored.name, 'Survey plan');
+
+// A bare .kml, which readers hand over as often as a .kmz.
+const plain = await load('plain.kml');
+check('a bare KML needs no unzipping', plain.features.length, 5);
+
+/* Descriptions carry arbitrary HTML and a file from a colleague or a portal is
+   untrusted input even when the reader chose to open it. Markup is stripped
+   rather than filtered — an allow-list is a thing to get subtly wrong. */
+const hostile = await load('hostile.kmz');
+const desc = hostile.features[0].description;
+check('a script tag does not survive', /<script|onerror|<img/i.test(desc), false);
+check('but the readable text does', desc.includes('safe text'), true);
 
 console.log(
   failures

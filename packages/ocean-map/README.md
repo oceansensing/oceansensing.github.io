@@ -3,8 +3,9 @@
 An interactive map of ocean observing platforms and the water they are working
 in: storm tracks and forecast cones, gliders, saildrones, Argo floats, animated
 currents at two depths, sea-surface temperature and salinity, isobaths, a
-coastline and EEZ boundaries — with distance/bearing measurement and a
-right-click readout of depth, current, temperature and jurisdiction.
+coastline and EEZ boundaries — with distance/bearing measurement, a
+right-click readout of depth, current, temperature and jurisdiction, and a
+reader's own KMZ or KML drawn over the top and kept between visits.
 
 Built for <https://oceansensing.org/observations/hurricanes/>, and kept free of
 that site so it can be dropped somewhere else.
@@ -96,6 +97,8 @@ packages/ocean-map/
   geo.ts  ramp.ts  tiles.ts   no Leaflet, no DOM — see below
   palette.ts          map-palette.json, typed
   storm-status.ts     shared with the host's build-time status line
+  kmz.ts              KMZ/KML decode — no Leaflet, no DOM, parser injected
+  store.ts            IndexedDB, for overlays a reader uploads
   data/               the palette, and the sampled basemap water it is gated against
 ```
 

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+<name>Survey plan</name>
+<Style id="leg"><LineStyle><color>ff0000ff</color><width>3</width></LineStyle>
+  <PolyStyle><color>7f00ff00</color><fill>1</fill><outline>0</outline></PolyStyle></Style>
+<StyleMap id="legMap"><Pair><key>normal</key><styleUrl>#leg</styleUrl></Pair>
+  <Pair><key>highlight</key><styleUrl>#other</styleUrl></Pair></StyleMap>
+<Folder><name>Legs</name>
+  <Placemark><name>Leg 1</name><description>&lt;b&gt;CTD&lt;/b&gt; line&lt;br/&gt;12 stations</description>
+    <styleUrl>#legMap</styleUrl>
+    <LineString><coordinates>-75.5,36.5,0 -74.0,37.0,0 -72.5,37.5,0</coordinates></LineString></Placemark>
+  <Placemark><name>Station A</name><Point><coordinates>-75.5,36.5,0</coordinates></Point></Placemark>
+</Folder>
+<Folder><name>Areas</name>
+  <Placemark><name>Box</name><styleUrl>#leg</styleUrl><Polygon>
+    <outerBoundaryIs><LinearRing><coordinates>-76,36 -74,36 -74,38 -76,38 -76,36</coordinates></LinearRing></outerBoundaryIs>
+    <innerBoundaryIs><LinearRing><coordinates>-75.5,36.5 -74.5,36.5 -74.5,37.5 -75.5,37.5 -75.5,36.5</coordinates></LinearRing></innerBoundaryIs>
+  </Polygon></Placemark>
+  <Placemark><name>Both</name><MultiGeometry>
+    <Point><coordinates>-70,35</coordinates></Point>
+    <LineString><coordinates>-70,35 -69,36</coordinates></LineString></MultiGeometry></Placemark>
+</Folder>
+<NetworkLink><Link><href>https://example.org/live.kml</href></Link></NetworkLink>
+<GroundOverlay><name>chart</name></GroundOverlay>
+</Document></kml>
