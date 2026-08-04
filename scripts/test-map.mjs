@@ -11,6 +11,13 @@
 import { JSDOM } from 'jsdom';
 import fs from 'node:fs';
 import path from 'node:path';
+/* The map's own admissibility rule and its sampled water, so this harness
+   judges a drawn colour by the same test the map and test:contrast apply
+   rather than by a third copy of it. */
+import { admissible } from '../packages/ocean-map/contrast.ts';
+const basemapWater = JSON.parse(
+  fs.readFileSync('packages/ocean-map/data/basemap-ocean.json', 'utf8')
+);
 
 const dom = new JSDOM(
   /* Mirrors the component's own markup, figure and all. The wrapper is not
@@ -30,6 +37,7 @@ const dom = new JSDOM(
   // module must replace: a key that merely happened to say "current" because
   // the markup did would prove nothing.
   '<span data-flow-key>STALE</span>' +
+  '<span class="om-particle-colours" data-particle-colours></span>' +
   '<span class="field-controls" data-field-controls hidden>' +
   '<select data-field-map></select><input type="number" data-field-min />' +
   '<input type="number" data-field-max /><button type="button" data-field-auto></button></span>' +
@@ -51,7 +59,12 @@ const { window } = dom;
 globalThis.window = window;
 globalThis.document = window.document;
 Object.defineProperty(globalThis, 'navigator', { value: window.navigator, configurable: true });
-for (const k of ['HTMLElement', 'Element', 'Node', 'SVGElement', 'Event', 'MouseEvent', 'KeyboardEvent', 'DOMParser'])
+/* CustomEvent belongs here for the same reason Event does: the module
+   announces a re-picked particle ramp with one, and jsdom's constructor is
+   window's — a global from elsewhere is not of type 'Event' as far as
+   dispatchEvent is concerned, and the failure is a TypeError in the bundle
+   rather than a failed check. */
+for (const k of ['HTMLElement', 'Element', 'Node', 'SVGElement', 'Event', 'CustomEvent', 'MouseEvent', 'KeyboardEvent', 'DOMParser'])
   globalThis[k] = window[k];
 globalThis.getComputedStyle = window.getComputedStyle.bind(window);
 
@@ -781,12 +794,25 @@ const medianSegment = sortedSegments.length ? sortedSegments[Math.floor(sortedSe
    measured, so listing only the currents passed — but it would have called
    every wind stroke stray the moment the reading moved, which is a check
    that fails for a reason unrelated to what it is testing. */
-const allowedStrokes = new Set([
-  ...palette.currents, ...palette.wind, palette.features.argoEdge,
-]);
-const paletteUsed =
-  [...drawn.styles].every((c) => allowedStrokes.has(c)) &&
-  palette.currents.some((c) => drawn.styles.has(c));
+/* **The ramps are chosen at runtime now, so the palette is no longer the
+   list of colours to expect.** Comparing against it was the old check and
+   would now fail for the wrong reason — the drawn colour is whatever
+   `contrast.ts` picked for the background this harness happens to have up.
+
+   What is still true, and is the thing worth holding, is the *rule*: every
+   colour reaching the canvas must be one the gate would admit over that
+   background. So the strokes are measured rather than matched. The palette's
+   own ramps stay allowed because they are what is drawn before the first
+   resolve and whenever the background is unrecognised. */
+const strokeBackground = basemapWater.basemaps['Bathymetry (GEBCO)'].ocean.map((o) => o.colour);
+const markerColours = Object.values(palette.features);
+const strayStrokes = [...drawn.styles].filter((c) => {
+  if (palette.currents.includes(c) || palette.wind.includes(c)) return false;
+  if (c === palette.features.argoEdge) return false;
+  // A single stop, not a whole ramp: judge it as its own one-colour ramp.
+  return !admissible([c], { background: strokeBackground, markers: markerColours }, palette.bars);
+});
+const paletteUsed = strayStrokes.length === 0 && drawn.styles.size > 0;
 
 /* Argo: two thousand dots on a canvas rather than SVG, so they leave no DOM
    to inspect. Arcs are the tell — the particle layer only ever strokes
@@ -1797,6 +1823,73 @@ const windReadHtml = host.querySelector('.om-point-readout .leaflet-popup-conten
 const flowKeyRamps = [...(flowKey()?.querySelectorAll('.om-key-flow') ?? [])]
   .map((el) => el.style.getPropertyValue('--om-key-ramp'));
 
+/* ---- the particle colour picker -------------------------------------
+
+   The ramps are picked at runtime against whatever is behind them, and the
+   reader may ask for a colour. **The picker offers only the names that
+   clear**, which is the entire reason it ships with no ΔE readout beside
+   it: a choice that would hide the layer is not selectable. So what is
+   checked here is that the disabling is real and agrees with the rule, and
+   that a choice which stops clearing is handed back rather than left on
+   screen. */
+/* Scoped through `[data-ocean-map]` like every other chrome lookup here —
+   `host` is the canvas, and the legend row is its sibling in the caption. */
+const tintSelects = [...(host.closest('[data-ocean-map]')
+  ?.querySelectorAll('[data-particle-colours] select') ?? [])];
+const tintOptions = (i) => [...(tintSelects[i]?.options ?? [])]
+  .map((o) => ({ name: o.textContent, value: o.value, disabled: o.disabled }));
+
+const currentTints = tintOptions(0);
+const someTintDisabled = currentTints.some((o) => o.value && o.disabled);
+const someTintEnabled = currentTints.some((o) => o.value && !o.disabled);
+const autoNeverDisabled = currentTints.find((o) => !o.value)?.disabled === false;
+
+/* Every enabled name must genuinely clear, and every disabled one must
+   genuinely not — both halves, or the control could disable everything and
+   still look correct. Measured against the background the map has up, which
+   with no scalar field on is the active basemap's water. */
+const pickerBackground =
+  basemapWater.basemaps['Bathymetry (GEBCO)'].ocean.map((o) => o.colour);
+const { pickRamp: pickRampFor } = await import('../packages/ocean-map/contrast.ts');
+const tintLabelsHonest = currentTints.filter((o) => o.value).every((o) => {
+  const clears = admissible(
+    pickRampFor(pickerBackground, Object.values(palette.features), o.value).ramp,
+    { background: pickerBackground, markers: Object.values(palette.features) },
+    palette.bars
+  );
+  return clears === !o.disabled;
+});
+
+/* Choose a colour that clears the water, then move the background out from
+   under it and require the map to give it back.
+
+   `Red` is admissible over GEBCO's water and is not over `jet`, which is
+   what an SST layer opens on — so switching that layer on is a real change
+   of background under a choice that was legitimate when it was made. The
+   only acceptable answer is to fall back to automatic: leaving it would
+   draw a field the gate would reject, and there is no readout on this
+   control to warn anybody. */
+let staleChoiceTaken = null;
+let staleChoiceDropped = null;
+let staleChoiceDisabled = null;
+if (tintSelects[0]) {
+  const redOption = [...tintSelects[0].options].find((o) => o.textContent === 'Red');
+  if (redOption && !redOption.disabled) {
+    tintSelects[0].value = redOption.value;
+    tintSelects[0].dispatchEvent(new window.Event('change', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 50));
+    staleChoiceTaken = tintSelects[0].value === redOption.value;
+
+    overlayLabelled(/SST \(ESPC\)/)?.querySelector('input')?.click();
+    await new Promise((r) => setTimeout(r, 400));
+    staleChoiceDropped = tintSelects[0].value === '';
+    staleChoiceDisabled =
+      [...tintSelects[0].options].find((o) => o.textContent === 'Red')?.disabled === true;
+    overlayLabelled(/SST \(ESPC\)/)?.querySelector('input')?.click();
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+
 const windAttribution = host.querySelector('.leaflet-control-attribution')?.textContent ?? '';
 
 windToggle?.querySelector('input')?.click();
@@ -2487,10 +2580,28 @@ const checks = [
   ['the legend names every field that is on',
     /current/i.test(flowKeyBefore) &&
     /wind at 10\s*m/i.test(flowKeyWithWind) && /current/i.test(flowKeyWithWind)],
+  /* Two distinct ramps, each a gradient the module built from that field's
+     own colours. Matching the palette's hexes was the old form of this and
+     is wrong now that the ramps are picked at runtime — it would pass only
+     when the search happened to land back on the fixed pair. Distinctness is
+     the property that actually matters: the whole point of the key is that
+     two sets of drifting lines can be told apart. */
+  /* ---- the particle colour picker ---------------------------------- */
+  ['the reader can choose a particle colour', tintSelects.length === 2],
+  /* Both halves. A control that disabled everything would satisfy the first
+     of these and be useless; one that disabled nothing would satisfy the
+     second and be the bug this replaces. */
+  ['some colours are offered and some are not', someTintEnabled && someTintDisabled],
+  ['and the two agree with the gate\'s own rule', tintLabelsHonest],
+  ['automatic is never unavailable', autoNeverDisabled],
+  ['a chosen colour is applied', staleChoiceTaken === true],
+  /* The check that lets this ship without a live contrast readout. */
+  ['and handed back when the background stops clearing it', staleChoiceDropped === true],
+  ['which the picker then shows as unavailable', staleChoiceDisabled === true],
   ['and each key is painted from its own ramp, not a copy in CSS',
     flowKeyRamps.length === 2 &&
-    flowKeyRamps.some((r) => r.includes(palette.wind[palette.wind.length - 1])) &&
-    flowKeyRamps.some((r) => r.includes(palette.currents[palette.currents.length - 1]))],
+    flowKeyRamps.every((r) => /linear-gradient\(90deg(?:,\s*#[0-9a-f]{6}){5}\)/i.test(r)) &&
+    flowKeyRamps[0] !== flowKeyRamps[1]],
   /* **A current is named for where it goes, a wind for where it comes
      from.** The fixture blows due east at 12 m/s, so the honest report is
      "from 270" — "toward 90" would be exactly backwards and entirely

@@ -363,7 +363,28 @@
   /* The colour-scale controls sit with the legend rather than on the map:
      number inputs and a select inside a Leaflet control are awkward on a
      touchscreen, and this is where the colour bar they act on already is. */
-  .om-field-controls {
+  /* The particle colour picker. Styled here rather than in the host page for
+   the same reason every other map style is — see S7 in BOUNDARIES.md.
+
+   A disabled option is a colour that would not clear the background the
+   reader currently has up; the browser's own disabled styling is the whole
+   affordance, which is why there is no readout beside this. */
+.om-particle-colours {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs, 0.25rem);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--text-muted, #5b6672);
+}
+
+.om-particle-colours label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.om-field-controls {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2xs, 0.25rem);

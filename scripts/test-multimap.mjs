@@ -49,7 +49,7 @@ const { window } = dom;
 globalThis.window = window;
 globalThis.document = window.document;
 Object.defineProperty(globalThis, 'navigator', { value: window.navigator, configurable: true });
-for (const k of ['HTMLElement', 'Element', 'Node', 'SVGElement', 'Event', 'MouseEvent', 'KeyboardEvent', 'DOMParser'])
+for (const k of ['HTMLElement', 'Element', 'Node', 'SVGElement', 'Event', 'CustomEvent', 'MouseEvent', 'KeyboardEvent', 'DOMParser'])
   globalThis[k] = window[k];
 globalThis.getComputedStyle = window.getComputedStyle.bind(window);
 globalThis.sessionStorage = window.sessionStorage;

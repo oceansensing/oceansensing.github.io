@@ -81,7 +81,10 @@ for (const [name, info] of Object.entries(basemaps)) {
    a pale mint that is under a tenth of its water, and judging white against
    only that would reject it despite it being unmissable over the deep navy
    that covers most of the map. */
-const MIN_DELTA_E = 22;
+/* Read from the palette rather than declared here. The map applies these
+   same numbers at runtime now — see contrast.ts — and two copies is exactly
+   how a gate ends up checking a bar the map does not enforce. */
+const MIN_DELTA_E = palette.bars.background;
 const MIN_COVERAGE = 0.9;
 
 /* **What a velocity field has to clear, and what it does not.**
@@ -103,7 +106,7 @@ const MIN_COVERAGE = 0.9;
    Getting this the wrong way round is what put the current ramp at ΔE 21.8
    from the shelf while comfortably clear of every marker: the gate was
    spending its strictness where it mattered least. */
-const MARKER_DELTA_E = 15;
+const MARKER_DELTA_E = palette.bars.marker;
 
 function against(colour, oceans) {
   let covered = 0;
@@ -322,6 +325,128 @@ for (const [pair, c] of concessions) {
     notes.push(`conceded: ${pair} at ΔE ${c.seen.toFixed(1)} (declared ${c.deltaE}) — see _concessions`);
   }
 }
+
+/* ---- the runtime search, over every background the map can present ----
+
+   The particle ramps are no longer fixed: `packages/ocean-map/contrast.ts`
+   picks them in the browser against whatever is behind the particles. That
+   would be unprovable if the background were open-ended, and it is not —
+   it is the sampled water of each basemap, or one of the colour scales,
+   painted opaque. All of them are in this repository, so the search can be
+   run over every one of them here and its answers held to the same bars.
+
+   **This gate calls the map's own `admissible()`.** A reimplementation of
+   the rule would prove something adjacent to what ships; sharing the
+   predicate is the whole basis for believing the offline check.
+
+   What is checked is what a reader can actually reach: automatic mode over
+   every background, and every named colour the picker *offers* over every
+   background — a name that does not clear is fine so long as the picker
+   disables it, so the two lists are compared rather than the colours alone. */
+const { pickRamp, admissible, clearance: rampClearance, NAMED_TINTS } =
+  await import('../packages/ocean-map/contrast.ts');
+
+const backgrounds = [
+  ...Object.entries(basemaps).map(([n, i]) => [`${n} water`, i.ocean.map((o) => o.colour)]),
+  ...Object.entries(palette.colormaps ?? {}).map(([n, stops]) => [`colormap ${n}`, stops]),
+];
+const markerColours = Object.values(palette.features);
+const bars = palette.bars;
+
+let autoWorst = { background: Infinity, marker: Infinity, apart: Infinity };
+const autoFailures = [];
+let thinnestCurrent = { count: Infinity, where: null };
+let thinnestWind = { count: Infinity, where: null };
+const offeredButUnusable = [];
+
+for (const [where, background] of backgrounds) {
+  /* Same order the map resolves in: currents first, wind against a
+     background that already includes the currents' answer. */
+  const current = pickRamp(background, markerColours, null);
+  const wind = pickRamp(background, [...markerColours, ...current.ramp], null);
+  const measured = {
+    background: Math.min(current.clearance, wind.clearance),
+    marker: Math.min(rampClearance(current.ramp, markerColours),
+                     rampClearance(wind.ramp, markerColours)),
+    apart: rampClearance(current.ramp, wind.ramp),
+  };
+  for (const k of Object.keys(autoWorst)) autoWorst[k] = Math.min(autoWorst[k], measured[k]);
+  if (!admissible(current.ramp, { background, markers: markerColours }, bars) ||
+      !admissible(wind.ramp, { background, markers: markerColours, apartFrom: current.ramp }, bars)) {
+    autoFailures.push(
+      `${where}: background ${measured.background.toFixed(1)}, ` +
+      `marker ${measured.marker.toFixed(1)}, apart ${measured.apart.toFixed(1)}`
+    );
+  }
+
+  /* How many named colours survive here. Not a pass/fail on its own — the
+     picker disables the rest — but a picker down to one option is a control
+     not worth having, so the floor is reported and asserted. */
+  const usable = { current: 0, wind: 0 };
+  for (const [, exemplar] of NAMED_TINTS) {
+    for (const field of ['current', 'wind']) {
+      const apartFrom = field === 'wind' ? current.ramp : [];
+      const choice = pickRamp(background, [...markerColours, ...apartFrom], exemplar);
+      if (admissible(choice.ramp, { background, markers: markerColours, apartFrom }, bars)) {
+        usable[field] += 1;
+      }
+    }
+  }
+  if (usable.current < thinnestCurrent.count) thinnestCurrent = { count: usable.current, where };
+  if (usable.wind < thinnestWind.count) thinnestWind = { count: usable.wind, where };
+}
+
+/* A name in the list that clears nowhere is dead weight the reader can see:
+   it appears in the dropdown permanently greyed. Black was dropped from
+   NAMED_TINTS for exactly this and nothing would have said so. */
+for (const [name, exemplar] of NAMED_TINTS) {
+  const anywhere = backgrounds.some(([, background]) =>
+    admissible(pickRamp(background, markerColours, exemplar).ramp,
+               { background, markers: markerColours }, bars));
+  if (!anywhere) offeredButUnusable.push(name);
+}
+
+results.push({
+  what: 'runtime ramps (auto)',
+  on: `every background (bar ${bars.background})`,
+  coverage: autoFailures.length ? 0 : 1,
+  worst: autoWorst.background,
+});
+results.push({
+  what: 'runtime ramps (auto)',
+  on: `every marker (bar ${bars.marker})`,
+  coverage: autoWorst.marker >= bars.marker ? 1 : 0,
+  worst: autoWorst.marker,
+});
+results.push({
+  what: 'runtime ramps (auto)',
+  on: `each other (bar ${bars.apart})`,
+  coverage: autoWorst.apart >= bars.apart ? 1 : 0,
+  worst: autoWorst.apart,
+});
+results.push({
+  what: 'named colours offered',
+  on: 'at least two per field',
+  coverage: Math.min(thinnestCurrent.count, thinnestWind.count) >= 2 ? 1 : 0,
+  worst: Math.min(thinnestCurrent.count, thinnestWind.count),
+});
+results.push({
+  what: 'every offered name',
+  on: 'usable somewhere',
+  coverage: offeredButUnusable.length ? 0 : 1,
+  worst: NAMED_TINTS.length - offeredButUnusable.length,
+});
+for (const line of autoFailures) notes.push(`auto mode under the bar — ${line}`);
+if (offeredButUnusable.length) {
+  notes.push(`offered but never usable: ${offeredButUnusable.join(', ')} — drop from NAMED_TINTS`);
+}
+notes.push(
+  `runtime search over ${backgrounds.length} backgrounds: auto clears background ` +
+  `${autoWorst.background.toFixed(1)}, markers ${autoWorst.marker.toFixed(1)}, ` +
+  `fields ${autoWorst.apart.toFixed(1)} apart; thinnest picker ` +
+  `${thinnestCurrent.count} current (${thinnestCurrent.where}), ` +
+  `${thinnestWind.count} wind (${thinnestWind.where})`
+);
 
 let ok = true;
 for (const r of results) {

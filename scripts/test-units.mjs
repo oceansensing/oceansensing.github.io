@@ -32,7 +32,7 @@ import { rampColour, rampStops } from '../packages/ocean-map/ramp.ts';
 import { ParticleField, sampleVector, speedIndex } from '../packages/ocean-map/particles.ts';
 import { tileKeysFor } from '../packages/ocean-map/tiles.ts';
 import { apply, matrix3d, unitSquareTo } from '../packages/ocean-map/warp.ts';
-import { pickRamp, deltaE, hex as hexRgb } from '../packages/ocean-map-dev/contrast.ts';
+import { pickRamp, deltaE, hex as hexRgb, NAMED_TINTS } from '../packages/ocean-map/contrast.ts';
 import {
   kmlColour,
   parseCoordinates,
@@ -449,12 +449,16 @@ const desc = hostile.features[0].description;
 check('a script tag does not survive', /<script|onerror|<img/i.test(desc), false);
 check('but the readable text does', desc.includes('safe text'), true);
 
-/* ---- the sandbox's runtime ramp search -------------------------------
+/* ---- the runtime ramp search -----------------------------------------
 
-   `packages/ocean-map-dev` is exempt from the map gates by design — it is
-   where colour rules get broken on purpose. This one claim is checked
-   anyway, because it broke twice and both times looked plausible on screen:
-   the picker must return the colour it was asked for.
+   `contrast.ts` picks the particle ramps in the browser against whatever is
+   behind them. `test:contrast` proves those answers clear the bars over
+   every background the map can present; what it cannot see is whether the
+   *named* colours mean anything, because a picker that ignores the name
+   still returns an admissible ramp.
+
+   This is where that is checked, and it needs checking: it broke twice, and
+   both times looked plausible on screen.
 
    First the hue-band test was inverted, so every name returned its
    complement — blue gave olive, violet gave green. Fixing that exposed the
@@ -462,11 +466,9 @@ check('but the readable text does', desc.includes('safe text'), true);
    hue does not name a colour on its own anyway, since deep blue and pale
    pink sit twelve degrees apart. Nothing asked "does blue give a blue?", so
    nothing objected. */
-const NAMED = [
-  ['red', '#e01000'], ['orange', '#ff8000'], ['yellow', '#ffe000'],
-  ['green', '#00b000'], ['teal', '#00b0a0'], ['cyan', '#00b8f0'],
-  ['blue', '#1030d0'], ['violet', '#8020d0'], ['pink', '#e030a0'],
-];
+/* The list the picker offers, not a copy of it — a copy would go on
+   passing about names nobody can choose. */
+const NAMED = NAMED_TINTS;
 /* Deliberately awkward: dark navy water, a warm colormap, and a green one.
    A picker that ignores its argument passes over one background by luck. */
 const BACKDROPS = [
@@ -485,7 +487,7 @@ for (const backdrop of BACKDROPS) {
     // The middle stop is what the eye takes the field to be.
     if (deltaE(hexRgb(choice.ramp[2]), hexRgb(exemplar)) > 18) strays++;
   }
-  check(`over one backdrop, nine names give nine ramps`, answers.size, NAMED.length);
+  check('over one backdrop, every name gives a different ramp', answers.size, NAMED.length);
 }
 check('every named colour returns that colour', strays, 0);
 check('and every one of them finds a candidate', unmatched, 0);
@@ -501,6 +503,6 @@ check('auto clears the background by more than a forced hue does',
 console.log(
   failures
     ? `\n${failures} failing check(s) in the renderer-independent modules.`
-    : '\nok    geo, ramp, tiles and the sandbox ramp search behave as their comments claim'
+    : '\nok    geo, ramp, tiles and the runtime ramp search behave as their comments claim'
 );
 process.exit(failures ? 1 : 0);

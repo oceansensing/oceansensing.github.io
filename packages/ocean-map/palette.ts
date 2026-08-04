@@ -12,8 +12,13 @@
  * contrast gate.
  */
 import raw from './data/map-palette.json';
+import type { Bars } from './contrast';
 
 export interface Palette {
+  /** What a runtime-chosen particle ramp has to clear. Lives in the JSON so
+      the map and scripts/test-contrast.mjs read one number rather than two
+      copies that can drift — see `_bars` there. */
+  bars: Bars;
   /** Marker and line colours, keyed by feature. */
   features: Record<string, string>;
   /** The current-particle ramp, slow to fast. */

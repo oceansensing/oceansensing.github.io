@@ -92,7 +92,17 @@ for a pair that actually clears fails with "remove it". That second half is
 what stops the list becoming a place to hide things — without it a clash that
 got fixed would stay listed forever and the record would stop being read.
 
-*Enforced by* `npm run test:contrast` and the palette comparison in `test:map`.
+**The particle ramps are the one exception, and they are still not inlined.**
+They are *chosen* at runtime by `contrast.ts`, against whatever the particles
+are actually drawn over — see the section in `CLAUDE.md`. What that changes is
+when the decision is made, not whether it is checked: every answer is held to
+`bars` from the palette, and `test:contrast` runs the same search over all 27
+backgrounds the map can present. The rule for a port is the same either way —
+**call `admissible()`, never re-derive it**. A second copy of the bar is how a
+check ends up proving something the map does not do.
+
+*Enforced by* `npm run test:contrast`, which shares `admissible()` with the
+module, and the stroke measurement in `test:map`.
 
 ### S6. CSS keys off the `ocean-map` class, never an id
 

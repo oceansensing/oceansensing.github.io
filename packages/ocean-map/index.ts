@@ -9,6 +9,8 @@ import { coordText, elapsed, hoursAhead, hourStamp, initialBearing, spanText, st
   from './geo';
 import { rampColour, rampStops } from './ramp';
 import { VelocityLayer } from './velocity-layer';
+import { pickRamp, admissible, clearance, NAMED_TINTS, type RampChoice } from './contrast';
+import basemapWater from './data/basemap-ocean.json';
 import { tileKeysFor } from './tiles';
 import { readKmz, summarise, type KmzDocument, type KmzFeature, type KmzOverlay } from './kmz';
 import { matrix3d, type Pixel } from './warp';
@@ -430,6 +432,54 @@ export async function createOceanMap(
   /* Both animated fields, so the point readout can sample whichever one
      the reader has on rather than a fixed depth. */
   const flows: { group: L.LayerGroup; layer: L.Layer | null; kind: FlowKind }[] = [];
+
+  /* ---- particle colours, resolved against what is behind them ----------
+
+     See `contrast.ts` for why these are chosen here rather than offline. The
+     short form: a particle owes the background more than anything else on
+     the map does, and the background is 27 different things depending on
+     which basemap and which colour scale the reader has up. One fixed pair
+     had to clear all 27 at once and cleared some of them by ΔE 3.
+
+     Every answer is still held to the palette's `bars`, and
+     `scripts/test-contrast.mjs` proves that offline over all 27 — the search
+     is deterministic and the backgrounds are all known, so nothing about
+     moving the decision to runtime makes it unprovable. */
+  let activeBasemap = 'Bathymetry (GEBCO)';
+
+  /** The reader's request per field, as an exemplar hex from `NAMED_TINTS`,
+      or null for automatic. */
+  const particleTint: Record<'current' | 'wind', string | null> = { current: null, wind: null };
+  const particleChoice: Partial<Record<'current' | 'wind', RampChoice>> = {};
+
+  /** What the particles are actually drawn over.
+
+      A scalar field is painted opaque, so when one is on the background is
+      **its colour scale**, not the basemap — the water is not visible at
+      all. That is what makes this tractable: the answer depends on one ramp
+      of ten stops rather than on every basemap and every colormap at once.
+      With no field on it is the sampled water of the active basemap, the
+      same tones the offline gate has always used. */
+  const backgroundColours = (): string[] => {
+    const shown = ssts.find((f) => map.hasLayer(f.group));
+    if (shown) {
+      const stops = (palette.colormaps ?? {})[choiceFor(shown.layer?.options?.field).map];
+      if (stops?.length) return stops;
+    }
+    const water = (basemapWater as { basemaps: Record<string, { ocean: { colour: string }[] }> })
+      .basemaps[activeBasemap]?.ocean;
+    return water ? water.map((o) => o.colour) : [];
+  };
+
+  const MARKER_COLOURS = Object.values(palette.features);
+
+  /* Assigned once the flows exist; called from the basemap, layer and
+     colour-scale handlers, which are all built later. */
+  let resolveParticleColours = () => {};
+  /* The picker re-reads which names are available whenever the background
+     moves under it. Set when that control is built; a no-op if the host
+     page has no picker in its markup. */
+  let refreshTintOptions = () => {};
 
   /* ---- the forecast hour ------------------------------------------------
 
@@ -920,6 +970,63 @@ export async function createOceanMap(
     colours: palette.wind,
     reads: 'from',
   });
+
+  /* Resolve both ramps against whatever is behind them now.
+
+     Called on a basemap change, a layer going on or off, a colour-scale
+     change, and a reader picking a colour — never inside a frame. Scoring
+     the candidate set is ~17 ms; doing it 18 times a second would be absurd
+     and would make the colour jitter besides.
+
+     **Currents resolve first, wind second, against a background that
+     includes the currents' answer.** The order matters and this is the
+     honest one: resolved independently the two converge on the same region
+     of the wheel, and two sets of drifting lines with no shape to tell them
+     apart is the one failure this map cannot absorb.
+
+     **A reader's choice is dropped if it no longer clears.** They pick green
+     over one colour scale and then change the scale to something green; the
+     choice was admissible when made and is not now. Falling back to
+     automatic is the only answer that cannot leave an unreadable layer on
+     screen, and the picker snaps back to Auto so it is not a silent
+     substitution. This is also what makes the control safe without a live
+     ΔE readout beside it. */
+  resolveParticleColours = () => {
+    const background = backgroundColours();
+    // No answer is better than a wrong one: an unrecognised basemap leaves
+    // the palette's fixed ramps, which are gated for exactly this case.
+    if (!background.length) return;
+
+    const admits = (ramp: string[], apartFrom?: string[]) =>
+      admissible(ramp, { background, markers: MARKER_COLOURS, apartFrom }, palette.bars);
+
+    const pick = (
+      field: 'current' | 'wind',
+      apartFrom: string[]
+    ): RampChoice => {
+      const wanted = particleTint[field];
+      if (wanted) {
+        const asked = pickRamp(background, [...MARKER_COLOURS, ...apartFrom], wanted);
+        if (admits(asked.ramp, apartFrom)) return asked;
+        particleTint[field] = null;   // no longer clears; hand it back to auto
+      }
+      return pickRamp(background, [...MARKER_COLOURS, ...apartFrom], null);
+    };
+
+    const current = pick('current', []);
+    const windChoice = pick('wind', current.ramp);
+    particleChoice.current = current;
+    particleChoice.wind = windChoice;
+
+    for (const entry of flows) {
+      const chosen = entry.kind.reads === 'from' ? windChoice : current;
+      entry.kind.colours = chosen.ramp;
+      (entry.layer as unknown as { setOptions?: (o: object) => void } | null)
+        ?.setOptions?.({ colorScale: chosen.ramp });
+    }
+    refreshTintOptions();
+    host.dispatchEvent(new CustomEvent('particlecolours', { detail: particleChoice }));
+  };
 
   /* ---- sea-surface temperature ---------------------------------------
 
@@ -1474,7 +1581,85 @@ export async function createOceanMap(
         }
       };
       map.on('overlayadd overlayremove', showFlowKeys);
+      /* And whenever the ramps are re-picked, which a layer event does not
+         cover: changing the colour scale changes the background, which
+         changes the particle colours, with no layer going on or off. A
+         legend still showing the previous colour is worse than no legend —
+         it is the one thing on screen claiming what the field is drawn in. */
+      host.addEventListener('particlecolours', showFlowKeys);
       showFlowKeys();
+    }
+  }
+
+  /* ---- the particle colour control ------------------------------------
+
+     A named-colour picker, not a colour picker. A free picker lets a reader
+     choose something that hides the layer — the same objection that keeps
+     the colormap list curated. Asking for "green" states an intent and
+     leaves the exact stop to the search, so the reader gets their green and
+     it is always the green that works over whatever is behind it now.
+
+     **Only the names that clear are offered.** Each is re-tested against the
+     current background whenever that background moves, and one that does not
+     clear the palette's bars is disabled rather than removed, so the list
+     does not reshuffle under the pointer. That is what lets this ship with no
+     ΔE readout beside it: the reader cannot choose a colour that hides the
+     layer, because it is not selectable. Measured across all 27 backgrounds
+     the map can present, the thinnest case still offers five named colours
+     for the current and three for the wind, plus Auto.
+
+     Wind is judged against the current's chosen ramp as well, so a name that
+     would collide with the other field goes unavailable rather than drawing
+     two indistinguishable sets of trails. */
+  {
+    const picker = find<HTMLElement>('[data-particle-colours]');
+    if (picker) {
+      const selects: Partial<Record<'current' | 'wind', HTMLSelectElement>> = {};
+      for (const field of ['current', 'wind'] as const) {
+        const label = document.createElement('label');
+        const name = document.createElement('span');
+        name.textContent = field === 'wind' ? 'Wind' : 'Current';
+        label.append(name);
+        const select = document.createElement('select');
+        select.setAttribute('aria-label', `${name.textContent} particle colour`);
+        for (const [label_, tint] of [['Auto', ''] as const, ...NAMED_TINTS]) {
+          const option = document.createElement('option');
+          option.value = tint;
+          option.textContent = label_;
+          select.append(option);
+        }
+        select.addEventListener('change', () => {
+          particleTint[field] = select.value || null;
+          resolveParticleColours();
+        });
+        label.append(select);
+        picker.append(label);
+        selects[field] = select;
+      }
+
+      refreshTintOptions = () => {
+        const background = backgroundColours();
+        if (!background.length) return;
+        const currentRamp = particleChoice.current?.ramp ?? [];
+        for (const field of ['current', 'wind'] as const) {
+          const select = selects[field];
+          if (!select) continue;
+          /* The wind must also stay clear of whatever the current ended up
+             with; the current has nothing above it to avoid. */
+          const apartFrom = field === 'wind' ? currentRamp : [];
+          for (const option of Array.from(select.options)) {
+            if (!option.value) continue;   // Auto always works: it searches everything
+            const choice = pickRamp(background, [...MARKER_COLOURS, ...apartFrom], option.value);
+            option.disabled = !admissible(
+              choice.ramp,
+              { background, markers: MARKER_COLOURS, apartFrom },
+              palette.bars
+            );
+          }
+          // Reflect a choice the resolver handed back to auto.
+          select.value = particleTint[field] ?? '';
+        }
+      };
     }
   }
 
@@ -1621,6 +1806,9 @@ export async function createOceanMap(
       choiceFor(field).map = mapPicker.value;
       repaint();
       syncControls();
+      // The colour scale *is* the background when a field is on, so the
+      // particles have to be re-picked against it.
+      resolveParticleColours();
     });
 
     const pin = () => {
@@ -1960,6 +2148,9 @@ export async function createOceanMap(
   const LIGHT_BASEMAPS = new Set(['Bathymetry (Esri Ocean)', 'OpenStreetMap']);
   const markBasemapTone = (name: string) => {
     host.dataset.basemapTone = LIGHT_BASEMAPS.has(name) ? 'light' : 'dark';
+    // With no scalar field on, the basemap's water *is* the background.
+    activeBasemap = name;
+    resolveParticleColours();
   };
   markBasemapTone('Bathymetry (GEBCO)');
   map.on('baselayerchange', (e: L.LayersControlEvent) => markBasemapTone(e.name));
@@ -2595,6 +2786,10 @@ export async function createOceanMap(
     [sstOisst, sstNavy, sssNavy],
   ];
 
+  /* A scalar field going on or off swaps the background wholesale — from the
+     basemap's water to that field's colour scale, or back. */
+  map.on('overlayadd overlayremove', () => resolveParticleColours());
+
   map.on('overlayadd', (e: L.LayersControlEvent) => {
     const group = EXCLUSIVE.find((p) => p.includes(e.layer));
     const others = (group ?? []).filter((l) => l !== e.layer && map.hasLayer(l));
@@ -2662,6 +2857,12 @@ export async function createOceanMap(
              reload wants tomorrow-from-now, not the absolute hour that
              meant at the time — which by then is a frame nearer the past. */
           lead: forecast.lead,
+          /* Same reason again: the page reloads itself hourly, and a colour
+             the reader chose deliberately must survive that. Stored as the
+             exemplar they asked for, not the ramp it resolved to — the
+             background may differ by then, and what they asked for is
+             "green", not that particular green. */
+          tints: particleTint,
         })
       );
     } catch {
@@ -2710,6 +2911,21 @@ export async function createOceanMap(
     }
     if (typeof saved.bathyOpacity === 'number' && Number.isFinite(saved.bathyOpacity)) {
       bathyOpacity = Math.max(0.1, Math.min(1, saved.bathyOpacity));
+    }
+
+    /* Only a colour still on offer — the list can change between builds, and
+       a stored exemplar nothing recognises would sit in `particleTint`
+       forever, failing every admissibility test and quietly costing the
+       reader the automatic choice. Whether it clears *this* background is
+       not checked here: the resolver does that on every background change
+       and hands an inadmissible one back to auto. */
+    const tints = saved.tints as Record<string, unknown> | undefined;
+    if (tints) {
+      const offered = new Set(NAMED_TINTS.map(([, tint]) => tint));
+      for (const field of ['current', 'wind'] as const) {
+        const tint = tints[field];
+        if (typeof tint === 'string' && offered.has(tint)) particleTint[field] = tint;
+      }
     }
 
     if (Array.isArray(saved.overlays)) {
@@ -3091,6 +3307,13 @@ export async function createOceanMap(
 
     bathyOpacity = BATHY_OPACITY;
     applyBathyOpacity();
+
+    // Back to automatic particle colours. markBasemapTone above already
+    // re-resolved them, but against the reader's tints — clear those and
+    // resolve again, or Reset would leave a chosen colour in place.
+    particleTint.current = null;
+    particleTint.wind = null;
+    resolveParticleColours();
 
     // Back to the hour nearest the reader's clock, which is where the map
     // opens — not to lead 0, which on a late run is not the same thing.

@@ -178,12 +178,22 @@ const claims = [
     from: /const VIEW_MARGIN = ([\d.]+)/,
     doc: (v) => new RegExp(`${Math.round(Number(v) * 100)}% of the viewport|${Math.round(Number(v) * 100)}% past the viewport`),
   },
-  /* The sandbox's likeness bar. It is the whole argument that the picker's
-     labels are honest — loosen it and "Green" starts returning yellow — and
-     the docs quote it as the reason the names can be trusted. */
+  /* The likeness bar. It is the whole argument that the picker's labels are
+     honest — loosen it and "Green" starts returning yellow — and the docs
+     quote it as the reason the names can be trusted. */
+  /* The marker bar. It moved from the gate into the palette so the map could
+     apply it too, and the prose explains why it is lower than the background
+     one — a number the docs argue about at length must not be able to drift
+     from the file. */
+  {
+    what: 'particle-vs-marker bar',
+    file: 'packages/ocean-map/data/map-palette.json',
+    from: /"marker":\s*(\d+)/,
+    doc: (v) => new RegExp(`\`bars.marker\`, ${v} rather than`),
+  },
   {
     what: 'runtime ramp likeness bar',
-    file: 'packages/ocean-map-dev/contrast.ts',
+    file: 'packages/ocean-map/contrast.ts',
     from: /likeness = (\d+)/,
     doc: (v) => new RegExp(`\\u0394E \\u2264 ${v} to an exemplar`),
   },
@@ -192,7 +202,7 @@ const claims = [
      so a doc quoting the old count would be quoting the broken version. */
   {
     what: 'runtime ramp candidate profiles',
-    file: 'packages/ocean-map-dev/contrast.ts',
+    file: 'packages/ocean-map/contrast.ts',
     from: /for \(const chroma of \[([\d, ]+)\]\)[\s\S]*?for \(const L0 of \[([\d, ]+)\]\)/,
     count: (chroma, lightness) => chroma.split(',').length * lightness.split(',').length,
     doc: (n) => new RegExp(`${n} profiles`),

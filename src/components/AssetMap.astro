@@ -71,6 +71,12 @@ const {
            to say before the module has read which layers are on. -->
       <span data-flow-key></span>
       <span class="om-key sst" data-sst-key hidden>Sea surface temp</span>
+      <!-- A container, not a control. The module fills it with one select
+           per animated field, offering only the colours that clear the
+           palette's bars over whatever is behind the particles right now —
+           see the note in the module for why that is what lets it ship
+           without a live contrast readout beside it. -->
+      <span class="om-particle-colours" data-particle-colours></span>
       <span class="om-field-controls" data-field-controls hidden>
         <label>
           <span class="om-vh">Colour scale</span>

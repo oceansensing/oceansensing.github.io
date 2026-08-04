@@ -769,61 +769,18 @@ that graduates has to satisfy the gates it was exempt from, and usually has
 to be argued for here as well, because this map's constants are measured
 decisions rather than preferences.
 
-#### Particle colours chosen at runtime
+#### The first experiment graduated
 
-The first experiment, and the reason the fork exists. Production picks its two
-particle ramps once, offline, and `test:contrast` proves them against every
-water tone and every marker. `packages/ocean-map-dev/contrast.ts` does the
-same arithmetic — CIEDE2000, agreeing with `scripts/lib/colour.mjs` to 0.01 —
-**in the browser, against whatever is actually behind the particles now**: the
-colormap's stops when a scalar field is on, the sampled basemap water when it
-is not. Currents resolve first, then wind against a background that includes
-the currents' answer, so two sets of drifting lines cannot converge on the
-same region of the wheel.
+Runtime particle colours were built here and are **in production now** — see
+"Particle colours are chosen against what is behind them". The fork is back
+in sync with `packages/ocean-map`, which is the resting state: `diff -r`
+shows only the README and `package.json`.
 
-What it buys is measurable, and it is largest exactly where the fixed choice
-is weakest — a ramp checked against water is not checked against a colormap
-the reader turned on afterwards:
-
-| background | production ΔE | runtime ΔE |
-| --- | --- | --- |
-| GEBCO water, no field | 30.1 | 39 |
-| `cmo.matter` | **3.1** | 42 |
-| `cmo.algae` | 7.9 | 42 |
-| `jet` | 16.4 | 41 |
-| `thermal` | 46.2 | 39 |
-
-**The picker names colours; it does not offer a colour wheel.** A free picker
-lets a reader choose something that hides the layer, which is the same
-objection that keeps the colormap list curated. Asking for "blue" states an
-intent and leaves the exact stop to the search, and the readout beside it
-prints what the choice cost in the same ΔE the offline gate speaks — including
-when the honest answer is that blue over blue water is a poor idea.
-
-**A name is an exemplar colour, not a hue angle, and getting there took two
-wrong turns worth recording.** The hue band was tested inverted first, so
-every name returned its complement — blue gave olive, violet gave green — a
-palette plausible enough to survive a browser check. Fixing that exposed that
-the angles had been guessed rather than measured: Lab compresses the blues
-into 300–345° and spreads the yellow-greens over 90–180°, so "Blue 260" was
-cyan's angle and "Red 25" was orange's. And measuring them still was not
-enough, because **hue does not name a colour on its own** — deep blue and pale
-pink sit twelve degrees apart, lightness being what separates them, so a
-hue-banded search asked for blue over blue water quite reasonably returned
-`#ffb0ff`. Filtering on ΔE ≤ 18 to an exemplar constrains both axes at once,
-in the metric everything else here already speaks.
-
-The candidate set covers lightness at every chroma for that reason. Pairing
-pale with low chroma and dark with high — six profiles — left the tight balls
-around named colours empty, since deep blue is high chroma at *low* lightness.
-30 profiles × 60 hues costs 16.5 ms per search, which is a layer or colormap
-change and never a frame.
-
-`test:units` carries the one check the sandbox is not exempt from: **asking for
-a colour must return that colour**, over three deliberately awkward
-backgrounds. Nothing asked that, which is why the bug shipped twice. Mutation-
-tested against all three failure shapes — the inverted test, ignoring the
-request, and thinning the candidates.
+That is what promotion is supposed to look like. The idea needed somewhere to
+be wrong in — its first two attempts returned the complement of every colour
+asked for — and then had to satisfy the gates it had been exempt from before
+it could ship. Both halves matter; a sandbox nothing ever leaves is just a
+second codebase.
 
 ### One map, however many pages carry it
 
@@ -850,8 +807,14 @@ tested: planting one rule in `visualization.astro` fails it.
 **Never inline a colour in `AssetMap.astro`.** They live in
 `packages/ocean-map/data/map-palette.json`, which the component imports and
 `npm run test:contrast` checks — a hardcoded colour is invisible to the gate.
-`test:map` catches it too, by comparing what actually reaches the canvas
-against the palette file.
+`test:map` catches it too, by measuring what actually reaches the canvas
+against the same admissibility rule.
+
+**The particle ramps are the exception, and they are chosen at runtime.**
+Everything else on the map is one fixed colour; a velocity field is not, for
+a reason specific to it — see "Particle colours are chosen against what is
+behind them" below. It is still gated, over every background the map can
+present.
 
 **What a velocity field owes, in order: the background, then the other
 field, then the markers — and the gate is built that way now.**
@@ -860,8 +823,12 @@ A particle is a thin moving line covering the whole map, and the only thing
 behind it is the water: the bathymetry in whichever of its tones, or whichever
 colour scale has replaced it. There is no casing and no shape to fall back on,
 so a particle that does not clear the background is simply invisible. Both
-velocity fields are held to `MIN_DELTA_E` against every water tone and every
-marker-safe colormap.
+velocity fields are held to the palette's `bars.background` against every
+water tone and every marker-safe colormap.
+
+**The three bars live in `map-palette.json` now, not in the gate.** The map
+applies them itself at runtime, and two copies of a threshold is how a gate
+ends up checking a bar the map does not enforce.
 
 The two fields also owe *each other*, for the same reason: two sets of
 drifting lines have nothing but hue to tell them apart. Coral against deep
@@ -871,7 +838,7 @@ Markers owe far less. A marker is a small filled dot with a dark outline,
 sitting still, in a place the reader is looking at deliberately — shape, size
 and stillness separate it from a drifting trail long before hue does, which is
 the argument Argo's old exemption always rested on. So particle-vs-marker is
-held to `MARKER_DELTA_E`, 15 rather than 22.
+held to `bars.marker`, 15 rather than 22.
 
 Getting that order wrong is what produced the two bugs above: the gate spent
 its strictness on the markers, where it was not needed, and let the current
@@ -916,6 +883,93 @@ contrast to 79%. The dots carry a dark outline instead, which separates a
 discrete dot from a drifting trail whatever the fill does. That argument —
 form and motion carrying what colour does not — is what every concession here
 leans on, and its limits are visible in the list getting longer.
+
+#### Particle colours are chosen against what is behind them
+
+`packages/ocean-map/contrast.ts`. Every other colour on this map is fixed and
+proved offline. The two particle ramps are not, and the reason is specific to
+what a velocity field is: a thin moving line with nothing behind it but the
+background, where the background is **27 different things** — the sampled
+water of each basemap, or any of the 25 colour scales, painted opaque — and a
+reader swaps between them without touching the particles.
+
+One fixed pair had to clear all 27 at once, and the arithmetic of that is
+unforgiving. Measured, the coral ramp sat ΔE **3.1** from `cmo.matter` and 7.9
+from `cmo.algae`: it was chosen against water, and a colormap the reader turns
+on afterwards was never part of the problem it solved. Solving one background
+at a time is a far easier problem, and the search now runs in the browser
+whenever the background changes — a basemap switch, a layer going on or off, a
+colour scale change. Never in a frame: it costs ~17 ms.
+
+**Moving the decision to runtime did not move it out of the gate's reach**,
+and that is the whole reason it was allowed to ship. The 27 backgrounds are
+all in this repository, so `test:contrast` runs the same search over every one
+of them and holds the answers to the same bars. Measured worst case across all
+27: background **30.7**, markers **23.0**, and the two fields **22.7** apart —
+against a fixed pair whose worst was 3.1. It is a stronger guarantee than the
+one it replaced, not a weaker one.
+
+**The gate calls the map's own `admissible()`.** A gate with its own copy of
+the rule proves something adjacent to what ships; the bars live in
+`map-palette.json` for the same reason. Mutation-tested three ways — raising
+the bar past what the search can reach, offering a colour that clears nothing,
+and resolving the wind independently of the currents, which is the one that
+matters most: it reports the two fields at ΔE **0.0** apart, i.e. identical.
+So the resolve order — currents first, wind against a background that already
+includes the currents' answer — is load-bearing rather than tidy.
+
+**The reader can ask for a colour, and only the ones that work are offered.**
+Ten named colours per field, each re-tested against the current background;
+one that would not clear is disabled rather than removed, so the list does not
+reshuffle under the pointer. That is what lets the control ship with no ΔE
+readout beside it — the sandbox had one, and it is not needed when an
+unusable choice is simply not selectable. Measured across all 27 backgrounds,
+the thinnest case still offers **five** named colours for the current and
+three for the wind, plus Auto.
+
+A choice can stop being admissible after it is made: pick green, then switch
+to a green colour scale. The resolver hands it back to automatic and the
+picker snaps to Auto, because leaving it would draw a field the gate would
+reject with nothing on screen saying so. `test:map` drives exactly that —
+`Red` clears GEBCO's water and fails over `jet`, which is what an SST layer
+opens on — and mutation-testing the fallback away fails it.
+
+The choice rides in the saved view like the colour scales, so the hourly
+self-reload does not silently revert it, and Reset clears it.
+
+**Black is not offered, on measurement rather than taste**: across all 27
+backgrounds it clears none, since a dark ramp can separate from neither dark
+water nor a pale colour scale. `test:contrast` fails on any name in the list
+that is usable nowhere, so that stays true.
+
+**The palette's `currents` and `wind` ramps are still there and still gated.**
+They are what is drawn before the first resolve and whenever the background
+cannot be identified — an unrecognised basemap — which is exactly the case a
+fixed, fully-checked pair still serves.
+
+**A name is an exemplar colour, not a hue angle**, and that took two wrong
+turns worth recording. The hue band was tested inverted first, so every name
+returned its complement — blue gave olive, violet gave green — a palette
+plausible enough to survive a browser check. Fixing that exposed that the
+angles had been guessed: Lab compresses the blues into 300–345° and spreads
+the yellow-greens over 90–180°, so "Blue 260" was cyan's angle and "Red 25"
+was orange's. And measuring them still was not enough, because **hue does not
+name a colour on its own** — deep blue and pale pink sit twelve degrees apart,
+lightness being what separates them, so a hue-banded search asked for blue
+over blue water quite reasonably returned `#ffb0ff`. Filtering on ΔE ≤ 18 to
+an exemplar constrains both axes at once, in the metric everything else here
+already speaks.
+
+The candidate set covers lightness at every chroma for that reason — 30
+profiles × 60 hues. Pairing pale with low chroma and dark with high left the
+tight balls around named colours empty, since deep blue is high chroma at
+*low* lightness.
+
+`test:units` carries the claim the contrast gate cannot see: **asking for a
+colour must return that colour.** A picker that ignored its argument entirely
+would still return an admissible ramp and pass `test:contrast`, which is
+precisely how the inverted-hue bug survived. Mutation-tested against all three
+failure shapes.
 
 The map offers two bathymetries of opposite tone: Esri Ocean is light (ocean
 luminance ~0.33) and GEBCO is dark (~0.10, though it paints shallow banks a
