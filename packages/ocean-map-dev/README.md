@@ -22,21 +22,28 @@ an experiment, it is a broken deploy.
 
 ## What is being tried right now
 
-**Sea ice.** Two concentration layers — the OISST analysis and the ESPC
-forecast — plus the 15% edge as linework in its own pane. The data comes from
-the shared pipelines like everything else; what is being tried here is how to
-draw a field that covers a tenth of the ocean rather than all of it, which is
-the first scalar on this map that is mostly absent.
+**Nothing**, and that is the resting state. `diff -r packages/ocean-map
+packages/ocean-map-dev` shows only this README and `package.json`.
 
-Two things in it may or may not deserve promotion, and that is the question:
-`drawAbove`, a floor below which a scalar paints nothing, and a range pinned
-to the whole scale rather than to the view. Both are right for ice and both
-would be wrong for temperature, so the interesting part is whether they
-generalise or are ice-shaped.
+Two experiments have graduated from here, which is what success looks like:
 
-The previous experiment, runtime particle colours, **graduated** — it is in
-`packages/ocean-map/contrast.ts` now, gated by `test:contrast` over every
-background the map can present.
+- **Runtime particle colours** — now `packages/ocean-map/contrast.ts`, gated
+  by `test:contrast` over every background the map can present.
+- **Sea ice** — concentration from both sources and thickness, together with
+  `drawAbove`, the floor below which a scalar paints nothing. That floor was
+  the open question while it sat here: right for ice and wrong for
+  temperature, so whether it generalised or was ice-shaped had to be seen. It
+  generalises as an opt-in per field, which is how it shipped.
+
+One thing was tried here and **thrown away rather than promoted**: the 15%
+ice edge, drawn as linework. It earned its place only while the concentration
+raster was coarse; once that reached native resolution the edge was drawing
+the boundary of a field already on screen, and a contour can never be finer
+than the grid it is cut from. Not every experiment graduates, and this is the
+shape of one that should not have.
+
+The next candidate is polar stereographic, scoped in the repo's `PLAN.md` and
+deliberately not started.
 
 ## How to read it
 

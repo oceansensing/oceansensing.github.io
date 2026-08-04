@@ -109,8 +109,24 @@ isobath opacity slider and status line are the host's markup**, found by
 | `[data-kmz-file]` | `<input type="file">` for a reader's KMZ or KML |
 | `[data-kmz-list]` | where loaded overlays are listed, with a remove button each |
 | `[data-kmz-note]` | what the last upload drew and skipped |
+| `[data-flow-key]` | a **bare container** the module fills with one key per animated field that is on. Give it no class of its own or it draws a swatch in front of the ones it holds |
+| `[data-particle-colours]` | where the per-field particle colour pickers are built |
+| `[data-forecast-controls]` | the forecast-hour buttons, when the data publishes more than one frame |
+| `[data-point-readout]` | not a hook — the readout is a Leaflet popup and needs no markup |
+| `[data-map-credit]` | where Leaflet's attribution is **moved to** |
 
 Every one is optional. Omit a hook and that control simply does not appear.
+
+**`[data-map-credit]` is the one worth adding deliberately.** Leaflet renders
+attribution as a control, so by default it floats over the bottom edge of the
+map — on top of the graticule's longitude labels, which are pinned to that
+same edge. Give the module an element and it reparents the control there; the
+control is otherwise untouched, so it goes on assembling and updating the
+credit itself. Omit it and you keep Leaflet's floating box, which is correct
+but crowded.
+
+The attribution is **not** optional in the legal sense — the data sources
+require credit. What is optional is only where it sits.
 
 This is the roughest edge in the package and the obvious next improvement:
 having the module build its own chrome would reduce a deployment to one

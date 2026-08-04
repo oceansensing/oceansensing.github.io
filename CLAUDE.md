@@ -463,6 +463,22 @@ forecast hour this one reached **~904 MB, 90% of it**, and one more layer
 would not have fitted. The data repository is on a *separate account*, so it
 has its own gigabyte and its own bandwidth allowance.
 
+**Where that stands now** (measured 2026-08-04, six tiled products including
+the two ice sets): the Pages deploy artifact is **57 MB compressed**, the
+committed static half is **134 MB** — 118 of it `bathy-tiles` — and the
+uncompressed published tree is roughly **500 MB**, about half the cap. The
+estimate is the committed half plus the grids plus the tile sets at their
+documented raw sizes; nobody has summed the deployed tree exactly.
+
+**What holds that down is `LEADS = [36]`.** The 904 MB was five forecast
+frames with a tile set each. At one frame the sets do not multiply, so the
+ice layers cost almost nothing: all four field tile sets together cache to
+**6 MB compressed**, because most of the ocean is a field of zeros and ice
+tiles compress about 200:1. Turning the extra leads back on is the change
+that moves this from half-full to over the cap — and there are six tiled
+products now rather than four, so it is a steeper multiplier than when that
+decision was last weighed.
+
 The split is not clean down the middle, and the seam is worth knowing:
 
 - **Real-time data** — currents, fields, storms, platforms — is fetched
