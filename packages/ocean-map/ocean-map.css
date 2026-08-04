@@ -876,3 +876,16 @@
 .ocean-map .om-credit .leaflet-control-attribution a {
   color: var(--link, #1b4f72);
 }
+
+/* One colour bar per scalar field that is on. The swatch is the field's own
+   ramp, so two fields on at once cannot be told apart only by their numbers. */
+.ocean-map .om-key-scalar::before {
+  background: var(--sst-ramp, linear-gradient(to right, #2c7fb8, #edf8b1));
+}
+
+.ocean-map [data-sst-key] {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs, 0.5rem);
+  align-items: center;
+}

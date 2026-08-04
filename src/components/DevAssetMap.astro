@@ -80,7 +80,11 @@ const {
            front of them. Empty in the markup because there is nothing true
            to say before the module has read which layers are on. -->
       <span data-flow-key></span>
-      <span class="om-key sst" data-sst-key hidden>Sea surface temp</span>
+      <!-- A container, not a key. The module fills it with one bar per
+           scalar field that is on — ice draws over temperature, so there
+           can be two. It carries no `om-key` class of its own, or it
+           draws a swatch in front of the ones it holds. -->
+      <span data-sst-key hidden></span>
       <span class="om-field-controls" data-field-controls hidden>
         <label>
           <span class="om-vh">Colour scale</span>

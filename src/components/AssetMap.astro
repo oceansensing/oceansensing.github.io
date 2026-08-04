@@ -76,7 +76,11 @@ const {
            front of them. Empty in the markup because there is nothing true
            to say before the module has read which layers are on. -->
       <span data-flow-key></span>
-      <span class="om-key sst" data-sst-key hidden>Sea surface temp</span>
+      <!-- A container, not a key. The module fills it with one bar per
+           scalar field that is on — ice draws over temperature, so there
+           can be two. It carries no `om-key` class of its own, or it
+           draws a swatch in front of the ones it holds. -->
+      <span data-sst-key hidden></span>
       <!-- A container, not a control. The module fills it with one select
            per animated field, offering only the colours that clear the
            palette's bars over whatever is behind the particles right now —

@@ -395,6 +395,23 @@ export async function createOceanMap(
   sstPane.style.zIndex = '240';
   sstPane.style.pointerEvents = 'none';
 
+  /* **Ice gets its own pane so it can be read over temperature.**
+
+     Every scalar used to share one pane, which forced them all into a single
+     exclusivity group: the upper raster simply hid the lower, so the map
+     would have named two fields while showing one. That is right for
+     temperature against salinity, which cover the whole ocean and would
+     completely occlude each other — and wrong for ice, which covers about a
+     tenth of it.
+
+     What makes the pair legible is the draw floor. Ice paints nothing below
+     15% concentration or 0.1 m, so everywhere there is no ice the pane is
+     transparent and the field underneath shows through untouched. Ice over
+     SST is then one picture: the pack, and the water at its edge. */
+  const icePane = map.createPane('ice');
+  icePane.style.zIndex = '242';
+  icePane.style.pointerEvents = 'none';
+
   /* Isobaths sit directly on top of the scalar fields, which is the whole
      point of them: a temperature field with no seafloor under it says
      nothing about why the water is that temperature. Below the currents,
@@ -1156,7 +1173,7 @@ export async function createOceanMap(
        "how packed", not "how packed relative to here". */
     sic: {
       key: 'sic', unit: '%', step: 0.05, label: 'Ice concentration',
-      autoClamp: [0.15, 1], drawAbove: 0.15, percent: true,
+      autoClamp: [0.15, 1], drawAbove: 0.15, percent: true, pane: 'ice',
     },
     /* Thickness in metres. Unlike concentration this is *not* pinned to a
        fixed scale: 0-15 m spans ridged multi-year ice that almost no view
@@ -1166,7 +1183,7 @@ export async function createOceanMap(
        nominal ice the concentration field already shows better. */
     sit: {
       key: 'sit', unit: 'm', step: 0.25, label: 'Ice thickness',
-      autoClamp: [0, 8], drawAbove: 0.1,
+      autoClamp: [0, 8], drawAbove: 0.1, pane: 'ice',
     },
   };
 
@@ -1199,6 +1216,11 @@ export async function createOceanMap(
     /** Bounds the *automatic* range, where the extremes are not ocean — see
         the salinity note in FIELDS. A pinned range ignores it. */
     autoClamp?: [number, number];
+    /** Which pane to paint into. Fields sharing a pane occlude each other
+        and so must be mutually exclusive; a field with its own pane can be
+        read on top of another — which only works because ice has a draw
+        floor and is therefore transparent over most of the ocean. */
+    pane?: string;
     /** Shown as a percentage rather than as the fraction it is stored as.
 
         Ice concentration is published 0–1 and reported by every ice service
@@ -1267,7 +1289,7 @@ export async function createOceanMap(
     },
     onAdd(this: ScalarLayer, map: L.Map) {
       this._canvas = L.DomUtil.create('canvas', 'leaflet-layer map-sst');
-      map.getPane('sst')!.appendChild(this._canvas);
+      map.getPane(this.options.field?.pane ?? 'sst')!.appendChild(this._canvas);
       map.on('moveend zoomend resize viewreset', this._render, this);
       this._render();
     },
@@ -1676,21 +1698,36 @@ export async function createOceanMap(
        ramp is stretched over whatever water is on screen, so the colours
        alone do not say what they mean. Read from the layer rather than
        recomputed here, so the label and the pixels cannot disagree. */
+    /* **One bar per scalar that is on, not one bar.** Ice draws in its own
+       pane over temperature, so two can be up at once — and a single key
+       would have to pick one of them, which is the "names two fields while
+       showing one" failure inverted. Built the way the particle keys are:
+       the container is filled with a key each, so the markup does not have
+       to know how many there will be. */
     const showKey = () => {
-      const on = ssts.find((f) => map.hasLayer(f.group));
-      const field = on?.layer?.options?.field;
-      const range = on?.layer?.getRange?.();
-      sstKey.hidden = !on;
-      if (!on) return;
-      // The bar shows the ramp of whichever field is on, and its own unit —
-      // two scalars sharing one key would otherwise mislabel one of them.
-      const hexes = (palette.colormaps ?? {})[choiceFor(field).map] ?? [];
-      sstKey.style.setProperty('--sst-ramp', `linear-gradient(to right, ${hexes.join(', ')})`);
-      const shown = (v: number) =>
-        field?.percent ? String(Math.round(v * 100)) : String(v);
-      sstKey.textContent = range
-        ? `${shown(range[0])} to ${shown(range[1])} ${field?.unit ?? ''}`.trim()
-        : (field?.label ?? 'ocean field');
+      const on = ssts.filter((f) => map.hasLayer(f.group));
+      sstKey.hidden = !on.length;
+      sstKey.textContent = '';
+      for (const entry of on) {
+        const field = entry.layer?.options?.field;
+        const range = entry.layer?.getRange?.();
+        const hexes = (palette.colormaps ?? {})[choiceFor(field).map] ?? [];
+        const shown = (v: number) =>
+          field?.percent ? String(Math.round(v * 100)) : String(v);
+        const key = document.createElement('span');
+        key.className = 'om-key om-key-scalar';
+        key.style.setProperty('--sst-ramp', `linear-gradient(to right, ${hexes.join(', ')})`);
+        /* Named as well as numbered once there is more than one: with a
+           single field the range alone is unambiguous, with two "15 to 90 %"
+           beside "0 to 28 °C" needs saying which is which. */
+        const span = range
+          ? `${shown(range[0])} to ${shown(range[1])} ${field?.unit ?? ''}`.trim()
+          : '';
+        key.textContent = on.length > 1
+          ? `${field?.label ?? 'field'}${span ? ` ${span}` : ''}`
+          : (span || field?.label || 'ocean field');
+        sstKey.append(key);
+      }
     };
     map.on('overlayadd overlayremove moveend zoomend', showKey);
     for (const entry of ssts) entry.layer.on('rangechange', showKey);
@@ -3036,7 +3073,12 @@ export async function createOceanMap(
        name two fields while showing one. The ice *edge* is deliberately not
        here — it is a line in its own pane, and edge-over-SST is the pair
        worth reading. */
-    [sstOisst, sstNavy, sssNavy, iceOisst, iceNavy, iceThickness],
+    [sstOisst, sstNavy, sssNavy],
+    /* Ice is exclusive with *itself* and nothing else. Concentration and
+       thickness share the ice pane and are two readings of the same floe, so
+       one would hide the other and the legend would name both; either can be
+       read over temperature or salinity. */
+    [iceOisst, iceNavy, iceThickness],
   ];
 
   /* A scalar field going on or off swaps the background wholesale — from the
@@ -3356,7 +3398,7 @@ export async function createOceanMap(
      in as a placeholder and fillDepth patches it. */
   const oceanRows = (ll: L.LatLng) => {
     const moving = flowsAt(ll);
-    const temp = sstAt(ll);
+    const fields = scalarsAt(ll);
     return (
       `<dl class="ocean">` +
       `<dt>Seafloor</dt><dd data-depth>fetching…</dd>` +
@@ -3383,7 +3425,7 @@ export async function createOceanMap(
       /* Only when a temperature layer is on. With none loaded there is no
          grid to miss, and "no data" would claim something untrue about the
          ocean rather than about the map. */
-      (temp ? `<dt>${temp.label}</dt><dd>${temp.text}</dd>` : '') +
+      fields.map((f) => `<dt>${f!.label}</dt><dd>${f!.text}</dd>`).join('') +
       `</dl>`
     );
   };
@@ -3786,8 +3828,13 @@ export async function createOceanMap(
      loaded — no request, and it is the same field the particles follow. */
   /* Temperature at a point, from the grid already loaded — no request, and
      it is the same field being painted. */
-  const sstAt = (ll: L.LatLng) => {
-    const shown = ssts.find((f) => map.hasLayer(f.group));
+  /** Every scalar under a point, not the first — ice draws over temperature
+      so two can be on, and naming one of them would drop the other silently
+      and pick which by layer build order. */
+  const scalarsAt = (ll: L.LatLng) =>
+    ssts.filter((f) => map.hasLayer(f.group)).map((f) => sstAtLayer(ll, f)).filter(Boolean);
+
+  const sstAtLayer = (ll: L.LatLng, shown: { layer: ScalarLayer }) => {
     const grid = shown?.layer?.getGrid?.();
     const h = grid?.header;
     if (!h) return null;

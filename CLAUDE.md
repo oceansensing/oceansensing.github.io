@@ -2303,9 +2303,30 @@ every view.
 #### The ice layers on the map
 
 Three entries in the switcher: `SIC (OISST)`, `SIC (ESPC)` and `SIT (ESPC)`.
-All three join the scalar exclusivity group: they share the `sst` pane, so the
-upper would simply hide the lower and the map would name two fields while
-showing one.
+
+**Ice draws in its own pane, so it reads over temperature.** Every scalar
+used to share one pane, which forced them all into a single exclusivity
+group. That is right for temperature against salinity — both cover the whole
+ocean and would completely occlude each other — and wrong for ice, which
+covers about a tenth of it. `icePane` sits at z-index 242, just above the
+scalar pane.
+
+**The draw floor is what makes the pair legible**, and is the reason this
+could not have been done before it existed: ice paints nothing below 15% or
+0.1 m, so everywhere there is no ice the pane is transparent and the field
+beneath shows through untouched. Ice over SST is one picture — the pack, and
+the water at its edge.
+
+Ice is still exclusive with *itself*: concentration and thickness share the
+ice pane and are two readings of the same floe, so one would hide the other.
+
+Two things had to stop assuming a single scalar. The colour bar builds **one
+key per field that is on**, the way the particle keys do, and names them once
+there is more than one — with a single field the range alone is unambiguous,
+with two "15 to 90 %" beside "0 to 28 °C" needs saying which is which. And
+the point readout reports every field under the pointer rather than the first
+found, which would otherwise have dropped one silently and picked which by
+layer build order.
 
 **`drawAbove` is new and is what makes the two products draw the same
 thing.** A scalar field with a floor below which nothing is painted has no
