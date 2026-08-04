@@ -72,8 +72,10 @@ The module supplies behaviour only. The host page provides:
   exactly what each file must contain, and `npm run test:schema` checks a
   directory against it — which is also the definition a native port mirrors.
 
-Leaflet and `leaflet-velocity` are imported directly; the module brings
-Leaflet's own CSS with it.
+Leaflet is the only peer dependency, and the module brings its CSS. The
+animated fields are drawn by this package's own layer — see
+`velocity-layer.ts` — which is written in the constructor style so it runs
+unmodified on Leaflet 1.9 and 2.0.
 
 ## Not done yet
 
@@ -99,6 +101,8 @@ packages/ocean-map/
   ocean-map.css       its styling; imported by index.ts
   schema.ts           what every file under dataBase must contain
   geo.ts  ramp.ts  tiles.ts   no Leaflet, no DOM — see below
+  particles.ts        u/v sampling and particle advection — no Leaflet, no DOM
+  velocity-layer.ts   the Leaflet canvas layer around it; runs on 1.9 and 2.0
   palette.ts          map-palette.json, typed
   storm-status.ts     shared with the host's build-time status line
   kmz.ts              KMZ/KML decode — no Leaflet, no DOM, parser injected
@@ -107,7 +111,8 @@ packages/ocean-map/
   data/               the palette, and the sampled basemap water it is gated against
 ```
 
-`geo.ts`, `ramp.ts`, `tiles.ts`, `schema.ts`, `warp.ts` and `kmz.ts` import
+`geo.ts`, `ramp.ts`, `tiles.ts`, `schema.ts`, `warp.ts`, `kmz.ts` and
+`particles.ts` import
 neither Leaflet nor the DOM and typecheck standalone. That is deliberate and worth preserving: they
 are what a native port keeps, reimplementing only the drawing. Keep new logic
 that does not touch `L.` out of the Leaflet path.

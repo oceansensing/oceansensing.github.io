@@ -148,7 +148,7 @@ export interface ForecastFrame {
 /* Row-major from the north-west corner: index = row * nx + column, with row 0
    at `la1` and column 0 at `lo1`. Longitude wraps and latitude does not — a
    global grid must span a full 360°, which is the exact condition
-   leaflet-velocity uses to advect particles across the antimeridian. */
+   the particle field uses to advect across the antimeridian. */
 export interface GridHeader {
   nx: number;
   ny: number;
@@ -198,7 +198,8 @@ export interface GridHeader {
   forecast?: ForecastFrame[];
 }
 
-/** leaflet-velocity identifies the u and v components by these. */
+/** Which component is which. GRIB conventions, kept because the published
+    files use them and a native port reads the same numbers. */
 export interface VectorHeader extends GridHeader {
   parameterCategory: number;
   parameterNumber: number;

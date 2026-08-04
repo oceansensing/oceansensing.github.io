@@ -178,7 +178,7 @@ for (const name of ['currents', 'currents-60m', 'wind']) {
     gridBody(`${f}[${i}]`, part.header, part.data);
   }
   /* A global grid must span a full turn of longitude — that is the exact
-     condition leaflet-velocity uses to wrap particles across the
+     condition the particle field uses to wrap across the
      antimeridian, and without it they pile up against the edge. */
   const h = g[0].header;
   if (Math.abs(h.nx * h.dx - 360) > h.dx) {

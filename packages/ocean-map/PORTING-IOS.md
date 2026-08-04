@@ -35,6 +35,7 @@ what make this port possible, and the same rules apply to whatever you add.
 | `tiles.ts` | which tiles a view needs | pure; floored modulo, mind the antimeridian |
 | `warp.ts` | the homography behind `gx:LatLonQuad` image overlays | pure; falls back to affine when the quad is a parallelogram |
 | `kmz.ts` | KMZ/KML decode — ZIP, geometry, styles, ground overlays | pure; **inject** an XML parser, do not import one |
+| `particles.ts` | u/v sampling and the particle pool behind the animated fields | pure; the whole of the animation bar the canvas |
 | `data/map-palette.json` | every colour, 25 colour scales, and every conceded clash | with the reasoning in `_`-prefixed keys |
 | `data/basemap-ocean.json` | sampled water colours the palette is gated against | |
 | `../../scripts/*.py` | the six data pipelines | run unchanged, or read the same output |
@@ -53,6 +54,11 @@ backwards produces a plausible wrong answer rather than an error:
   surface current, so one speed constant makes one of them invisible and the
   other a streak. The web version keeps a `DRIFT` per field and a ceiling on
   the particle count, since the count scales with the map's area.
+- **Advection needs no projection maths.** Mercator is conformal, so a vector
+  (u east, v north) is the screen direction (u, −v) and the magnitude is a
+  free choice: `x += u * drift`. If your map view is Mercator, take this
+  verbatim. If it is not — a globe, say — that is the one line to revisit,
+  and it is the *only* place the projection enters the animation.
 
 ## The data
 

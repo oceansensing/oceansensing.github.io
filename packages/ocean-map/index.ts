@@ -8,6 +8,7 @@ import './ocean-map.css';
 import { coordText, elapsed, hoursAhead, hourStamp, initialBearing, spanText, stamp }
   from './geo';
 import { rampColour, rampStops } from './ramp';
+import { VelocityLayer } from './velocity-layer';
 import { tileKeysFor } from './tiles';
 import { readKmz, summarise, type KmzDocument, type KmzFeature, type KmzOverlay } from './kmz';
 import { matrix3d, type Pixel } from './warp';
@@ -509,19 +510,11 @@ export async function createOceanMap(
     saveView();
   };
 
-  /* leaflet-velocity is a UMD plugin: it reaches for Leaflet on the
-     global object, which the bundled ESM build never sets. A static
-     import is hoisted above any assignment, so the global has to be put
-     in place first and the plugin pulled in dynamically after. Without
-     this the built bundle dies on "L is not defined" — the dev server
-     hides it by serving Leaflet's UMD build, which does set the global. */
   /* Pixels a 1 m/s flow should carry a particle each frame — **per field,
      because the two quantities are not the same size**. Measured on the
      published grids: the median surface current is 0.22 m/s and the median
      10 m wind is 5.97, so wind runs **26.7x** faster. One constant for both
-     would put one of them off screen and the other under a pixel; the
-     plugin's own default is wind-tuned, which is why currents needed 3.0 to
-     be visible at all.
+     would put one of them off screen and the other under a pixel.
 
      Divided by that ratio, the wind drifts at the same apparent rate as the
      currents do — which is the point. These are alternative depictions of
@@ -547,29 +540,7 @@ export async function createOceanMap(
   const PARTICLE_SECONDS = 4;
   const FRAME_RATE = 18;
 
-  /* The plugin turns a velocity into a screen displacement by multiplying
-     it by the reader's velocityScale, then by mapArea^0.4, then by the
-     projection's own Jacobian — pixels per degree, which doubles with
-     every zoom level. Both of the last two have to be divided back out to
-     get a drift that depends on the current rather than the viewport.
-
-     Cancelling only mapArea^0.4 is worse than cancelling nothing: that
-     term is the plugin's own rough compensation for zoom, so removing it
-     leaves the Jacobian bare and particles accelerate as you zoom in —
-     measured at 0.08 px/frame at zoom 3 against 10.7 at zoom 9, which is
-     most of the way across the map every second. The Jacobian is measured
-     off the map rather than assumed, so this holds for any projection.
-
-     Measured with project(), and that part is not incidental.
-     latLngToContainerPoint() rounds to whole pixels, and below zoom 7 a
-     tenth of a degree of longitude is a fraction of one — 0.28 px at zoom
-     2 — so the difference between the two probes collapsed to zero, the
-     Jacobian fell to its floor, and velocityScale came out around 200x
-     too high. Particles then crossed the whole map between frames and the
-     field rendered as nothing at all: the globe view had no currents on
-     it. project() returns fractional pixel coordinates, which is the
-     quantity the plugin actually distorts by. */
-  /* leaflet-velocity draws `area x particleMultiplier` particles, so with the
+  /* The field draws `area x particleMultiplier` particles, so with the
      map's size no longer capped the particle count was no longer capped
      either. Measured against the 1152x800 the old CSS maximum allowed: a
      1440p window is 3.5x the area and a 4K one **6.4x**, which is ~52,000
@@ -589,32 +560,6 @@ export async function createOceanMap(
     const size = map.getSize();
     const area = Math.max(size.x * size.y, 1);
     return Math.min(FULL_DENSITY, MAX_PARTICLES / area);
-  };
-
-  const scaleForView = (drift: number = DRIFT.current) => {
-    const rad = Math.PI / 180;
-    const bounds = map.getBounds();
-    const area = Math.abs(
-      (bounds.getSouth() - bounds.getNorth()) * rad * (bounds.getWest() - bounds.getEast()) * rad
-    );
-
-    const centre = map.getCenter();
-    const step = 0.1;
-    const zoom = map.getZoom();
-    const here = map.project(centre, zoom);
-    const east = map.project(L.latLng(centre.lat, centre.lng + step), zoom);
-    const pxPerDegree = Math.hypot(east.x - here.x, east.y - here.y) / step;
-    // The plugin divides the eastward derivative by cos(lat); match it.
-    const jacobian = Math.max(pxPerDegree / Math.cos(centre.lat * rad), 1e-6);
-
-    return drift / (Math.pow(Math.max(area, 1e-6), 0.4) * jacobian);
-  };
-
-  const loadPlugin = async () => {
-    // globalThis rather than window: it is window in a browser and works
-    // in the headless harness too, where the two are different objects.
-    (globalThis as unknown as { L: typeof L }).L = L;
-    await import('leaflet-velocity');
   };
 
   /* Everything below is per depth: fetch that depth's global grid, build
@@ -648,8 +593,8 @@ export async function createOceanMap(
     const entry: { group: L.LayerGroup; layer: L.Layer | null; kind: FlowKind } =
       { group, layer: null, kind };
     flows.push(entry);
-    Promise.all([fetch(url).then((r) => r.json()), loadPlugin()])
-    .then(([loadedCoarse]) => {
+    fetch(url).then((r) => r.json())
+    .then((loadedCoarse) => {
       // Reassignable: stepping to another forecast hour swaps the whole
       // chain — this grid, its regions and its tiles — for that hour's.
       let coarse = loadedCoarse;
@@ -660,26 +605,27 @@ export async function createOceanMap(
          The depth this layer draws is in its own name in the switcher, and
          repeating it here is what made the control say ESPC twice. */
       const run = coarse?.[0]?.header?.modelRun;
-      const flowReady = L.velocityLayer({
+      const flowReady = new VelocityLayer({
         data: coarse,
         attribution: credit(kind.source, run, undefined,
                             coarse?.[0]?.header?.refTime),
         paneName: 'currents',
-        displayValues: false,
-        velocityScale: scaleForView(kind.drift),
-        minVelocity: 0,
+        /* Pixels per (m/s) per frame, straight through — no velocity scale,
+           no viewport area, no Jacobian. See the note at the top of
+           `particles.ts`: Mercator is conformal, so the direction needs no
+           correction and the magnitude is ours to pick. This is the same
+           number the old code arrived at, having multiplied by two factors
+           and then divided both back out. */
+        drift: kind.drift,
         maxVelocity: kind.maxVelocity,
         colorScale: kind.colours,
-        /* Denser and thicker than the plugin's wind defaults: ocean
-           particles move slowly, so they need weight to register.
-
-           The multiplier is one particle per this many square pixels of
-           map, and the count is linear in it — so 1/112 is a quarter more
-           than the 1/140 it replaced. It pairs with the shorter lifetime
-           above: cutting the trails shortens what each particle
-           contributes, and more of them puts the density back without
-           going back to long ropes. */
-        particleAge: Math.round(PARTICLE_SECONDS * FRAME_RATE),
+        /* Denser and thicker than a wind-tuned default: ocean particles move
+           slowly, so they need weight to register. The multiplier is one
+           particle per this many square pixels of map, and the count is
+           linear in it. It pairs with the lifetime: cutting the trails
+           shortens what each particle contributes, and more of them puts the
+           density back without going back to long ropes. */
+        particleSeconds: PARTICLE_SECONDS,
         particleMultiplier: densityForView(),
         lineWidth: 2.2,
         frameRate: FRAME_RATE,
@@ -841,36 +787,22 @@ export async function createOceanMap(
           showing = url;
           layer.setOptions?.({
             data: url ? grids.get(url) : coarse,
-            velocityScale: scaleForView(kind.drift),
             particleMultiplier: densityForView(),
           });
           return;
         }
 
-        /* Rescale on every settled view, not only when the zoom changed.
-           The scale divides out the viewport area as well as the projection's
-           Jacobian, and both move with any pan across latitude — but the real
-           reason is the first one: the layer is built before the page has
-           finished laying the map out, so the scale it is born with was
-           measured against whatever bounds existed at that instant.
+        /* Density only. There is no scale left to refresh — the drift is a
+           constant in pixels per (m/s), so it cannot go stale against the
+           viewport, which is what the old measured `velocityScale` did in
+           three separate ways: cancelling one of the plugin's two factors
+           instead of both, measuring the Jacobian with an API that rounds to
+           whole pixels, and measuring it before the page had laid the map
+           out. All three shipped, all three were silent, and all three are
+           gone with the arithmetic that produced them.
 
-           On a page opening at globe zoom that came out **259 against 0.436**
-           — some six hundred times too fast. Particles crossed the whole map
-           between frames, landed off the grid and were respawned where they
-           started: 120,000 strokes of exactly zero length, a globe covered in
-           long straight streaks, and no error anywhere. It survived until the
-           reader happened to zoom, which is what had been refreshing it.
-
-           Same failure as the rounded-Jacobian bug this file already carries
-           a note about, reached by a different route: there the measurement
-           was wrong, here it was taken too early. */
-        /* Density travels with the scale, on the same settled-view path: a
-           resize changes the area, and the area is what both of them are
-           measured from. */
-        layer.setOptions?.({
-          velocityScale: scaleForView(kind.drift),
-          particleMultiplier: densityForView(),
-        });
+           Density does still follow the view, because the particle count is
+           the map's area times a multiplier and a resize changes the area. */
       };
 
       map.on('zoomend', () => applyView(true));

@@ -29,6 +29,7 @@ import {
   wrapLongitude,
 } from '../packages/ocean-map/geo.ts';
 import { rampColour, rampStops } from '../packages/ocean-map/ramp.ts';
+import { ParticleField, sampleVector, speedIndex } from '../packages/ocean-map/particles.ts';
 import { tileKeysFor } from '../packages/ocean-map/tiles.ts';
 import { apply, matrix3d, unitSquareTo } from '../packages/ocean-map/warp.ts';
 import {
@@ -127,6 +128,101 @@ check('the half hour either side reads as now', hoursAhead('2026-08-03T21:20:00Z
 check('rounding is to the nearest hour, not down', hoursAhead('2026-08-03T23:40:00Z', NOW), '+3 h');
 check('no valid time, nothing claimed', hoursAhead(undefined, NOW), '');
 check('an unparseable time claims nothing', hoursAhead('not a time', NOW), '');
+
+// ---- the particle field --------------------------------------------------
+
+/* A 4x3 grid at 90 degrees, starting at the prime meridian, so it spans a
+   full turn and its wrap can be exercised. Row 0 is the north edge. */
+const grid = (values) => ({
+  header: { nx: 4, ny: 3, lo1: 0, la1: 90, dx: 90, dy: 90 },
+  data: values,
+});
+//              0E  90E 180E 270E
+const U = grid([1,  2,  3,  4,      // 90N
+                5,  6,  7,  8,      //  0
+                9, 10, 11, 12]);    // 90S
+const V = grid([0,  0,  0,  0,
+                0,  0,  0,  0,
+                0,  0,  0,  0]);
+
+check('a sample on a node is that node', sampleVector(U, V, 90, 0)?.u, 6);
+/* Floored modulo: the grids start at 0E and half the world is west of it, so
+   a bare remainder would go negative and index off the front. 270E is the
+   same column as 90W. */
+check('the western hemisphere folds onto the eastern', sampleVector(U, V, -90, 0)?.u, 8);
+check('and equals its eastern twin', sampleVector(U, V, 270, 0)?.u, 8);
+/* The column after the last is the first. Clamping instead leaves a one-cell
+   seam nothing paints — the stripe the scalar field once drew at 0E. */
+check('the seam wraps rather than clamping',
+  sampleVector(U, V, 315, 0)?.u, (8 + 5) / 2);
+check('a latitude off the grid has no flow', sampleVector(U, V, 0, -95), null);
+
+/* Land. The plugin this replaces passed `[u, v]` to its interpolator — an
+   array, so always truthy — and multiplied a null straight through as zero,
+   which defines a reduced but non-zero velocity over the land and advects
+   particles onto it. */
+const holed = grid([1, 2, 3, 4,  null, 6, 7, 8,  9, 10, 11, 12]);
+check('a null under the point is land, not slow water',
+  sampleVector(holed, V, 0, 0), null);
+/* But a null merely *nearby* renormalises rather than dragging a phantom
+   zero into the blend: halfway between 90E (6) and 180E (7) with the 0E cell
+   holed must still be 6.5, not something pulled towards zero. */
+check('a null beside the point is dropped, not averaged in',
+  sampleVector(holed, V, 135, 0)?.u, 6.5);
+
+/* The pool. Seeded from an injected RNG so positions are assertable. */
+const view = { width: 100, height: 100, toLngLat: (x, y) => ({ lng: 90, lat: 0 }) };
+const still = grid([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+{
+  const half = () => 0.5;
+  const field = new ParticleField(4, 10, half);
+  field.step(view, still, still, 1);        // first step only seeds
+  check('a fresh particle is seeded inside the view', field.x[0], 50);
+  check('and is alive', field.live[0], 1);
+  /* Staggered ages, or the whole pool would expire on one frame and the
+     field would visibly pulse. */
+  check('with a staggered age rather than zero', field.age[0], 5);
+}
+{
+  /* Direction. +u is east and must move right; +v is north and must move
+     *up*, which is -y on a screen. Getting this backwards draws a plausible
+     field flowing the wrong way. */
+  const east = grid([0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0]);
+  const north = grid([0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0]);
+  const zero = grid([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  const f = new ParticleField(1, 100, () => 0.5);
+  f.step(view, east, zero, 3);              // seed
+  f.step(view, east, zero, 3);              // advect
+  check('+u carries a particle east, which is +x', f.x[0] - f.px[0], 3);
+  const g = new ParticleField(1, 100, () => 0.5);
+  g.step(view, zero, north, 3);
+  g.step(view, zero, north, 3);
+  check('+v carries it north, which is -y', g.y[0] - g.py[0], -3);
+}
+{
+  /* Retirement, three ways. Each leaves a particle the renderer must skip
+     rather than a bright stationary dot. */
+  const zero = grid([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  const old = new ParticleField(1, 2, () => 0.5);
+  for (let i = 0; i < 6; i++) old.step(view, zero, zero, 0);
+  check('a particle past its age is retired', old.live[0], 0);
+
+  const dry = new ParticleField(1, 100, () => 0.5);
+  const allLand = grid([null, null, null, null, null, null, null, null, null, null, null, null]);
+  dry.step(view, allLand, allLand, 1);
+  dry.step(view, allLand, allLand, 1);
+  check('a particle over land is retired', dry.live[0], 0);
+
+  const gone = new ParticleField(1, 100, () => 0.5);
+  const fast = grid([0, 500, 0, 0, 0, 500, 0, 0, 0, 500, 0, 0]);
+  gone.step(view, fast, zero, 1);
+  gone.step(view, fast, zero, 1);
+  check('a particle carried out of the view is retired', gone.live[0], 0);
+}
+
+check('speed maps into the ramp', speedIndex(0.5, 1, 10), 5);
+check('and clamps at the top rather than running off it', speedIndex(9, 1, 10), 9);
+check('a zero range does not divide by it', speedIndex(1, 0, 10), 0);
 
 // ---- colour ramps --------------------------------------------------------
 

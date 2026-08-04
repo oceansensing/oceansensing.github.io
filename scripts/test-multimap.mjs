@@ -73,7 +73,7 @@ for (const p of ['clientWidth', 'clientHeight', 'offsetWidth', 'offsetHeight'])
   Object.defineProperty(window.HTMLElement.prototype, p, { get: () => 600, configurable: true });
 
 /* Empty-but-well-shaped answers. Enough for a map to build; nothing to draw.
-   The current grids need leaflet-velocity's u/v header fields — without them
+   The current grids need the u/v header fields — without them
    it dereferences a null component and takes the page down, which is a
    fixture problem rather than anything the maps are doing wrong. */
 const grid = (extra = {}) => ({

@@ -949,9 +949,65 @@ barely above the 0.64 random directions would give, 0.71 at 0.24°, 0.73 on
 the Arctic band. GEBCO also draws a far finer coastline than the model masks,
 so flow parallel to the model's coast reads as oblique to the one on screen.
 
-#### Particle rendering, four ways to get it wrong
+#### The particle layer is ours
 
-All four were shipped and all four were silent:
+`packages/ocean-map/particles.ts` (no Leaflet, no DOM) and
+`velocity-layer.ts` (the Leaflet adapter) replaced `leaflet-velocity`, which
+was last released in **March 2023**, ships UMD only, and reaches for
+`L.latLng`, `L.point` and `L.setOptions` — **all three removed in Leaflet 2**.
+It was the map's centrepiece resting on an unmaintained dependency that
+blocked the next Leaflet.
+
+**Written to run unmodified on 1.9 and 2.0.** Leaflet 2 drops every lowercase
+factory but keeps the classes, so the layer is a native `class ... extends
+Layer` using `new Point(...)` and `Util.setOptions`. Probed against both
+versions before writing a line: every construct it uses exists in each. The
+57 factory calls left in `index.ts` are a separate, mechanical migration that
+fails loudly at the type-check rather than silently on a canvas.
+
+**The velocity arithmetic is gone, and that is the point.** The plugin turned
+a velocity into a screen displacement by multiplying by a `velocityScale`,
+then `mapArea^0.4`, then the projection's Jacobian — and *three of the four
+particle bugs below* were about cancelling those correctly. None of it was
+ever needed: Web Mercator is **conformal**, so a vector (u east, v north) maps
+to the screen direction (u, −v) scaled by one local factor, and dropping that
+factor is exactly what makes the drift a constant number of pixels per m/s.
+The whole of it is now `x += u * drift`. `scaleForView()`, the Jacobian probe
+and the note about measuring it with `project()` are all deleted. Measured
+before and after: **p90 1.50 px/frame either way**, zoom ratio 1.6 either way
+— the new code lands on the same numbers because the old one's two factors
+cancelled to this all along.
+
+**Land is respected now.** The plugin handed its interpolator `[u, v]` — an
+array, so always truthy, so its `isValue()` passed — then multiplied a `null`
+through a bilinear blend as zero, defining a reduced but non-zero velocity
+over land. `sampleVector` treats a null *nearest* cell as no water and
+renormalises the blend over whichever corners are wet. The coastal erosion in
+the pipeline is still worth having, but it is no longer the only thing
+standing between particles and the land.
+
+**Two things bit while doing it, both silent.** `start()` called `stop()` to
+clear any existing timer, and `stop()` set the flag `frame()` bails on —
+nothing cleared it again, so the layer ran a timer that drew nothing. And
+batching the strokes into a `Path2D` took `moveTo`/`lineTo` off the context,
+where `test:map`'s recorder watches: it read **51,115 strokes and zero
+segments**, which is indistinguishable from a field that has stopped moving.
+The batching is identical built on the context, so it is built there.
+
+**Trail length is the fade, not the lifetime.** A particle lives
+`particleSeconds`; what a reader sees behind it is however many frames of
+stroke have not yet faded, which is the `destination-out` alpha alone. The
+first value shipped at 0.10 and gave ~33 px tails — the map read as long
+bright ropes rather than a fine even texture, the exact decay the lifetime
+note above was written about. At 0.18 the tail is ~18 px and canvas coverage
+fell from 38.5% to 18.9%. Shorten the fade before the lifetime; the lifetime
+is what keeps the slow water seeded.
+
+#### Particle rendering, four ways it went wrong before
+
+All four were shipped and all four were silent. Three of them cannot recur —
+they lived in the velocity arithmetic that no longer exists — but the shape
+of the failure is the thing to remember, not the arithmetic:
 
 - **They must composite normally.** The Mercator raster is multiplied over
   the basemap; while the particles shared that pane they were multiplied too,

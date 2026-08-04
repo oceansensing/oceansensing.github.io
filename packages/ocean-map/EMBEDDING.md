@@ -9,7 +9,7 @@ those rules are what keep it reusable.
 ## The short version
 
 ```sh
-npm install leaflet leaflet-velocity      # peer dependencies
+npm install leaflet      # the only peer dependency
 ```
 
 ```html

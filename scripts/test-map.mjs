@@ -82,7 +82,7 @@ window.Element.prototype.scrollIntoView = function () {};
    whether segments are being stroked, in which colours, and whether the
    particles are moving. Pixels would be nicer but not worth the CI fragility.
 
-   requestAnimationFrame is stubbed below, so leaflet-velocity's loop really
+   requestAnimationFrame is stubbed below, so the particle layer's loop really
    runs here — unlike a headless browser pane, which never paints. */
 const drawn = { moveTo: 0, lineTo: 0, stroke: 0, arc: 0, styles: new Set(), fills: new Set(), segments: [], images: [] };
 const properties = {};
@@ -512,10 +512,12 @@ await new Promise((r) => setTimeout(r, 1500));
 
 const host = document.getElementById('asset-map');
 
+/* Found by the layer's own public tag rather than by a private field of
+   somebody else's plugin — see `isVelocityLayer`. */
 const velocityLayer = (() => {
   let found = null;
   host._map?.eachLayer?.((l) => {
-    if (l._windy) found = l;
+    if (l.isVelocityLayer) found = l;
   });
   return found;
 })();
@@ -688,7 +690,7 @@ const near = (a, b) => a !== null && Math.abs(a) < b;
    just with the Gulf Stream running the wrong way. */
 const [cu, cv] = files.currents;
 const ch = cu.header;
-/* Longitude wraps, so index it the way leaflet-velocity does — a floored
+/* Longitude wraps, so index it the way particles.ts does — a floored
    modulo. The grid now starts at 0 degrees east and a plain subtraction
    sends anything in the western hemisphere to a negative index. */
 const currentAt = (lat, lon) => {
@@ -1573,7 +1575,7 @@ const paneSvgUnclamped =
 const scaleNow = () => {
   let found = null;
   host._map.eachLayer((l) => {
-    if (l._windy && found === null) found = l.options?.velocityScale ?? null;
+    if (l.isVelocityLayer && found === null) found = l.options?.drift ?? null;
   });
   return found;
 };
@@ -1798,8 +1800,15 @@ await new Promise((r) => setTimeout(r, 300));
 
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
-  ['panning across latitude rescales the particle field, with no zoom change',
-    scaleSouth !== null && scaleNorth !== null && scaleSouth !== scaleNorth],
+  /* The drift is a constant in pixels per (m/s) and must **not** move with
+     the view. It used to: the old plugin multiplied by the viewport area and
+     the projection's Jacobian, so the map measured those and divided them
+     back out, and this check asserted the measurement had happened. Three
+     shipped bugs lived in that arithmetic. Mercator is conformal, so none of
+     it was ever needed — and the check now asserts the opposite of what it
+     used to, which is the honest way to record that. */
+  ['the drift is constant, not remeasured on every pan',
+    scaleSouth !== null && scaleNorth !== null && scaleSouth === scaleNorth],
 
   // ---- a reader's own KMZ overlay
   ['an uploaded KMZ is decoded and drawn',
@@ -1995,9 +2004,10 @@ const checks = [
   ['no zoom button shown for a storm absent from the data', staleShown.length === 0],
   ['clicking a zoom button centres that storm',
     !!movedTo && near(movedTo.lat - target.lat, 1) && near(movedTo.lng - target.lon, 1)],
-  /* leaflet-velocity is UMD and wants Leaflet on the global, which the
-     bundled build does not set. Without the workaround the bundle throws
-     "L is not defined" on load and no canvas is ever created. */
+  /* The particle layer is our own now — a plain ESM module, so there is no
+     UMD global to arrange and nothing that can throw "L is not defined" in
+     `dist/` only. What this still checks is that a canvas reaches the pane,
+     which is the first thing to go if the layer fails to mount. */
   ['animated current layer loaded', !!host.querySelector('.leaflet-currents-pane canvas')],
   ['currents grid is well formed',
     files.currents.length === 2 && cu.header.parameterNumber === 2 && cv.header.parameterNumber === 3 &&
@@ -2012,7 +2022,7 @@ const checks = [
      hug their coasts and were lost at the first threshold tried. */
   ['coastal erosion spared the Gulf Stream', Math.hypot(gsU, gsV) > 0.6],
   ['coastal erosion spared the Kuroshio', Math.hypot(kuU, kuV) > 0.5],
-  /* Global coverage, and it has to close on itself: leaflet-velocity only
+  /* Global coverage, and it has to close on itself: `sampleVector` only
      wraps the grid across the antimeridian when it spans a full 360, and
      without that particles pile up at the edge instead of crossing. */
   ['currents grid spans the globe', Math.floor(ch.nx * ch.dx) >= 360],

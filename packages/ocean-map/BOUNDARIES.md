@@ -12,21 +12,24 @@ behind it, and every one was learned by breaking it.
 
 ## Structural
 
-### S1. `geo.ts`, `ramp.ts`, `tiles.ts`, `schema.ts`, `warp.ts` and `kmz.ts` never import Leaflet or the DOM
+### S1. `geo`, `ramp`, `tiles`, `schema`, `warp`, `kmz` and `particles` never import Leaflet or the DOM
 
 They typecheck standalone:
 
 ```sh
 npx tsc --noEmit --ignoreConfig --strict --target es2022 \
   --moduleResolution bundler --module esnext \
-  packages/ocean-map/{geo,ramp,tiles,schema,warp,kmz}.ts
+  packages/ocean-map/{geo,ramp,tiles,schema,warp,kmz,particles}.ts
 ```
 
 **Why:** these are what a native port keeps verbatim. Everything that moves
 into them is work an iOS app does not repeat; everything left in `index.ts` is
-work it rewrites. Measured today: **1,030 lines free of the renderer against
-3,606 in `index.ts`**, so about 22% is portable — up from 11% when only the
-first four files existed, which is the direction to keep pushing.
+work it rewrites. Measured today: **1,255 lines free of the renderer against
+3,538 in `index.ts` and 243 in `velocity-layer.ts`**, so about 25% is portable — up from 11% when only the
+first four files existed, which is the direction to keep pushing. The newest
+of them, `particles.ts`, is the advection maths behind the animated fields;
+it arrived by *replacing a dependency*, which is the cheapest way this share
+has ever moved.
 
 `kmz.ts` is the pattern to copy when something *seems* to need the DOM: it
 parses XML, which in a browser means `DOMParser`, so the parser is **injected**
