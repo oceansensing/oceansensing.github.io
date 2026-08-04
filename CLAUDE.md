@@ -1348,21 +1348,40 @@ against what the ocean is doing about it. The two current *depths* stay
 exclusive with each other, since 0 m and 60 m are the same quantity and no
 colour could say which is which.
 
-**So the wind has its own gated ramp**, pale orchid, and the constraint that
-picked it is the coexistence: two sets of drifting lines carry no shape or
-outline to fall back on, unlike a marker against a particle, so colour is the
-entire separation. The ramp therefore has to clear the currents' amber *as
-well as* every basemap ocean, every colormap a reader can switch on, and
-every marker. Chosen by the same search that picked the SST ramp: 200 ramps
-clear all of it, and this is the one with the most room — **ΔE 27.8 from the
-amber and 27.1 from the glider magenta**, which is the binding marker since
-orchid and magenta are neighbours. Everything else is 33 or better.
+**So the wind has its own gated ramp**, deep forest green, and the constraint
+that picked it is the coexistence: two sets of drifting lines carry no shape
+or outline to fall back on, unlike a marker against a particle, so colour is
+the entire separation. The ramp therefore has to clear the currents' amber
+*as well as* every basemap ocean, every marker-safe colormap and every
+marker. Chosen by the same search that picked the SST ramp: of 52,514 dark
+greens tried, 15 clear all of it, and this is the one with the most room.
 
-An earlier pass had wind reusing the amber, on the reasoning that exclusive
-fields never share a screen. That was true while they were exclusive and is
-the thing this change undid; the coarse search behind it also only found four
-candidates, all worse, because its steps were 5° of hue and 4 of chroma. The
-refined search is what made a distinct ramp affordable.
+| against | ΔE |
+| --- | --- |
+| the currents' amber | 48.8 |
+| Esri's water | 43.9 |
+| GEBCO's water | 37.0 |
+| every marker but one | 32+ |
+| **the Argo dots' outline** | **22.5** |
+
+**It is dark where every other particle colour here is pale, and that is the
+trade.** Being dark is what buys the 48.8 from the amber — but it also means
+the thing it runs closest to is the one dark feature on the map, the Argo
+dots' olive outline, at half a point over the bar. That is tolerable because
+an outline is a hairline round a gold fill the green clears by 51.9: the dot
+reads gold, not olive. It is worth knowing before adding another dark
+feature, which would be competing for the same narrow space.
+
+**Two earlier passes got this wrong in opposite directions, both by
+searching under the wrong constraint.** The first had wind reusing the amber,
+which was true while the fields were exclusive and is what this change
+undid. The second rejected dark green outright — because the search demanded
+clearance from *every* colormap, when the gate only holds a colour to the
+five **marker-safe** ones. That distinction is the whole point of
+`markerSafe`, and measured against the real bar the live amber ramp fails 56
+of the 250 colormap stops while this green fails 13. Searching a stricter
+rule than the gate applies does not produce a safer answer; it produces no
+answer, and the wrong reason for it.
 
 **`test:contrast` had to learn about the plural.** It iterated a bare
 `palette.currents`, so a second ramp could be added to the palette and drawn
