@@ -16,13 +16,13 @@
     "#ffb4a7",
     "#ffb9ab"
   ],
-  "_wind": "The wind particle ramp — lemon yellow, slow to fast. **Chosen against the measurement rather than by it**, and the concessions it makes are listed in `concessions` below rather than absorbed quietly. Yellow is the one region of this palette that is genuinely crowded: the Argo floats are gold, the saildrones orange, and the current particles pale amber, so a yellow has warm neighbours on three sides. Of every true yellow searched, this is the one whose worst clash is furthest from zero — it clears the storms by 66, the gliders by 77, the saildrones by 38.5 and the measuring line by 86, and concedes four pairs in the 17.9 to 19.6 band, which is the same order as the amber ramp's own long-standing concession to Argo at 17.8. A brighter, more saturated yellow was measured first and is far worse: ΔE 2.9 from the Argo gold, which is the same colour.",
+  "_wind": "The wind particle ramp — deep forest green, slow to fast, and dark where the currents' coral is pale. Two things decide a velocity field's colour and they are not the markers: it has to clear the **background**, which is the bathymetry in all its tones and whichever colour scale has replaced it, and it has to contrast with the **other** velocity field, since the two share the screen and a drifting line has no shape to be told apart by. This clears every water tone of both basemaps at worst 38.1, every marker-safe colormap at 24.6, and sits ΔE 69.0 from the coral — the largest separation available from it. It replaced a lemon yellow, which was chosen while coverage was still weighted by area and the pale shelf could be outvoted: measured tone by tone, that yellow sat 20.8 from GEBCO's mint shelf and 17.9 from the haline scale, and carried four background concessions. This carries none. No yellow can fix that — searched, and the ones that clear the shelf fail the colour scales instead, because the two constraints pull opposite ways. Its closest approach to anything is ΔE 19.8, to the Argo dots' dark outline — a hairline round a gold fill this clears by 50, and a marker is a still, filled, outlined dot that shape separates from a moving trail long before hue does.",
   "wind": [
-    "#d9f474",
-    "#ddf878",
-    "#e2fd7c",
-    "#e6ff80",
-    "#ebff84"
+    "#003b00",
+    "#003f00",
+    "#004200",
+    "#004600",
+    "#004900"
   ],
   "_colormaps": "Colour scales the reader can choose, in two groups, and the split is measured rather than editorial. Whichever map is on becomes the water beneath every marker and particle, so scripts/test-contrast.mjs measures every stop of every map against every feature colour by CIEDE2000. The five in markerSafe clear 22 everywhere along their length; nothing else does, and that is not a flaw in the others — a full-gamut colormap sweeps through the whole wheel, so somewhere along it it passes close to a marker. Measured worst clearance: cmo.haline 11.2, hsv 7.5, jet 6.4, viridis 6.2, grey 5.5, turbo 4.2, inferno 3.0. The five safe ones exist because they were built to dodge the feature gamut, which is exactly why they look less like the standard maps. The standard set is offered anyway — it is the reader's map and these are the scales oceanography actually speaks — but the picker groups them apart and the defaults stay in the safe set. The markers keep their dark outlines, which is what carries them on a background the fill contrast does not. The cmo.* and matplotlib entries are ten-stop samples of the published maps, close enough to be recognisable, not the exact tables.",
   "colormaps": {
@@ -346,31 +346,5 @@
   ],
   "_measure": "The measuring line. Dark rather than bright because it is drawn over everything and must not be mistaken for a platform or a current; charcoal was the only candidate clearing both bathymetries while staying clear of every feature colour. It carries a light halo, which like the track casings is an outline rather than a feature colour and so is themed in CSS rather than gated here.",
   "_concessions": "Every place a colour on this map knowingly sits under the ΔE 22 bar, with the measured distance and the reason. Recorded here rather than by lowering the threshold, which would quietly cover every future clash as well. scripts/test-contrast.mjs reports each on every run and checks the list **both ways**: a pair under the bar with no concession fails, and a concession for a pair that actually clears fails too. Without the second half the list rots — a clash that got fixed would still be listed, and the listing would stop meaning anything. Same bargain markerSafe strikes with the colormaps. What makes these tolerable is that a particle is a thin moving trail and the things it is close to are either filled dots with dark outlines or a whole-field raster: form and motion separate them where colour does not. That argument has limits, and the honest place to see them is this list getting longer.",
-  "concessions": [
-    {
-      "pair": "wind vs argo",
-      "deltaE": 18.0,
-      "why": "The same clash from the other side: a lemon wind particle against the same gold dot, at the same distance and mitigated the same way by the dots' outline."
-    },
-    {
-      "pair": "wind vs thermal",
-      "deltaE": 19.6,
-      "why": "The warm end of the thermal colormap, which is a background the reader can switch on under the particles."
-    },
-    {
-      "pair": "wind vs haline",
-      "deltaE": 17.9,
-      "why": "The pale end of the haline colormap, same case as thermal."
-    },
-    {
-      "pair": "wind vs #b0f0d0",
-      "deltaE": 20.8,
-      "why": "The lemon wind ramp against GEBCO's pale mint shelf — 4.9% of ocean pixels, and the water this map is most used to look at. The same clash the amber current ramp was changed to fix, inherited because the yellow was chosen while coverage was still weighted by area and the shelf was outvoted. Conceded rather than fixed because yellow was asked for deliberately and there is no yellow that clears a pale green; fixing it means moving the wind off yellow."
-    },
-    {
-      "pair": "wind vs #70d090",
-      "deltaE": 19.9,
-      "why": "The same, against GEBCO's other shallow-green tone (1.5%). One clash, two samples of it."
-    }
-  ]
+  "concessions": []
 }

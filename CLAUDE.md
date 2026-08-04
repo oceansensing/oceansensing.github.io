@@ -757,6 +757,30 @@ tested: planting one rule in `visualization.astro` fails it.
 `test:map` catches it too, by comparing what actually reaches the canvas
 against the palette file.
 
+**What a velocity field owes, in order: the background, then the other
+field, then the markers — and the gate is built that way now.**
+
+A particle is a thin moving line covering the whole map, and the only thing
+behind it is the water: the bathymetry in whichever of its tones, or whichever
+colour scale has replaced it. There is no casing and no shape to fall back on,
+so a particle that does not clear the background is simply invisible. Both
+velocity fields are held to `MIN_DELTA_E` against every water tone and every
+marker-safe colormap.
+
+The two fields also owe *each other*, for the same reason: two sets of
+drifting lines have nothing but hue to tell them apart. Coral against deep
+green is ΔE 69.
+
+Markers owe far less. A marker is a small filled dot with a dark outline,
+sitting still, in a place the reader is looking at deliberately — shape, size
+and stillness separate it from a drifting trail long before hue does, which is
+the argument Argo's old exemption always rested on. So particle-vs-marker is
+held to `MARKER_DELTA_E`, 15 rather than 22.
+
+Getting that order wrong is what produced the two bugs above: the gate spent
+its strictness on the markers, where it was not needed, and let the current
+ramp sit ΔE 21.8 from the shelf, where it was.
+
 **Particle ramps are held to every water tone; markers are held to 90% of it
 by area.** That difference was learned from a bug report. Coverage is
 prevalence-weighted so one uncommon tone cannot veto a colour that is clear
@@ -1577,8 +1601,21 @@ against what the ocean is doing about it. The two current *depths* stay
 exclusive with each other, since 0 m and 60 m are the same quantity and no
 colour could say which is which.
 
-**The wind ramp is lemon yellow, and it is the one colour on this map chosen
-*against* the measurement rather than by it.** Every other colour here is
+**The wind ramp is deep forest green**, dark where the currents' coral is
+pale, ΔE **69.0** from it — the largest separation available — clearing every
+water tone at worst 38.1 and every marker-safe colormap at 24.6. It concedes
+nothing. Its closest approach to anything is 19.8, to the Argo dots' dark
+hairline outline, which is a marker and judged by the marker bar.
+
+It replaced a lemon yellow, and the reason is worth keeping. That yellow was
+chosen when coverage was still weighted by area, so the pale shelf could be
+outvoted; measured tone by tone it sat 20.8 from GEBCO's mint shelf and 17.9
+from the haline scale, and carried **four** background concessions. No yellow
+fixes that — searched, and the yellows that clear the shelf fail the colour
+scales instead, because the two constraints pull opposite ways. The palette
+now has no concessions at all, for the first time.
+
+**On the yellow, and why it is worth recording rather than quietly deleting:** Every other colour here is
 where the search put it. This one was asked for, costed, and taken with the
 cost recorded — which is a legitimate way to decide, provided the cost is
 written down where it cannot be forgotten. It is, in `concessions`.

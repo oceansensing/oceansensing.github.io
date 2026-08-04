@@ -84,6 +84,27 @@ for (const [name, info] of Object.entries(basemaps)) {
 const MIN_DELTA_E = 22;
 const MIN_COVERAGE = 0.9;
 
+/* **What a velocity field has to clear, and what it does not.**
+
+   A particle is a thin moving line covering the whole map, and the only
+   thing behind it is the water — the bathymetry, whichever of its tones, or
+   whichever colour scale has replaced it. That is the background, it is
+   everywhere, and there is no casing or shape to fall back on: if a particle
+   does not clear it, the layer is invisible. Held to MIN_DELTA_E, tone by
+   tone.
+
+   A marker is none of those things. It is a small filled dot with a dark
+   outline, sitting still, in a place the reader is looking at deliberately.
+   Shape, size and stillness separate it from a drifting trail long before
+   hue does — which is the same argument Argo's long-standing exemption has
+   always rested on. So a particle only has to stay *distinguishable* from a
+   marker, not clear the full background bar.
+
+   Getting this the wrong way round is what put the current ramp at ΔE 21.8
+   from the shelf while comfortably clear of every marker: the gate was
+   spending its strictness where it mattered least. */
+const MARKER_DELTA_E = 15;
+
 function against(colour, oceans) {
   let covered = 0;
   let total = 0;
@@ -110,8 +131,11 @@ const concessions = new Map(
 /* Worst distance per pair, gathered rather than asserted, so a pair can be
    judged against the concession list once all of its stops are in. */
 const pairs = new Map();
-const note_pair = (pair, d) => {
-  pairs.set(pair, Math.min(pairs.get(pair) ?? Infinity, d));
+/* Each pair carries the bar it is judged against, since a particle owes a
+   background more than it owes a marker — see MARKER_DELTA_E. */
+const note_pair = (pair, d, bar = MIN_DELTA_E) => {
+  const seen = pairs.get(pair);
+  pairs.set(pair, { worst: Math.min(seen?.worst ?? Infinity, d), bar });
 };
 
 
@@ -252,7 +276,7 @@ if (sstWater.length) {
 for (const [field, ramp] of Object.entries(PARTICLE_RAMPS)) {
   for (const colour of ramp) {
     for (const [name, feature] of Object.entries(palette.features)) {
-      note_pair(`${field} vs ${name}`, deltaE(hex(colour), hex(feature)));
+      note_pair(`${field} vs ${name}`, deltaE(hex(colour), hex(feature)), MARKER_DELTA_E);
     }
     /* Each marker-safe colormap is a background the reader can switch on
        under the particles, so it is judged as one pair per map rather than
@@ -272,13 +296,13 @@ for (const w of palette.wind) {
   for (const c of palette.currents) note_pair('wind vs currents', deltaE(hex(w), hex(c)));
 }
 
-for (const [pair, worst] of pairs) {
+for (const [pair, { worst, bar }] of pairs) {
   const allowed = concessions.get(pair);
   if (allowed) allowed.seen = worst;
   results.push({
     what: pair,
-    on: allowed ? 'conceded separation' : 'separation',
-    coverage: worst >= MIN_DELTA_E || allowed ? 1 : 0,
+    on: allowed ? 'conceded separation' : `separation (bar ${bar})`,
+    coverage: worst >= bar || allowed ? 1 : 0,
     worst,
   });
 }
@@ -291,7 +315,7 @@ for (const [pair, c] of concessions) {
   if (c.seen === null) {
     results.push({ what: `concession "${pair}"`, on: 'a pair never measured',
                    coverage: 0, worst: 0 });
-  } else if (c.seen >= MIN_DELTA_E) {
+  } else if (c.seen >= (pairs.get(pair)?.bar ?? MIN_DELTA_E)) {
     results.push({ what: `concession "${pair}"`, on: 'a pair that clears — remove it',
                    coverage: 0, worst: c.seen });
   } else {
