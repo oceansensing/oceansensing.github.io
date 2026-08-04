@@ -1861,32 +1861,64 @@ const tintLabelsHonest = currentTints.filter((o) => o.value).every((o) => {
 });
 
 /* Choose a colour that clears the water, then move the background out from
-   under it and require the map to give it back.
+   under it.
 
    `Red` is admissible over GEBCO's water and is not over `jet`, which is
    what an SST layer opens on — so switching that layer on is a real change
-   of background under a choice that was legitimate when it was made. The
-   only acceptable answer is to fall back to automatic: leaving it would
-   draw a field the gate would reject, and there is no readout on this
-   control to warn anybody. */
+   of background under a choice that was legitimate when it was made.
+
+   **The choice is kept, not cleared.** It stays selected and goes grey, the
+   particles fall through to the best available colour, and the request comes
+   back into force on its own when the background clears it again. Clearing
+   it was the first behaviour and discards an instruction the reader would
+   then have to repeat; deferring it does not. What says the choice is not in
+   force meanwhile is the legend, painted from the ramp actually drawn — so
+   that is checked too, or "kept" would be indistinguishable from "kept and
+   also still drawn", which is the failure this must not have. */
 let staleChoiceTaken = null;
-let staleChoiceDropped = null;
-let staleChoiceDisabled = null;
+let staleChoiceKept = null;
+let staleChoiceGreyed = null;
+let staleChoiceNotDrawn = null;
+let staleChoiceExplained = null;
+let staleChoiceResumed = null;
+const drawnRamp = () => {
+  let ramp = null;
+  host._map.eachLayer((l) => { if (l.isVelocityLayer && !ramp) ramp = l.options.colorScale; });
+  return ramp ?? null;
+};
+const rampMid = () => drawnRamp()?.[2] ?? null;
 if (tintSelects[0]) {
-  const redOption = [...tintSelects[0].options].find((o) => o.textContent === 'Red');
-  if (redOption && !redOption.disabled) {
-    tintSelects[0].value = redOption.value;
+  const red = [...tintSelects[0].options].find((o) => o.textContent === 'Red');
+  if (red && !red.disabled) {
+    tintSelects[0].value = red.value;
     tintSelects[0].dispatchEvent(new window.Event('change', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 50));
-    staleChoiceTaken = tintSelects[0].value === redOption.value;
+    await new Promise((r) => setTimeout(r, 60));
+    const redDrawn = rampMid();
+    staleChoiceTaken = tintSelects[0].value === red.value && redDrawn !== null;
 
     overlayLabelled(/SST \(ESPC\)/)?.querySelector('input')?.click();
     await new Promise((r) => setTimeout(r, 400));
-    staleChoiceDropped = tintSelects[0].value === '';
-    staleChoiceDisabled =
-      [...tintSelects[0].options].find((o) => o.textContent === 'Red')?.disabled === true;
+    const greyedOption = [...tintSelects[0].options].find((o) => o.textContent === 'Red');
+    staleChoiceKept = tintSelects[0].value === red.value;
+    staleChoiceGreyed = greyedOption?.disabled === true;
+    /* Not "the ramp changed" — it would change anyway, since the ramp for a
+       given colour depends on the background it was searched against, so
+       that version passed even when the inadmissible request was still being
+       honoured. The guarantee is that **what is drawn clears**, so that is
+       what is measured, against the scale the SST layer just put up. */
+    const jetStops = palette.colormaps[palette.defaultColormap.sst];
+    const nowDrawn = drawnRamp();
+    staleChoiceNotDrawn = !!nowDrawn && admissible(
+      nowDrawn,
+      { background: jetStops, markers: Object.values(palette.features) },
+      palette.bars
+    );
+    // A greyed selection does not explain itself; the tooltip has to.
+    staleChoiceExplained = /would not stand out/.test(tintSelects[0].title ?? '');
+
     overlayLabelled(/SST \(ESPC\)/)?.querySelector('input')?.click();
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 500));
+    staleChoiceResumed = rampMid() === redDrawn && tintSelects[0].value === red.value;
   }
 }
 
@@ -2595,9 +2627,12 @@ const checks = [
   ['and the two agree with the gate\'s own rule', tintLabelsHonest],
   ['automatic is never unavailable', autoNeverDisabled],
   ['a chosen colour is applied', staleChoiceTaken === true],
-  /* The check that lets this ship without a live contrast readout. */
-  ['and handed back when the background stops clearing it', staleChoiceDropped === true],
-  ['which the picker then shows as unavailable', staleChoiceDisabled === true],
+  /* The checks that let this ship without a live contrast readout. */
+  ['it is kept, not cleared, when the background stops clearing it', staleChoiceKept === true],
+  ['the picker shows it greyed', staleChoiceGreyed === true],
+  ['and says why', staleChoiceExplained === true],
+  ['and what is drawn instead clears the new background', staleChoiceNotDrawn === true],
+  ['and it comes back when the background clears it again', staleChoiceResumed === true],
   ['and each key is painted from its own ramp, not a copy in CSS',
     flowKeyRamps.length === 2 &&
     flowKeyRamps.every((r) => /linear-gradient\(90deg(?:,\s*#[0-9a-f]{6}){5}\)/i.test(r)) &&
@@ -2628,6 +2663,17 @@ const checks = [
   ['a field with no value under the pointer says so rather than vanishing',
     /Current at surface<\/dt><dd>no data here<\/dd>/.test(popupHtml) ||
       /Current at surface<\/dt><dd>[\d.]+ m\/s/.test(popupHtml)],
+  /* **Semicolons, not commas.** Leaflet joins credits with ", " and the
+     credits contain commas of their own — a run stamp is "valid ... 00Z
+     (+9 h), 2026-08-03 12Z run" — so with several products overlaid a reader
+     cannot see where one ends. The override is on Leaflet's private
+     `_update`, which is exactly why it is checked here: an upgrade that
+     renames those internals must fail a check rather than quietly go back to
+     an ambiguous line. */
+  ['credits are separated by semicolons, not commas',
+    windAttribution.includes(';') &&
+    // Two or more products, or the separator proves nothing.
+    windAttribution.split(';').length >= 2],
   ['both sources are credited when both fields are on',
     /ECMWF/.test(windAttribution) && /ESPC/.test(windAttribution)],
 

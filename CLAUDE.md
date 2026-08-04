@@ -804,6 +804,16 @@ tested: planting one rule in `visualization.astro` fails it.
 
 ### Map colour, and the contrast gate
 
+**Credits are separated by semicolons.** Leaflet joins attributions with
+`", "` and offers no option for it, which is fine for one product and
+ambiguous for several: the credits contain commas of their own — `US Navy
+ESPC-D-V02 — valid 2026-08-05 00Z (+8 h), 2026-08-03 12Z run` is *one*
+source — so a reader counting them gets the wrong number. `_update` is
+private, so the override is guarded and falls back to Leaflet's own version
+if the internals it reads are ever renamed; `test:map` asserts the semicolons
+survive, so a Leaflet upgrade that moves them fails a check rather than
+quietly restoring an ambiguous line.
+
 **Never inline a colour in `AssetMap.astro`.** They live in
 `packages/ocean-map/data/map-palette.json`, which the component imports and
 `npm run test:contrast` checks — a hardcoded colour is invisible to the gate.
@@ -928,11 +938,24 @@ the thinnest case still offers **five** named colours for the current and
 three for the wind, plus Auto.
 
 A choice can stop being admissible after it is made: pick green, then switch
-to a green colour scale. The resolver hands it back to automatic and the
-picker snaps to Auto, because leaving it would draw a field the gate would
-reject with nothing on screen saying so. `test:map` drives exactly that —
-`Red` clears GEBCO's water and fails over `jet`, which is what an SST layer
-opens on — and mutation-testing the fallback away fails it.
+to a green colour scale. **The request is kept, not cleared** — it stays
+selected and goes grey, the particles fall through to the best available
+colour, and the choice comes back into force on its own once the background
+clears it again. Clearing it was the first behaviour and is worse: it
+discards an instruction the reader then has to repeat, and it makes a
+temporary clash look like a permanent refusal. What says the choice is not
+in force meanwhile is the legend, which is painted from the ramp actually
+drawn, and a tooltip on the greyed selection — a greyed option does not
+explain itself.
+
+`test:map` drives the whole cycle: `Green` clears `jet` and fails over
+`cmo.algae`, so switching the scale under it is a real change of background.
+**The check that matters is "what is drawn clears the new background", not
+"the drawn ramp changed"** — the first version asserted the latter and passed
+even when the inadmissible request was still being honoured, because a ramp
+for a given colour legitimately differs between backgrounds. Mutation-tested
+both ways: reverting to clearing fails it, and honouring the stale choice
+fails it.
 
 The choice rides in the saved view like the colour scales, so the hourly
 self-reload does not silently revert it, and Reset clears it.

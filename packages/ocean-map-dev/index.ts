@@ -208,6 +208,42 @@ export async function createOceanMap(
 
   map.attributionControl.setPrefix('');
 
+  /* **Credits are separated by semicolons, not commas.**
+
+     Leaflet joins them with ", " and offers no option for it. With one
+     product on the map that reads fine; with several overlaid it does not,
+     because the credits contain commas of their own — "US Navy ESPC-D-V02 —
+     valid 2026-08-05 00Z (+9 h), 2026-08-03 12Z run" is a single product, and
+     set beside another credit with the same separator there is nothing to
+     say where one ends and the next begins. A reader counting sources gets
+     the wrong number.
+
+     `_update` is private, so the override is guarded: if the internals it
+     reads are not there — a Leaflet upgrade that renames them — Leaflet's own
+     version runs and the line degrades to commas rather than vanishing.
+     `test:map` asserts the semicolons survive, so that upgrade shows up as a
+     failed check rather than as a quietly ambiguous credit line. */
+  {
+    const control = map.attributionControl as unknown as {
+      _attributions?: Record<string, number>;
+      _container?: HTMLElement;
+      options: { prefix?: string | false };
+      _update: () => void;
+    };
+    const leafletUpdate = control._update.bind(control);
+    control._update = () => {
+      const credits = control._attributions;
+      const container = control._container;
+      if (!credits || !container) return leafletUpdate();
+      const shown = Object.keys(credits).filter((text) => credits[text]);
+      const parts: string[] = [];
+      if (control.options.prefix) parts.push(String(control.options.prefix));
+      if (shown.length) parts.push(shown.join('; '));
+      container.innerHTML = parts.join(' <span aria-hidden="true">|</span> ');
+    };
+    control._update();
+  }
+
   /* One credit per source and run, however many layers draw from it.
      Currents and the Navy scalar fields come from the same model at the
      same hour, so with the quantity written into each string the control
@@ -1008,7 +1044,16 @@ export async function createOceanMap(
       if (wanted) {
         const asked = pickRamp(background, [...MARKER_COLOURS, ...apartFrom], wanted);
         if (admits(asked.ramp, apartFrom)) return asked;
-        particleTint[field] = null;   // no longer clears; hand it back to auto
+        /* **Remembered, not cleared.** The reader asked for green and the
+           background moved under them; forgetting the request would mean
+           they had to ask again once it became usable, and the map would
+           have silently discarded an instruction rather than deferred it.
+           So the tint stays, the picker keeps showing it greyed as
+           unavailable, and this resolve falls through to automatic — which
+           reverses on its own the moment the background clears it again.
+
+           What says the choice is not in force is the legend, which is
+           painted from the ramp actually drawn. */
       }
       return pickRamp(background, [...MARKER_COLOURS, ...apartFrom], null);
     };
@@ -1656,8 +1701,17 @@ export async function createOceanMap(
               palette.bars
             );
           }
-          // Reflect a choice the resolver handed back to auto.
+          /* Keep the reader's request selected even when it is unavailable
+             — it is deferred, not discarded. The browser greys a disabled
+             option, and the tooltip says why, since a greyed selection on
+             its own does not explain itself. */
           select.value = particleTint[field] ?? '';
+          const selected = select.selectedOptions[0];
+          select.title = selected?.disabled
+            ? `${selected.textContent} would not stand out from what is behind the ` +
+              'particles right now, so they are drawn in the best available colour ' +
+              'until it does.'
+            : '';
         }
       };
     }
