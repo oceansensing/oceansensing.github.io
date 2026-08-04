@@ -2329,6 +2329,14 @@ recording:
   coupling is invisible: `choiceFor` indexes `choices` by the field's key and
   the legend reads `.map` off the result, so a field added to one and not the
   other throws on the first repaint rather than falling back to a default.
+- **The point readout guessed its unit from the data.** It read
+  `h.units === 'psu' ? 'psu' : '°C'` — a two-way guess in a place that now
+  has three answers — so ice fell into the else and a concentration of 0.9
+  was reported as "0.9 °C". `FIELDS` already states the unit and whether to
+  show it as a percentage, and it is the same descriptor the colour bar
+  reads, so there was never anything to infer. The value is formatted there
+  too: a caller cannot know a fraction is shown times a hundred without
+  asking the same descriptor again.
 - **A step that is not a binary fraction did not survive the range
   rounding.** `Math.floor(0.15 / 0.05) * 0.05` is 0.1, and the ceiling of the
   same pair overshoots to 0.15000000000000002 — which the legend then printed

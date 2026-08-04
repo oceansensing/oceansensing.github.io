@@ -3322,7 +3322,7 @@ export async function createOceanMap(
       /* Only when a temperature layer is on. With none loaded there is no
          grid to miss, and "no data" would claim something untrue about the
          ocean rather than about the map. */
-      (temp ? `<dt>${temp.label}</dt><dd>${temp.value.toFixed(1)} ${temp.unit}</dd>` : '') +
+      (temp ? `<dt>${temp.label}</dt><dd>${temp.text}</dd>` : '') +
       `</dl>`
     );
   };
@@ -3751,9 +3751,22 @@ export async function createOceanMap(
     const j = Math.round((h.la1 - ll.lat) / h.dy);
     if (i < 0 || j < 0 || j >= h.ny) return null;
     const v = grid.data[j * h.nx + i];
-    return typeof v === 'number'
-      ? { value: v, unit: h.units === 'psu' ? 'psu' : '°C', label: field?.label ?? 'Sea surface' }
-      : null;
+    if (typeof v !== 'number') return null;
+    /* **The unit comes from the field, not from a guess at the data.** This
+       read `h.units === 'psu' ? 'psu' : '°C'`, which is a two-way guess in a
+       place that now has three answers: ice publishes `fraction`, fell into
+       the else, and the readout reported a concentration of 0.9 as "0.9 °C".
+       `FIELDS` already states the unit and whether to show it as a
+       percentage — the same descriptor the colour bar reads — so there is
+       nothing to infer.
+
+       Formatted here rather than by the caller, because the caller cannot
+       know that a fraction is shown times a hundred without asking the same
+       descriptor again. */
+    const text = field?.percent
+      ? `${Math.round(v * 100)} ${field.unit ?? '%'}`
+      : `${v.toFixed(1)} ${field?.unit ?? ''}`.trim();
+    return { text, label: field?.label ?? 'Sea surface' };
   };
 
   /* **Every** animated field that is on, not the first one found.
