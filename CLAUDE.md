@@ -1573,10 +1573,13 @@ Two things on the map side are easy to get wrong and both are silent:
   are *circulations* — which are only legible if a streak runs far enough to
   be seen turning. The longer life also thins the picture without touching the
   count, since a particle that lives longer is reseeded less often.
-- **The wind is drawn 25% faster than parity**, on top of that. `WIND_BOOST`
-  is a named factor over the measured ratio rather than a second number that
-  quietly disagrees with it — parity is the measurement, and this is the
-  legibility choice made against it. `check:docs` holds the two apart: the
+- **The wind is drawn 56% faster than parity**, on top of that — two
+  successive quarters, judged against the map rather than in one step.
+  `WIND_BOOST` is a named factor over the measured ratio rather than a second
+  number that quietly disagrees with it — parity is the measurement, and this
+  is the legibility choice made against it. Kept as the compounded 1.5625
+  rather than rounded to 1.5, so the constant and the percentage in this
+  sentence cannot drift apart. `check:docs` holds the two apart: the
   base drift must still match the measured ratio, and the boost must be
   stated here.
 - **Speed needs its own calibration.** Measured on the published grids, the
