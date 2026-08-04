@@ -2340,6 +2340,21 @@ const checks = [
     })()],
   /* With worldCopyJump off the centre can wander past ±180 after enough
      panning, and a stored view is read back much later. */
+  /* The gates read `packages/ocean-map/...` by explicit path, so a fork of
+     the map is exempt from all of them — which is the point of
+     `packages/ocean-map-dev`: a sandbox has to be allowed to fail the rules
+     it is questioning. But "exempt because nobody listed it" is not a
+     decision, it is an oversight waiting to happen, so the exemption is a
+     named list. A third map package appearing here fails this until someone
+     says which side of the line it is on. */
+  ['every map package is either gated or knowingly exempt', (() => {
+    const KNOWN = { 'ocean-map': 'gated', 'ocean-map-dev': 'sandbox, exempt' };
+    const found = fs.readdirSync('packages', { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name);
+    return found.every((name) => name in KNOWN);
+  })()],
+
   /* ---- page width ----
      The map takes the whole viewport on the pages built around it, and the
      text sits at its left edge rather than centred. That is one class, and

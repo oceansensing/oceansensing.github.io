@@ -13,4 +13,11 @@ Disallow: /ocean-data-repo/
 # page that presents them is indexable; the image store is not.
 Disallow: /hab-data-repo/
 
+# The development visualizer: a sandbox build of the map, deliberately
+# unfinished and sometimes deliberately wrong. It reads the same live data as
+# the published map, so there is nothing here a crawler needs that
+# /visualization/ does not already offer, and indexing it would put an
+# experimental page in front of people looking for the real one.
+Disallow: /dev/
+
 Sitemap: https://oceansensing.org/sitemap-index.xml

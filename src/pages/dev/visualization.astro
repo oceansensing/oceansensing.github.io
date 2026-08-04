@@ -1,0 +1,67 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import DevAssetMap from '../../components/DevAssetMap.astro';
+import UtcClock from '../../components/UtcClock.astro';
+
+/* The development visualizer.
+
+   It draws from `@c4po/ocean-map-dev`, a sandbox fork of the production map,
+   and reads **the same data** as production — same `MAP_DATA`, same hourly
+   refresh, same files. Nothing here has its own pipeline, and nothing here
+   should ever acquire one: the point is to try things about the *map*, with
+   the ocean held constant.
+
+   It is unlisted rather than private. Not in the nav, not in the sitemap,
+   disallowed in robots.txt — but GitHub Pages is public and so is this
+   repository, so anyone with the URL can open it. Hence the banner: someone
+   who finds it should not mistake it for the real map. */
+const title = 'Development visualizer';
+const description =
+  'Sandbox build of the C4PO ocean map. Experimental, unlisted, and not the published map.';
+---
+
+<BaseLayout title={title} description={description} wide noindex>
+  <article class="container wide">
+    <div class="topline">
+      <h1 class="eyebrow">Development visualizer</h1>
+      <UtcClock />
+    </div>
+
+    <p class="dev-banner" role="note">
+      <strong>Experimental build.</strong> This is a sandbox for trying changes
+      to the map itself. It reads the same live data as the
+      <a href="/visualization/">published visualizer</a>, but its behaviour,
+      colours and controls may be broken, half-finished, or deliberately
+      wrong. Nothing here is a statement about the ocean.
+    </p>
+
+    <DevAssetMap
+      storageKey="dev-visualization-map-view"
+      label="Development build of the interactive ocean map"
+      home={[[-60, -175], [70, 175]]}
+      layers={['Currents at 0m (ESPC)', 'Coastline']}
+    />
+  </article>
+</BaseLayout>
+
+<style>
+  .topline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+  }
+
+  /* Loud on purpose. The one thing this page must not do is be mistaken for
+     the published map by someone who arrived at the URL sideways. */
+  .dev-banner {
+    margin-block: var(--space-sm) var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: var(--radius);
+    background: var(--bg-subtle);
+    font-size: var(--text-sm);
+  }
+</style>

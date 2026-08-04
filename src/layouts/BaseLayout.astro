@@ -8,6 +8,11 @@ interface Props {
   title?: string;
   description?: string;
   ogImage?: string;
+  /** Keep this page out of search results. Unlisted pages are still public —
+      GitHub Pages serves whatever is deployed — so the only honest form of
+      "not visible" is: not in the nav, not in the sitemap, disallowed in
+      robots.txt, and `noindex` here for the crawlers that ignore robots. */
+  noindex?: boolean;
   /** Pages built around the live map. The map takes the whole viewport, and
       the page's own text sits at its left edge rather than centred — so the
       header and footer have to move with it, or they are the only things on
@@ -16,7 +21,7 @@ interface Props {
   wide?: boolean;
 }
 
-const { title, description = SITE.description, ogImage = '/og-default.png', wide = false } = Astro.props;
+const { title, description = SITE.description, ogImage = '/og-default.png', wide = false, noindex = false } = Astro.props;
 const pageTitle = title ? `${title} · ${SITE.title}` : `${SITE.title} — ${SITE.fullName}`;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 ---
@@ -29,6 +34,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <title>{pageTitle}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="sitemap" href="/sitemap-index.xml" />
     <link

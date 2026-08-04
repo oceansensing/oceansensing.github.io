@@ -1,0 +1,18 @@
+{
+  "name": "@c4po/ocean-map-dev",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sandbox fork of @c4po/ocean-map. Not shipped; see README.",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./storm-status": "./storm-status.ts",
+    "./ocean-map.css": "./ocean-map.css",
+    "./schema": "./schema.ts",
+    "./data/map-palette.json": "./data/map-palette.json",
+    "./data/basemap-ocean.json": "./data/basemap-ocean.json"
+  },
+  "peerDependencies": {
+    "leaflet": "^1.9.4"
+  }
+}

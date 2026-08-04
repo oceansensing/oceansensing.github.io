@@ -1,0 +1,162 @@
+---
+/* The dev map's placement. A copy of AssetMap.astro pointed at the sandbox
+   package — see packages/ocean-map-dev/README.md. Kept otherwise identical to
+   its production twin so `diff src/components/AssetMap.astro
+   src/components/DevAssetMap.astro` shows only what the experiment changed. */
+/* This site's placement of the ocean map: the markup, the styling, and the
+   configuration a page passes in. The map itself is @c4po/ocean-map-dev in
+   packages/ocean-map — a plain module with no Astro in it. See its README
+   for the options.
+
+   One engine, several pages. What separates the general-purpose map from the
+   hurricane map is the preset and the home bounds, not the code: each page
+   says which layers it opens with and where it looks, and the map does the
+   rest. Reset returns to that preset rather than to the map's own defaults. */
+import { MAP_DATA } from '../config';
+
+interface Props {
+  /** Overlay names to switch on, as the layer switcher shows them. */
+  layers?: string[];
+  /** Where to fetch from. Defaults to the data repository; a page or a
+      preview can point somewhere else without touching the module. */
+  dataBase?: string;
+  /** Bounds the map opens on, and that Reset returns to. */
+  home?: [[number, number], [number, number]];
+  /** Per instance, so two pages do not share a saved view. */
+  storageKey?: string;
+  /** Announced to a screen reader; the pages differ in what they are for. */
+  label?: string;
+}
+
+const {
+  layers,
+  home,
+  dataBase = MAP_DATA,
+  storageKey = 'asset-map-view',
+  label = 'Map of ocean observing platforms and the water they are working in',
+} = Astro.props;
+
+/* Data comes from the ocean-data repository rather than from this site — see
+   MAP_DATA in src/config.ts for why, and note that it means the map now
+   depends on a second origin being up. Leaflet is bundled from npm rather
+   than a CDN. The default basemap is GEBCO's bathymetry, so a page carrying
+   this map does request tiles; readers who would rather not can switch to
+   "Coastline only", which is fetched only when they do. */
+---
+
+<figure class="map-figure" data-ocean-map>
+  <div
+    id="asset-map"
+    data-ocean-map-canvas
+    data-map-data={dataBase}
+    data-map-storage-key={storageKey}
+    data-map-layers={layers ? JSON.stringify(layers) : undefined}
+    data-map-home={home ? JSON.stringify(home) : undefined}
+    role="application"
+    aria-label={label}>
+    <noscript>
+      <p class="om-fallback">
+        This map needs JavaScript. The underlying data is available as
+        <a href="/map/ocean-assets.json">ocean-assets.json</a>.
+      </p>
+    </noscript>
+  </div>
+  <figcaption>
+    <span class="om-legend">
+      <span class="om-key storm">Hurricane</span>
+      <span class="om-key usv">NOAA USV</span>
+      <span class="om-key glider">Ocean glider</span>
+      <span class="om-key argo">Argo float</span>
+      <!-- A container, not a key. The module fills it with one key per
+           animated field that is on — wind and a current can be shown
+           together — each painted from that field's own ramp. It carries no
+           `om-key` class of its own, or it would draw a swatch of its own in
+           front of them. Empty in the markup because there is nothing true
+           to say before the module has read which layers are on. -->
+      <span data-flow-key></span>
+      <span class="om-key sst" data-sst-key hidden>Sea surface temp</span>
+      <span class="om-field-controls" data-field-controls hidden>
+        <label>
+          <span class="om-vh">Colour scale</span>
+          <select data-field-map aria-label="Colour scale"></select>
+        </label>
+        <label>
+          <span class="om-vh">Minimum</span>
+          <input type="number" data-field-min step="any" aria-label="Scale minimum" />
+        </label>
+        <span aria-hidden="true">–</span>
+        <label>
+          <span class="om-vh">Maximum</span>
+          <input type="number" data-field-max step="any" aria-label="Scale maximum" />
+        </label>
+        <button type="button" data-field-auto>Auto</button>
+      </span>
+      <!-- The forecast hour. Built by the module from the frames the data
+           advertises, so the buttons cannot name an hour nobody published. -->
+      <span class="om-forecast-controls" data-forecast-controls hidden>
+        <span class="om-vh">Forecast hour</span>
+      </span>
+      <span class="om-bathy-controls" data-bathy-controls hidden>
+        <label>
+          Isobaths
+          <input
+            type="range"
+            data-bathy-opacity
+            min="10"
+            max="100"
+            step="5"
+            aria-label="Isobath opacity"
+          />
+        </label>
+      </span>
+      <!-- The input is visually hidden and the label is the button. A bare
+           file input renders the browser's own "No file selected." beside it,
+           which cannot be styled or translated, says nothing this map does
+           not already say in the note below, and was being clipped to
+           "No fi…cted." by the width this row can spare. The label carries
+           the whole affordance instead, and names both formats. -->
+      <span class="om-kmz-controls" data-kmz-controls>
+        <label class="om-kmz-add">
+          <span>Add KML or KMZ…</span>
+          <input
+            class="om-vh"
+            type="file"
+            data-kmz-file
+            accept=".kmz,.kml,application/vnd.google-earth.kmz,application/vnd.google-earth.kml+xml"
+            multiple
+          />
+        </label>
+        <span class="om-kmz-list" data-kmz-list hidden></span>
+      </span>
+    </span>
+    <span class="om-status" id="map-status" data-map-status>Loading…</span>
+    <span class="om-kmz-note" data-kmz-note aria-live="polite"></span>
+  </figcaption>
+</figure>
+
+<script>
+  /* The map itself lives in packages/ocean-map — a plain module with no Astro
+     in it, so another project can import it directly. This component is the
+     markup and the styling; mountOceanMaps finds every container on the page
+     and builds one. */
+  import { mountOceanMaps } from '@c4po/ocean-map-dev';
+
+  mountOceanMaps();
+</script>
+
+<style>
+  /* Placement only. Everything about how the map itself looks now lives in
+     packages/ocean-map/ocean-map.css, which the module imports, so another
+     site gets the styling with the behaviour instead of copying it.
+
+     The figure simply fills whatever it is given. Width is the host page's
+     to decide, and the two pages carrying this map say so by putting it in
+     a `.container.wide` — see global.css. An earlier pass had the figure
+     break out of a narrow container with a negative margin, which worked but
+     left the page's own text stranded in the middle of a wide screen while
+     the map ran past it on both sides. Widening the container instead moves
+     the text and the map to the same left edge, and needs no arithmetic. */
+  .map-figure {
+    margin: 0 0 var(--space-lg, 1.5rem);
+  }
+</style>

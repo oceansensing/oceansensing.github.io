@@ -730,6 +730,45 @@ which is what Leaflet's own resize handler runs inside. So the refit is
 tested in `test:map` against a stub observer, which is also the only way to
 assert *which element* is observed.
 
+### The development visualizer
+
+`/dev/visualization/`, drawn by `packages/ocean-map-dev` — a **sandbox fork**
+of the map package. It exists because some ideas cannot be tried in
+production: a reader-facing colour picker, for instance, deliberately breaks
+the rule that every colour has been checked against every background, and
+there is nowhere in `packages/ocean-map` for that to live even temporarily.
+
+**It shares the data and nothing else.** Same `MAP_DATA`, same hourly refresh,
+same files. Nothing under `/dev/` has its own pipeline and nothing should
+ever acquire one — the point is to vary the *map* with the ocean held
+constant.
+
+**It started byte-identical to production** apart from `package.json`, which
+is worth preserving: `diff -r packages/ocean-map packages/ocean-map-dev` is
+the experiment log. When that diff stops answering "what are we trying?", the
+fork has stopped being useful.
+
+**Unlisted is not private.** Out of the nav, out of the sitemap (filtered in
+`astro.config.mjs`), disallowed in `robots.txt`, and `noindex` via a
+`BaseLayout` prop for crawlers that ignore robots — but GitHub Pages serves
+what is deployed and this repository is public, so anyone with the URL can
+open it. Hence the banner: someone arriving sideways must not mistake it for
+the published map.
+
+**The gates read their inputs by explicit path under `packages/ocean-map`**,
+so the fork is exempt from all of them, which is the point. But "exempt because nobody
+listed it" is an oversight rather than a decision, so `test:map` carries a
+named list of map packages and fails on a third one until somebody says which
+side of the line it is on. Mutation-tested.
+
+Its saved view has its own storage key, so a reader's dev session does not
+overwrite where they were on the real map.
+
+**Promoting something back** means copying the change, not the file: anything
+that graduates has to satisfy the gates it was exempt from, and usually has
+to be argued for here as well, because this map's constants are measured
+decisions rather than preferences.
+
 ### One map, however many pages carry it
 
 **A change to how the map looks or behaves has to reach every instance of it,
