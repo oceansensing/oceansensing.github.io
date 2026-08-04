@@ -687,14 +687,26 @@ tested: planting one rule in `visualization.astro` fails it.
 `test:map` catches it too, by comparing what actually reaches the canvas
 against the palette file.
 
-Where a colour genuinely cannot clear the bar, the exception is **named in
-the palette with its reasoning** (`separationExempt`) and reported by the
-gate, rather than the threshold being lowered — which would quietly cover
-every future clash as well. Argo is the one such case: gold sits ~ΔE 18 from
-the current particles, no yellow clears them, and paling the particle ramp
-enough to make room drops its own water contrast to 79%. The dots carry a
-dark outline instead, which separates a discrete dot from a drifting trail
-whatever the fill does.
+Where a colour genuinely cannot clear the bar, the pair is **named in the
+palette with its measured distance and its reasoning** (`concessions`) and
+reported by the gate on every run, rather than the threshold being lowered —
+which would quietly cover every future clash as well.
+
+**The list is checked both ways, and the second half is what keeps it
+honest.** A pair under the bar with no concession fails; a concession for a
+pair that actually clears fails too, with "remove it". Without that second
+check the list only ever grows: a clash that gets fixed stays listed, and a
+record that cannot be wrong stops being read. Same bargain `markerSafe`
+strikes with the colormaps. Mutation-tested in both directions.
+
+There are five concessions today and four of them are the wind's, which is
+the honest cost of the colour it was given — see the wind section. The fifth
+is the oldest: Argo's gold sits ΔE 17.8 from the current particles, no yellow
+clears them, and paling the amber enough to make room drops its own water
+contrast to 79%. The dots carry a dark outline instead, which separates a
+discrete dot from a drifting trail whatever the fill does. That argument —
+form and motion carrying what colour does not — is what every concession here
+leans on, and its limits are visible in the list getting longer.
 
 The map offers two bathymetries of opposite tone: Esri Ocean is light (ocean
 luminance ~0.33) and GEBCO is dark (~0.10, though it paints shallow banks a
@@ -1348,40 +1360,55 @@ against what the ocean is doing about it. The two current *depths* stay
 exclusive with each other, since 0 m and 60 m are the same quantity and no
 colour could say which is which.
 
-**So the wind has its own gated ramp**, deep forest green, and the constraint
-that picked it is the coexistence: two sets of drifting lines carry no shape
-or outline to fall back on, unlike a marker against a particle, so colour is
-the entire separation. The ramp therefore has to clear the currents' amber
-*as well as* every basemap ocean, every marker-safe colormap and every
-marker. Chosen by the same search that picked the SST ramp: of 52,514 dark
-greens tried, 15 clear all of it, and this is the one with the most room.
+**The wind ramp is lemon yellow, and it is the one colour on this map chosen
+*against* the measurement rather than by it.** Every other colour here is
+where the search put it. This one was asked for, costed, and taken with the
+cost recorded — which is a legitimate way to decide, provided the cost is
+written down where it cannot be forgotten. It is, in `concessions`.
 
-| against | ΔE |
-| --- | --- |
-| the currents' amber | 48.8 |
-| Esri's water | 43.9 |
-| GEBCO's water | 37.0 |
-| every marker but one | 32+ |
-| **the Argo dots' outline** | **22.5** |
+Yellow is the crowded corner of this palette: the Argo floats are gold, the
+saildrones orange, the current particles pale amber. A yellow has warm
+neighbours on three sides. Of every true yellow searched, this is the one
+whose worst clash is furthest from zero:
 
-**It is dark where every other particle colour here is pale, and that is the
-trade.** Being dark is what buys the 48.8 from the amber — but it also means
-the thing it runs closest to is the one dark feature on the map, the Argo
-dots' olive outline, at half a point over the bar. That is tolerable because
-an outline is a hairline round a gold fill the green clears by 51.9: the dot
-reads gold, not olive. It is worth knowing before adding another dark
-feature, which would be competing for the same narrow space.
+| against | ΔE | |
+| --- | --- | --- |
+| the measuring line | 86.0 | clears |
+| the gliders | 76.6 | clears |
+| the storms | 66.0 | clears |
+| the Argo outline | 68.6 | clears |
+| the saildrones | 38.5 | clears |
+| Esri / GEBCO water | 100% / 93% cover | clears |
+| **the thermal colormap** | **19.6** | conceded |
+| **the Argo gold** | **18.0** | conceded |
+| **the currents' amber** | **17.9** | conceded |
+| **the haline colormap** | **17.9** | conceded |
 
-**Two earlier passes got this wrong in opposite directions, both by
-searching under the wrong constraint.** The first had wind reusing the amber,
-which was true while the fields were exclusive and is what this change
-undid. The second rejected dark green outright — because the search demanded
-clearance from *every* colormap, when the gate only holds a colour to the
-five **marker-safe** ones. That distinction is the whole point of
-`markerSafe`, and measured against the real bar the live amber ramp fails 56
-of the 250 colormap stops while this green fails 13. Searching a stricter
-rule than the gate applies does not produce a safer answer; it produces no
-answer, and the wrong reason for it.
+**The expensive one is the amber**, because that pair is the only one on the
+map with no form to fall back on: both are thin drifting trails, and they
+are meant to be on screen together. Yellow over pale amber is separable but
+not at a glance — which is precisely what the legend naming both fields and
+the readout reporting both are carrying. Everywhere else the concession is
+against a filled dot with a dark outline, or a whole-field raster, where
+motion and shape do the work colour is not doing.
+
+**A brighter, more saturated yellow is far worse and was measured first**:
+ΔE 2.9 from the Argo gold, which is to say the same colour, with about four
+thousand floats on the map. The lemon's four concessions all sit in the 17.9
+to 19.6 band — the same order as the amber's own long-standing 17.8 — which
+is what makes them the same kind of trade rather than a new one.
+
+**Three earlier passes got this wrong, each by searching under the wrong
+constraint, and the pattern is worth naming.** The first had wind reusing the
+amber, which held only while the fields were exclusive. The second rejected
+dark green outright, because the search demanded clearance from *every*
+colormap where the gate holds a colour to the five **marker-safe** ones —
+measured against the real bar the live amber ramp fails 56 of 250 colormap
+stops and that green failed 13, so it was the better colour by the very
+number used to reject it. The third rejected yellow on a bright sample and
+called the whole hue impossible, when a paler one concedes a fifth as much.
+Searching a stricter rule than the gate applies does not produce a safer
+answer; it produces no answer, and a confident wrong reason for it.
 
 **`test:contrast` had to learn about the plural.** It iterated a bare
 `palette.currents`, so a second ramp could be added to the palette and drawn

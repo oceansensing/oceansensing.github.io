@@ -33,7 +33,12 @@ export interface Palette {
       recorded in the `_defaultExempt` note beside it. */
   defaultExempt?: string[];
   /** Features exempt from the particle-separation check, likewise. */
-  separationExempt?: string[];
+  /** Every place a colour knowingly sits under the gate's ΔE bar, with the
+      measured distance and the reason. Checked both ways by
+      scripts/test-contrast.mjs: an unlisted clash fails, and a listing for a
+      pair that actually clears fails too, so the record cannot rot into a
+      warning nobody reads. See `_concessions` in map-palette.json. */
+  concessions?: { pair: string; deltaE: number; why: string }[];
 }
 
 /* The `_`-prefixed keys in the file are prose explaining each decision — the

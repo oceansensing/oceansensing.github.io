@@ -202,67 +202,79 @@ if (sstWater.length) {
       });
     }
   }
-  Object.entries(PARTICLE_RAMPS).forEach(([field, ramp]) => ramp.forEach((colour, i) => {
-    for (const stop of sstWater) {
-      const d = deltaE(hex(colour), hex(stop.colour));
-      results.push({
-        what: `${field}[${i}] (${colour})`,
-        on: `SST ramp ${stop.label} (${stop.colour})`,
-        coverage: d >= MIN_DELTA_E ? 1 : 0,
-        worst: d,
-      });
-    }
-  }));
+  /* The particle ramps used to be checked here too, one row per stop. They
+     are measured in the separation pass below instead, aggregated to one
+     pair per colormap — because a concession names a colormap a particle
+     runs close to, not a stop index, and ten rows saying the same thing
+     about `haline` bury the one line a reader needs. The markers stay
+     per-stop: nothing concedes against them, so each row is pass or fail on
+     its own. */
 }
 
 /* Particles must not read as assets. They are thin moving lines and the
    markers are filled dots, but keeping them apart in colour too means a
    glance is never ambiguous. */
-const exempt = new Set(palette.separationExempt ?? []);
-for (const [field, ramp] of Object.entries(PARTICLE_RAMPS)) {
-for (const [i, colour] of ramp.entries()) {
-  for (const [name, feature] of Object.entries(palette.features)) {
-    const d = deltaE(hex(colour), hex(feature));
-    if (exempt.has(name)) {
-      /* Named exemption, with the reason in map-palette.json. Reported, not
-         hidden — a silently lowered threshold would cover this and every
-         future clash along with it.
+/* Every knowing concession, from the palette. A pair named here may sit
+   under the bar; every other pair may not. Checked both ways below — see
+   `_concessions`. */
+const concessions = new Map(
+  (palette.concessions ?? []).map((c) => [c.pair, { ...c, seen: null }])
+);
 
-         Only reported where it is actually being *used*, though. The
-         exemption is per feature and the ramps are now plural, so Argo's
-         gold clears the wind's orchid by ΔE 57.9 while needing the
-         exemption against the currents' amber at 17.8. Announcing a
-         concession that is not being made is how a note stops being read. */
-      if (i === 0 && d < MIN_DELTA_E) {
-        notes.push(`${name} exempt from ${field} separation (ΔE ${d.toFixed(1)}) — see _separation`);
-      }
-      continue;
+/* Worst distance per pair, gathered rather than asserted, so a pair can be
+   judged against the concession list once all of its stops are in. */
+const pairs = new Map();
+const note_pair = (pair, d) => {
+  pairs.set(pair, Math.min(pairs.get(pair) ?? Infinity, d));
+};
+
+for (const [field, ramp] of Object.entries(PARTICLE_RAMPS)) {
+  for (const colour of ramp) {
+    for (const [name, feature] of Object.entries(palette.features)) {
+      note_pair(`${field} vs ${name}`, deltaE(hex(colour), hex(feature)));
     }
-    results.push({
-      what: `${field}[${i}] vs ${name}`,
-      on: 'feature separation',
-      coverage: d >= MIN_DELTA_E ? 1 : 0,
-      worst: d,
-    });
+    /* Each marker-safe colormap is a background the reader can switch on
+       under the particles, so it is judged as one pair per map rather than
+       one per stop — a concession names a colormap, not a stop index. */
+    for (const [name, stops] of Object.entries(palette.colormaps ?? {})) {
+      if (!safeMaps.has(name)) continue;
+      for (const stop of stops) note_pair(`${field} vs ${name}`, deltaE(hex(colour), hex(stop)));
+    }
   }
 }
+
+/* The two particle ramps against each other. This pair only became a
+   question when wind stopped being exclusive with the currents: both can now
+   drift over the same water, and unlike a marker against a particle there is
+   no filled dot and no outline to fall back on. */
+for (const w of palette.wind) {
+  for (const c of palette.currents) note_pair('wind vs currents', deltaE(hex(w), hex(c)));
 }
 
-/* The two particle ramps against each other, which only became a question
-   when wind stopped being exclusive with the currents. Both can now drift
-   over the same water at once, and drifting lines carry no shape or outline
-   to fall back on — unlike a marker against a particle, where one is a
-   filled dot and the other a thin trail. Colour is the entire separation
-   here, so it is held to the same bar. */
-for (const [i, w] of palette.wind.entries()) {
-  for (const [j, c] of palette.currents.entries()) {
-    const d = deltaE(hex(w), hex(c));
-    results.push({
-      what: `wind[${i}] vs currents[${j}]`,
-      on: 'particle separation',
-      coverage: d >= MIN_DELTA_E ? 1 : 0,
-      worst: d,
-    });
+for (const [pair, worst] of pairs) {
+  const allowed = concessions.get(pair);
+  if (allowed) allowed.seen = worst;
+  results.push({
+    what: pair,
+    on: allowed ? 'conceded separation' : 'separation',
+    coverage: worst >= MIN_DELTA_E || allowed ? 1 : 0,
+    worst,
+  });
+}
+
+/* Both directions. A pair under the bar must be named, which the loop above
+   enforces; a pair that is named must actually be under it, or the list
+   quietly accumulates concessions nobody is making any more and stops being
+   worth reading. */
+for (const [pair, c] of concessions) {
+  if (c.seen === null) {
+    results.push({ what: `concession "${pair}"`, on: 'a pair never measured',
+                   coverage: 0, worst: 0 });
+  } else if (c.seen >= MIN_DELTA_E) {
+    results.push({ what: `concession "${pair}"`, on: 'a pair that clears — remove it',
+                   coverage: 0, worst: c.seen });
+  } else {
+    notes.push(`conceded: ${pair} at ΔE ${c.seen.toFixed(1)} (declared ${c.deltaE}) — see _concessions`);
   }
 }
 
