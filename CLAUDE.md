@@ -1566,20 +1566,25 @@ Two things on the map side are easy to get wrong and both are silent:
   for wind. Getting it backwards would be exactly wrong and entirely
   plausible on screen. `test:map` blows the fixture due east and requires the
   readout to say **from 270°T**.
-- **Lifetime is per field: 4 s suits the ocean, 6 s suits the air.** Currents
+- **Lifetime is per field: 4 s suits the ocean, 8 s suits the air.** Currents
   are eddy-scale, and a longer life lets particles pile into the fast cores
   until an even texture decays into a few bright ropes. The air has less
   small-scale structure and no tight cores to collapse into, and its features
   are *circulations* — which are only legible if a streak runs far enough to
   be seen turning. The longer life also thins the picture without touching the
   count, since a particle that lives longer is reseeded less often.
-- **The wind is drawn 56% faster than parity**, on top of that — two
-  successive quarters, judged against the map rather than in one step.
+- **The wind is drawn 100% faster than parity** — twice the speed the
+  measurement would give it — reached in three steps of looking at the map.
   `WIND_BOOST` is a named factor over the measured ratio rather than a second
-  number that quietly disagrees with it — parity is the measurement, and this
-  is the legibility choice made against it. Kept as the compounded 1.5625
-  rather than rounded to 1.5, so the constant and the percentage in this
-  sentence cannot drift apart. `check:docs` holds the two apart: the
+  number that quietly disagrees with it: parity is the measurement, and this
+  is the legibility choice made against it.
+
+  At double, it is worth stating what the layer now is. The wind field is a
+  **depiction** of circulation rather than a scale model of it. Direction is
+  exact and relative speeds within the field are exact; only the overall rate
+  is chosen, and it is chosen to be read. The readout is where a reader gets
+  the actual number — it reports m/s from the same grid the particles follow,
+  so nothing on screen is claiming a speed the data does not support. `check:docs` holds the two apart: the
   base drift must still match the measured ratio, and the boost must be
   stated here.
 - **Speed needs its own calibration.** Measured on the published grids, the

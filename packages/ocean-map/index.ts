@@ -529,12 +529,14 @@ export async function createOceanMap(
      which is why it is a named factor over the measured ratio rather than a
      new number that quietly disagrees with it.
 
-     1.5625 is two successive quarters — 1.25 x 1.25 — arrived at by looking
-     at the map rather than in one step. Kept as the compounded figure rather
-     than rounded to 1.5, because the number that matters is the ratio to the
-     measured parity and rounding it would put the prose and the constant a
-     percent apart for no reason. */
-  const WIND_BOOST = 1.5625;
+     Twice parity, arrived at in three steps of looking at the map rather
+     than in one — 1.25, then 1.5625, then here. At this point it is worth
+     saying plainly what the number means: the wind is drawn at double the
+     speed the measurement would give it, so the field is a depiction of
+     circulation rather than a scale model of it. The direction is exact and
+     the relative speeds within the field are exact; only the overall rate is
+     the reader's, and it is chosen for legibility. */
+  const WIND_BOOST = 2;
   const DRIFT = { current: 3.0, wind: 0.11 * WIND_BOOST };
 
   /* How long a particle lives before it is reborn somewhere random. The
@@ -562,7 +564,7 @@ export async function createOceanMap(
      no tight cores for it to collapse into. It also thins the picture without
      touching the count: a particle that lives longer is respawned less often,
      so fewer are being seeded into slow air at any moment. */
-  const PARTICLE_SECONDS = { current: 4, wind: 6 };
+  const PARTICLE_SECONDS = { current: 4, wind: 8 };
   const FRAME_RATE = 18;
 
   /* The field draws `area x particleMultiplier` particles, so with the
