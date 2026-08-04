@@ -26,10 +26,10 @@ const dom = new JSDOM(
   '<div id="asset-map" data-ocean-map-canvas data-map-storage-key="asset-map-view"></div>' +
   '<figcaption>' +
   '<span class="key sst" data-sst-key hidden></span>' +
-  // Seeded with the wrong field on purpose: the module has to name whichever
-  // particle field is on, so a key that merely happens to say "current"
-  // because the markup did would prove nothing.
-  '<span class="key current" data-flow-key>STALE</span>' +
+  // A bare container, as the component's markup is, seeded with text the
+  // module must replace: a key that merely happened to say "current" because
+  // the markup did would prove nothing.
+  '<span data-flow-key>STALE</span>' +
   '<span class="field-controls" data-field-controls hidden>' +
   '<select data-field-map></select><input type="number" data-field-min />' +
   '<input type="number" data-field-max /><button type="button" data-field-auto></button></span>' +
@@ -1724,9 +1724,11 @@ const currentPx = await sampleDrift();
 
 windToggle?.querySelector('input')?.click();
 await new Promise((r) => setTimeout(r, 900));
-const currentsOffWithWind = [/Currents at 0m/, /Currents at 60m/].every(
-  (label) => overlayLabelled(label)?.querySelector('input')?.checked === false
-);
+/* Wind no longer excludes the currents — the point of giving it its own
+   ramp was so the two can be read together. The surface current was on
+   before the click and must still be. */
+const currentsOnWithWind =
+  overlayLabelled(/Currents at 0m/)?.querySelector('input')?.checked === true;
 const windPx = await sampleDrift();
 const flowKeyWithWind = flowKey()?.textContent ?? '';
 console.log(`wind: p90 ${windPx.toFixed(2)} px/frame against the currents' ${currentPx.toFixed(2)}`);
@@ -1735,6 +1737,9 @@ host._map.closePopup();
 host._map.fire('contextmenu', { latlng: window.L.latLng(20, -50) });
 await new Promise((r) => setTimeout(r, 250));
 const windRead = host.querySelector('.om-point-readout .leaflet-popup-content')?.textContent ?? '';
+const windReadHtml = host.querySelector('.om-point-readout .leaflet-popup-content')?.innerHTML ?? '';
+const flowKeyRamps = [...(flowKey()?.querySelectorAll('.om-key-flow') ?? [])]
+  .map((el) => el.style.getPropertyValue('--om-key-ramp'));
 
 const windAttribution = host.querySelector('.leaflet-control-attribution')?.textContent ?? '';
 
@@ -2245,10 +2250,11 @@ const checks = [
   /* ---- the wind field ---- */
   ['a wind layer is offered, off by default',
     !!windToggle && windToggle.querySelector('input')?.checked === false],
-  /* Three particle fields share one ramp and one pane, so two at once is two
-     sets of drifting lines with nothing to tell them apart — the same reason
-     the two current depths exclude each other. */
-  ['turning wind on turns both current fields off', currentsOffWithWind],
+  /* Wind and current are meant to be read together — a storm's forcing
+     beside what the ocean is doing about it — so wind is deliberately not in
+     the currents' exclusivity group. The two current *depths* still exclude
+     each other, which the check above this covers. */
+  ['wind and a current field can be on at the same time', currentsOnWithWind],
   /* The calibration, and the reason it is a check rather than a constant
      anyone can nudge: wind runs 27x the median current speed, so sharing the
      currents' DRIFT would streak it across the map — the exact runaway this
@@ -2257,21 +2263,44 @@ const checks = [
      down once. */
   ['wind drifts at a readable rate, not 27x the currents',
     windPx > 0.05 && currentPx > 0.05 && windPx / currentPx < 4],
-  /* All three fields share the amber ramp, so this line is the only thing on
-     screen that says which of them is drawing. */
-  ['the legend key names the field that is on',
-    /current/i.test(flowKeyBefore) && /wind at 10\s*m/i.test(flowKeyWithWind)],
+  /* With both fields drawing, the legend has to name both — and each swatch
+     carries its own field's ramp, since colour is what separates two sets of
+     drifting lines. */
+  ['the legend names every field that is on',
+    /current/i.test(flowKeyBefore) &&
+    /wind at 10\s*m/i.test(flowKeyWithWind) && /current/i.test(flowKeyWithWind)],
+  ['and each key is painted from its own ramp, not a copy in CSS',
+    flowKeyRamps.length === 2 &&
+    flowKeyRamps.some((r) => r.includes(palette.wind[palette.wind.length - 1])) &&
+    flowKeyRamps.some((r) => r.includes(palette.currents[palette.currents.length - 1]))],
   /* **A current is named for where it goes, a wind for where it comes
      from.** The fixture blows due east at 12 m/s, so the honest report is
      "from 270" — "toward 90" would be exactly backwards and entirely
      plausible on screen. */
-  ['the readout reports wind at its height, not a current',
-    /Wind at 10 m/.test(windRead) && !/Current at/.test(windRead)],
-  ['and in the meteorological convention, from rather than toward',
-    /from 270°T/.test(windRead) && !/toward/.test(windRead)],
+  /* Both rows, because both layers are on. A readout naming one of them
+     would drop the other silently, and which one it dropped would depend on
+     the order the layers happen to be built in. */
+  ['the readout reports both fields at once',
+    /Wind at 10 m/.test(windRead) && /Current at surface/.test(windRead)],
+  /* **A current is named for where it goes, a wind for where it comes
+     from.** The fixture blows due east at 12 m/s, so the honest report is
+     "from 270" — "toward 90" would be exactly backwards and entirely
+     plausible on screen. The current row beside it still reads "toward",
+     which is what makes this a check on the convention rather than on a
+     word appearing somewhere in the popup. */
+  ['each in its own convention, wind from and current toward',
+    /Wind at 10 m<\/dt><dd>[^<]*from 270°T/.test(windReadHtml) &&
+    /Current at surface<\/dt><dd>[^<]*toward/.test(windReadHtml)],
   ['and at the speed the grid actually holds', /12\.0 m\/s/.test(windRead)],
-  ['the wind layer credits ECMWF, not the Navy',
-    /ECMWF/.test(windAttribution) && !/ESPC/.test(windAttribution)],
+  /* A layer that is on but has no value under the pointer says so, which is
+     a different answer from a layer that is off and says nothing. The two
+     were briefly collapsed, and the only check on it was matching the words
+     "no data here" — which the *absent* row had been supplying all along. */
+  ['a field with no value under the pointer says so rather than vanishing',
+    /Current at surface<\/dt><dd>no data here<\/dd>/.test(popupHtml) ||
+      /Current at surface<\/dt><dd>[\d.]+ m\/s/.test(popupHtml)],
+  ['both sources are credited when both fields are on',
+    /ECMWF/.test(windAttribution) && /ESPC/.test(windAttribution)],
 
   ['a wandered centre is folded before it is saved', (() => {
     host._map.setView([10, 312.5], 3, { animate: false });

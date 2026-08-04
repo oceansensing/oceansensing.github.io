@@ -371,11 +371,16 @@ export async function createOceanMap(
      mutually exclusive. */
   const flow = L.layerGroup();
   const flowDeep = L.layerGroup();
-  /* Wind is a third animated field and joins the same exclusivity group,
-     for exactly the reason the two current depths do: drifting lines are
-     told apart by nothing but their motion, so two sets over the same water
-     read as one confused field. Colour is not enough — the eye follows the
-     streaks, not the hue. */
+  /* Wind is a third animated field but is **not** exclusive with the
+     currents, because wind over water and the current under it are a pair
+     worth reading together — a storm's forcing beside what the ocean is
+     doing about it.
+
+     That only works because the two are told apart by colour: wind takes its
+     own gated ramp, far enough from the currents' amber that a glance
+     separates them (see the palette). The two current *depths* stay
+     exclusive with each other, since 0 m and 60 m are the same quantity and
+     no colour would say which is which. */
   const wind = L.layerGroup();
 
   /* One group per temperature field, and the same rule as the two animated
@@ -569,6 +574,10 @@ export async function createOceanMap(
     drift: number;       // see DRIFT — wind and current are 27x apart
     maxVelocity: number; // the top of the colour ramp, in m/s
     colours: string[];
+    /* What the legend calls it. Shorter than the switcher's name, which has
+       to carry the product too: "Wind at 10 m" against "Wind at 10m
+       (ECMWF)". */
+    label: string;
     /* Which convention the readout reports this field in, and it is not a
        detail: **a current is named for where it goes, a wind for where it
        comes from.** A southwesterly blows towards the northeast. Reporting
@@ -843,7 +852,11 @@ export async function createOceanMap(
     });
   };
 
-  const ESPC_FLOW: FlowKind = {
+  /* One shape, two depths: everything but the legend label is shared, and
+     the label cannot be, or both depths would name themselves the same in a
+     legend that can now show two entries at once. */
+  const espcFlow = (label: string): FlowKind => ({
+    label,
     source: 'US Navy ESPC-D-V02',
     drift: DRIFT.current,
     // The ramp tops out well under the fastest water on the map: the Gulf
@@ -852,11 +865,12 @@ export async function createOceanMap(
     maxVelocity: 1.5,
     colours: palette.currents,
     reads: 'toward',
-  };
+  });
 
-  buildFlow(`${DATA}currents.json`, flow, ESPC_FLOW);
-  buildFlow(`${DATA}currents-60m.json`, flowDeep, ESPC_FLOW);
+  buildFlow(`${DATA}currents.json`, flow, espcFlow('Surface current'));
+  buildFlow(`${DATA}currents-60m.json`, flowDeep, espcFlow('Current at 60 m'));
   buildFlow(`${DATA}wind.json`, wind, {
+    label: 'Wind at 10 m',
     source: 'ECMWF IFS',
     drift: DRIFT.wind,
     /* 25 m/s is a strong gale, near the top of what the 0.25 degree field
@@ -864,20 +878,12 @@ export async function createOceanMap(
        and the maximum 36.9. Topping the ramp at the maximum would put
        almost every wind on the map in its lowest quarter. */
     maxVelocity: 25,
-    /* The **same ramp as the currents**, and that is measured rather than
-       lazy. The colour space clearing both bathymetries, every colormap a
-       reader can switch on, and every marker is nearly empty: a search over
-       hue, chroma and lightness found **four** ramps that clear it all, every
-       one of them pink — the glider's own hue — and the best of them cleared
-       the features by 24.4 against this ramp's 24.2. No gain, in a worse
-       place, for a second colour to gate forever.
-
-       It costs nothing here because the animated fields are mutually
-       exclusive: wind and current particles never share the screen, so there
-       is nothing to tell apart. Which field is drawing is said by the layer
-       switcher, by the legend key, and by the attribution — three places,
-       none of them a colour a reader has to have learned. */
-    colours: palette.currents,
+    /* Its own ramp, because it can now be on screen beside the currents —
+       and two sets of drifting lines are told apart by nothing but colour.
+       Chosen by search rather than by eye, under the extra constraint that
+       it clear the currents' amber as well as every background and marker;
+       see `_wind` in the palette for what it measured. */
+    colours: palette.wind,
     reads: 'from',
   });
 
@@ -1400,29 +1406,41 @@ export async function createOceanMap(
     showKey();
   }
 
-  /* The particle key names whichever animated field is on.
+  /* The particle keys, one per animated field that is on.
 
-     It has to, because all three share one ramp — the colour space that
-     clears both bathymetries and every marker is nearly empty, so wind
-     reuses the currents' amber rather than taking a second gated colour.
-     They are mutually exclusive, so exactly one is ever drawing and this
-     line is unambiguous; without it the key would say "Surface current"
-     over a wind field, which is the failure this project keeps meeting. */
+     Wind and a current can be drawn together now, so this is a list rather
+     than a single label — and each swatch carries its own field's ramp,
+     since that is the only thing on screen separating two sets of drifting
+     lines. The two current depths remain exclusive with each other, so at
+     most two of these ever show at once.
+
+     Built from the same FlowKind the layer draws with, so the swatch and the
+     particles cannot disagree about what colour the field is. */
   {
     const flowKey = find<HTMLElement>('[data-flow-key]');
     if (flowKey) {
-      const FLOW_KEYS: [L.Layer, string][] = [
-        [flow, 'Surface current'],
-        [flowDeep, 'Current at 60 m'],
-        [wind, 'Wind at 10 m'],
-      ];
-      const showFlowKey = () => {
-        const on = FLOW_KEYS.find(([layer]) => map.hasLayer(layer));
-        flowKey.hidden = !on;
-        if (on) flowKey.textContent = on[1];
+      const showFlowKeys = () => {
+        const on = flows.filter((f) => map.hasLayer(f.group));
+        flowKey.hidden = !on.length;
+        flowKey.textContent = '';
+        for (const entry of on) {
+          const swatch = document.createElement('span');
+          swatch.className = 'om-key om-key-flow';
+          /* The swatch is built from the ramp the layer actually draws with,
+             not from a copy in CSS. The old rule inlined the currents'
+             gradient, which was a second source of truth for a colour the
+             contrast gate owns — and with two fields on screen a stale
+             swatch would point at the wrong one. */
+          swatch.style.setProperty(
+            '--om-key-ramp',
+            `linear-gradient(90deg, ${entry.kind.colours.join(', ')})`
+          );
+          swatch.textContent = entry.kind.label;
+          flowKey.append(swatch);
+        }
       };
-      map.on('overlayadd overlayremove', showFlowKey);
-      showFlowKey();
+      map.on('overlayadd overlayremove', showFlowKeys);
+      showFlowKeys();
     }
   }
 
@@ -2535,7 +2553,9 @@ export async function createOceanMap(
      control, so the choice still survives the saved view, which records
      overlays by name. */
   const EXCLUSIVE: L.Layer[][] = [
-    [flow, flowDeep, wind],              // particle fields cannot be told apart
+    // The same quantity at two depths, so nothing on screen could say which
+    // is which. Wind is deliberately not here — see the note on `wind`.
+    [flow, flowDeep],
     // Every scalar raster: they share a pane, so the upper one simply
     // hides the lower and the map would name two fields while showing one.
     [sstOisst, sstNavy, sssNavy],
@@ -2832,7 +2852,7 @@ export async function createOceanMap(
      two different gestures. Seafloor comes back asynchronously, so it goes
      in as a placeholder and fillDepth patches it. */
   const oceanRows = (ll: L.LatLng) => {
-    const water = currentAt(ll);
+    const moving = flowsAt(ll);
     const temp = sstAt(ll);
     return (
       `<dl class="ocean">` +
@@ -2845,13 +2865,18 @@ export async function createOceanMap(
       /* Named for the depth actually sampled — the reader may have the
          60 m field on, and calling that "surface current" would be wrong
          in a way nothing on screen would give away. */
-      (water
-        ? `<dt>${water.reads === 'from'
-              ? `Wind at ${water.height ?? 10} m`
-              : `Current at ${water.depth ? `${water.depth} m` : 'surface'}`}</dt>` +
-          `<dd>${water.speed.toFixed(water.reads === 'from' ? 1 : 2)} m/s ` +
-          `${water.reads} ${water.bearing.toFixed(0)}°T</dd>`
-        : `<dt>Current</dt><dd>no data here</dd>`) +
+      /* A row per animated field that is on — both, when both are. With no
+         field on there is no grid to miss, so nothing is claimed: saying
+         "no data" would be a statement about the ocean rather than about
+         the map. */
+      moving.map((f) =>
+        `<dt>${f.label}</dt><dd>` +
+        (f.speed === null || f.bearing === null
+          ? 'no data here'
+          : `${f.speed.toFixed(f.reads === 'from' ? 1 : 2)} m/s ` +
+            `${f.reads} ${f.bearing.toFixed(0)}°T`) +
+        `</dd>`
+      ).join('') +
       /* Only when a temperature layer is on. With none loaded there is no
          grid to miss, and "no data" would claim something untrue about the
          ocean rather than about the map. */
@@ -3268,33 +3293,63 @@ export async function createOceanMap(
       : null;
   };
 
-  const currentAt = (ll: L.LatLng) => {
-    const entry = flows.find((f) => map.hasLayer(f.group));
-    const shown = entry?.layer;
-    const grid = (shown as unknown as { options?: { data?: VectorGrid } })?.options?.data;
-    const head = grid?.[0]?.header;
-    if (!head) return null;
-    const i = Math.round(((((ll.lng - head.lo1) % 360) + 360) % 360) / head.dx);
-    const j = Math.round((head.la1 - ll.lat) / head.dy);
-    if (i < 0 || i >= head.nx || j < 0 || j >= head.ny) return null;
-    const k = j * head.nx + i;
-    const u = grid[0].data[k];
-    const v = grid[1].data[k];
-    if (typeof u !== 'number' || typeof v !== 'number') return null;
-    const toward = (Math.atan2(u, v) / rad + 360) % 360;
-    return {
-      speed: Math.hypot(u, v),
-      toward,
-      // Meteorological convention for wind, oceanographic for current — see
-      // FlowKind.reads. The bearing itself is the same measurement; which
-      // end of it gets reported is the whole difference.
-      bearing: entry?.kind.reads === 'from' ? (toward + 180) % 360 : toward,
-      reads: entry?.kind.reads ?? 'toward',
-      deg: head.dx,
-      depth: head.depth ?? 0,
-      height: head.height,
-    };
+  /* **Every** animated field that is on, not the first one found.
+
+     Wind and current can now be shown together, so a readout naming one of
+     them would silently drop the other — and which one it dropped would
+     depend on the order this array happens to be built in. One reading per
+     layer, in that array's order. */
+  /* Stated rather than inferred: the "no value here" branch carries nulls
+     and the real one carries numbers, and left to itself TypeScript widens
+     the pair to `unknown` rather than to their union. */
+  type FlowReading = {
+    label: string;
+    reads: FlowKind['reads'];
+    speed: number | null;
+    bearing: number | null;
   };
+
+  const flowsAt = (ll: L.LatLng): FlowReading[] =>
+    flows.flatMap<FlowReading>((entry) => {
+      /* A row for every layer that is **on**, whether or not there is a
+         value under the pointer — the two are different answers and the
+         reader can only tell them apart if the map says so. "Current at
+         surface — no data here" means this cell is land or outside the
+         grid; no row at all means the layer is off. Collapsing them lost
+         that, and the harness did not notice because the one check on it
+         was matching the words "no data here" and nothing else. */
+      if (!map.hasLayer(entry.group)) return [];
+      const reads = entry.kind.reads;
+      const grid = (entry.layer as unknown as { options?: { data?: VectorGrid } })
+        ?.options?.data;
+      const head = grid?.[0]?.header;
+      const label = reads === 'from'
+        ? `Wind at ${head?.height ?? 10} m`
+        : `Current at ${head?.depth ? `${head.depth} m` : 'surface'}`;
+      const blank: FlowReading[] = [{ label, reads, speed: null, bearing: null }];
+      if (!head) return blank;
+      const i = Math.round(((((ll.lng - head.lo1) % 360) + 360) % 360) / head.dx);
+      const j = Math.round((head.la1 - ll.lat) / head.dy);
+      if (i < 0 || i >= head.nx || j < 0 || j >= head.ny) return blank;
+      const k = j * head.nx + i;
+      const u = grid[0].data[k];
+      const v = grid[1].data[k];
+      if (typeof u !== 'number' || typeof v !== 'number') return blank;
+      const toward = (Math.atan2(u, v) / rad + 360) % 360;
+      return [{
+        label,
+        reads,
+        speed: Math.hypot(u, v),
+        // Meteorological convention for wind, oceanographic for current — see
+        // FlowKind.reads. The bearing itself is the same measurement; which
+        // end of it gets reported is the whole difference.
+        bearing: reads === 'from' ? (toward + 180) % 360 : toward,
+      }];
+    });
+
+  // The current alone, for callers that want one number rather than a list.
+  const currentAt = (ll: L.LatLng) =>
+    flowsAt(ll).find((r) => r.reads === 'toward' && r.speed !== null) ?? null;
 
 
   // ---- storms and assets ----

@@ -1341,21 +1341,57 @@ Two things on the map side are easy to get wrong and both are silent:
   field, and `test:map` measures both at one view and fails if they diverge
   by more than 4×; it currently reads p90 1.41 px/frame against 1.59.
 
-**It joins the animated fields' exclusivity group** — one particle field at a
-time. Wind and current particles are told apart by nothing but their motion,
-so two sets over the same water read as one confused field, which is the same
-reason the two current depths exclude each other.
+**Wind and a current can be drawn together, and that is what its colour is
+for.** It is deliberately *not* in the currents' exclusivity group: wind over
+water beside the current under it is a pair worth reading — a storm's forcing
+against what the ocean is doing about it. The two current *depths* stay
+exclusive with each other, since 0 m and 60 m are the same quantity and no
+colour could say which is which.
 
-**It reuses the currents' amber ramp**, and that is measured rather than
-lazy. A search over hue, chroma and lightness for a ramp clearing both
-bathymetries, every colormap a reader can switch on, and every marker found
-**four** candidates, all of them pink — the glider's own hue — and the best
-cleared the features by 24.4 against the amber's 24.2. No gain, in a worse
-place, for a second colour to gate forever. It costs nothing because the
-fields are exclusive, so the two ramps never share a screen. Which field is
-drawing is said by the switcher, the attribution, and the legend key, which
-names it — `[data-flow-key]`, seeded with the wrong text in the harness so a
-key that merely happens to be right proves nothing.
+**So the wind has its own gated ramp**, pale orchid, and the constraint that
+picked it is the coexistence: two sets of drifting lines carry no shape or
+outline to fall back on, unlike a marker against a particle, so colour is the
+entire separation. The ramp therefore has to clear the currents' amber *as
+well as* every basemap ocean, every colormap a reader can switch on, and
+every marker. Chosen by the same search that picked the SST ramp: 200 ramps
+clear all of it, and this is the one with the most room — **ΔE 27.8 from the
+amber and 27.1 from the glider magenta**, which is the binding marker since
+orchid and magenta are neighbours. Everything else is 33 or better.
+
+An earlier pass had wind reusing the amber, on the reasoning that exclusive
+fields never share a screen. That was true while they were exclusive and is
+the thing this change undid; the coarse search behind it also only found four
+candidates, all worse, because its steps were 5° of hue and 4 of chroma. The
+refined search is what made a distinct ramp affordable.
+
+**`test:contrast` had to learn about the plural.** It iterated a bare
+`palette.currents`, so a second ramp could be added to the palette and drawn
+on the map with the gate never looking at it — it would have gone on saying
+`ok` about a colour it had never seen. It now runs every particle ramp
+against every background and marker, and adds a **particle separation** pass
+of wind against currents, which only became a question when they stopped
+being exclusive. Its exemption notes are also reported only where the
+exemption is actually being *used*: Argo's gold needs it against the amber at
+ΔE 17.8 and clears the orchid by 57.9, and announcing a concession that is
+not being made is how a note stops being read.
+
+**The legend is a list, not a label.** `[data-flow-key]` is a bare container
+— it carries no `om-key` class of its own, or it draws a swatch in front of
+the ones it holds — and the module fills it with one key per field that is
+on, each painted from that field's own ramp via `--om-key-ramp`. The ramp
+used to be inlined in CSS, which was a second copy of a colour the gate owns
+and would have pointed at the wrong field the moment two were on. The harness
+seeds the container with the wrong text so a key that merely happens to be
+right proves nothing.
+
+**The readout reports every field that is on, each in its own convention** —
+`Current at surface 0.17 m/s toward 62°T` above `Wind at 10 m 6.0 m/s from
+85°T`. Naming only the first would drop the other silently, and which one it
+dropped would depend on the order the layers happen to be built in. A layer
+that is on but has no value under the pointer says `no data here`, which is a
+different answer from a layer that is off and says nothing; those two were
+briefly collapsed, and the only check on it had been matching the words "no
+data here" — which the *absent* row had been supplying all along.
 
 ### Sea-surface temperature and salinity
 

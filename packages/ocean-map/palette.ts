@@ -18,6 +18,11 @@ export interface Palette {
   features: Record<string, string>;
   /** The current-particle ramp, slow to fast. */
   currents: string[];
+  /** The wind-particle ramp, slow to fast. Its own ramp rather than the
+      currents', because the two fields can be drawn at the same time and
+      drifting lines are told apart by nothing else — see `_wind` in
+      map-palette.json for what that constraint measured out to. */
+  wind: string[];
   /** Every colour scale a reader may choose, as "#rrggbb" stops. */
   colormaps: Record<string, string[]>;
   /** Scales whose every stop clears ΔE 22 from every marker. */

@@ -8,13 +8,21 @@
     "argoEdge": "#3d3000",
     "measure": "#1b2028"
   },
-  "_currents": "The particle ramp, slow to fast, and it serves **both animated fields** — the ESPC currents and the ECMWF wind. Warm pale amber rather than blue because the two bathymetries are opposite in tone (Esri Ocean light, GEBCO dark) and no blue clears both: any blue pale enough to show on GEBCO's navy lands inside Esri's ocean, and GEBCO's own water runs blue through cyan to the pale mint it paints shallow banks. Amber sits outside that whole range, so one ramp serves both maps and there is no basemap switching to get wrong. Kept pale rather than saturated so the particles are not mistaken for the orange USV markers. Wind reuses it rather than taking a second colour: a search over hue, chroma and lightness found only four ramps clearing every background and every feature, all of them pink — the glider's hue — and the best cleared the features by 24.4 against this ramp's 24.2. The two fields are mutually exclusive, so they never share the screen and there is nothing to tell apart; the legend key names whichever is drawing.",
+  "_currents": "The current particle ramp, slow to fast. Warm pale amber rather than blue because the two bathymetries are opposite in tone (Esri Ocean light, GEBCO dark) and no blue clears both: any blue pale enough to show on GEBCO's navy lands inside Esri's ocean, and GEBCO's own water runs blue through cyan to the pale mint it paints shallow banks. Amber sits outside that whole range, so one ramp serves both maps and there is no basemap switching to get wrong. Kept pale rather than saturated so the particles are not mistaken for the orange USV markers.",
   "currents": [
     "#ecd7ab",
     "#f1dfbb",
     "#f5e6ca",
     "#f9edd9",
     "#fcf2e3"
+  ],
+  "_wind": "The wind particle ramp — pale orchid, and it exists because wind and current can be drawn at the same time. That is the whole constraint: two sets of drifting lines over the same water are told apart by nothing but colour, so this ramp has to clear the currents' amber as well as every background and every marker. Chosen by the same search that picked the SST ramp rather than by eye, over hue, chroma and lightness: 200 ramps clear everything, and this is the one with the most room to spare. Measured, it sits ΔE 27.8 from the amber and 27.1 from its nearest marker, the glider magenta — which is the binding constraint, since orchid and magenta are neighbours. Everything else is 33 or better. The two fields also differ in what they mean, which the legend key and the readout both say, so colour is the fastest signal rather than the only one.",
+  "wind": [
+    "#e8b5f0",
+    "#eebbf6",
+    "#f4c0fc",
+    "#fac6ff",
+    "#ffcbff"
   ],
   "_colormaps": "Colour scales the reader can choose, in two groups, and the split is measured rather than editorial. Whichever map is on becomes the water beneath every marker and particle, so scripts/test-contrast.mjs measures every stop of every map against every feature colour by CIEDE2000. The five in markerSafe clear 22 everywhere along their length; nothing else does, and that is not a flaw in the others — a full-gamut colormap sweeps through the whole wheel, so somewhere along it it passes close to a marker. Measured worst clearance: cmo.haline 11.2, hsv 7.5, jet 6.4, viridis 6.2, grey 5.5, turbo 4.2, inferno 3.0. The five safe ones exist because they were built to dodge the feature gamut, which is exactly why they look less like the standard maps. The standard set is offered anyway — it is the reader's map and these are the scales oceanography actually speaks — but the picker groups them apart and the defaults stay in the safe set. The markers keep their dark outlines, which is what carries them on a background the fill contrast does not. The cmo.* and matplotlib entries are ten-stop samples of the published maps, close enough to be recognisable, not the exact tables.",
   "colormaps": {

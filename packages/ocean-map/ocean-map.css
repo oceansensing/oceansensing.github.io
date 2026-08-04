@@ -525,12 +525,29 @@
     box-shadow: inset 0 0 0 1px #3d3000;
   }
 
-  /* A slice of the speed colourmap rather than a flat dot — the currents
-     are a field, not a point. */
-  .om-key.current::before {
+  /* A slice of the speed colourmap rather than a flat dot — a flow is a
+     field, not a point.
+
+     The gradient comes from the module, which reads it off the ramp the
+     layer actually draws with. Two animated fields can be on at once, so a
+     swatch painted from a copy in CSS would eventually point at the wrong
+     one — which is the same reason the palette forbids inlining a colour
+     the contrast gate owns. */
+  .om-key-flow::before {
     border-radius: 0.15em;
     width: 1.4em;
-    background: linear-gradient(90deg, #ecd7ab, #f5e6ca, #fcf2e3);
+    background: var(--om-key-ramp, linear-gradient(90deg, #ecd7ab, #fcf2e3));
+  }
+
+  /* The keys for the animated fields sit in one span, so they need their own
+     spacing — the legend's own gap does not reach inside. */
+  [data-flow-key] {
+    display: inline-flex;
+    gap: var(--space-s, 0.75rem);
+  }
+
+  [data-flow-key][hidden] {
+    display: none;
   }
 
   /* Leaflet's chrome, matched to the site's tokens in both themes. */

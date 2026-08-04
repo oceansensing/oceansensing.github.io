@@ -112,13 +112,22 @@ for (const [name, colour] of Object.entries(palette.features)) {
   }
 }
 
-/* One particle ramp for every basemap — so, like the markers, every step of
-   it has to survive all of them. */
-palette.currents.forEach((colour, i) => {
-  for (const [mapName, info] of Object.entries(basemaps)) {
-    results.push({ what: `currents[${i}] (${colour})`, on: mapName, ...against(colour, info.ocean) });
-  }
-});
+/* Every particle ramp against every basemap — so, like the markers, every
+   step of every one has to survive all of them.
+
+   Plural since the wind arrived. It was one ramp and a bare
+   `palette.currents` here, which meant a second ramp could be added to the
+   palette and drawn on the map without this file ever looking at it — the
+   gate would have gone on saying `ok` about a colour it had never seen. */
+const PARTICLE_RAMPS = { currents: palette.currents, wind: palette.wind };
+
+for (const [field, ramp] of Object.entries(PARTICLE_RAMPS)) {
+  ramp.forEach((colour, i) => {
+    for (const [mapName, info] of Object.entries(basemaps)) {
+      results.push({ what: `${field}[${i}] (${colour})`, on: mapName, ...against(colour, info.ocean) });
+    }
+  });
+}
 
 /* An SST layer replaces the water under everything else, so every stop of
    its ramp is another background the markers and the particles have to
@@ -193,36 +202,64 @@ if (sstWater.length) {
       });
     }
   }
-  palette.currents.forEach((colour, i) => {
+  Object.entries(PARTICLE_RAMPS).forEach(([field, ramp]) => ramp.forEach((colour, i) => {
     for (const stop of sstWater) {
       const d = deltaE(hex(colour), hex(stop.colour));
       results.push({
-        what: `currents[${i}] (${colour})`,
+        what: `${field}[${i}] (${colour})`,
         on: `SST ramp ${stop.label} (${stop.colour})`,
         coverage: d >= MIN_DELTA_E ? 1 : 0,
         worst: d,
       });
     }
-  });
+  }));
 }
 
 /* Particles must not read as assets. They are thin moving lines and the
    markers are filled dots, but keeping them apart in colour too means a
    glance is never ambiguous. */
 const exempt = new Set(palette.separationExempt ?? []);
-for (const [i, colour] of palette.currents.entries()) {
+for (const [field, ramp] of Object.entries(PARTICLE_RAMPS)) {
+for (const [i, colour] of ramp.entries()) {
   for (const [name, feature] of Object.entries(palette.features)) {
     const d = deltaE(hex(colour), hex(feature));
     if (exempt.has(name)) {
-      // Named exemption, with the reason in map-palette.json. Reported, not
-      // hidden — a silently lowered threshold would cover this and every
-      // future clash along with it.
-      if (i === 0) notes.push(`${name} exempt from particle separation (ΔE ${d.toFixed(1)}) — see _separation`);
+      /* Named exemption, with the reason in map-palette.json. Reported, not
+         hidden — a silently lowered threshold would cover this and every
+         future clash along with it.
+
+         Only reported where it is actually being *used*, though. The
+         exemption is per feature and the ramps are now plural, so Argo's
+         gold clears the wind's orchid by ΔE 57.9 while needing the
+         exemption against the currents' amber at 17.8. Announcing a
+         concession that is not being made is how a note stops being read. */
+      if (i === 0 && d < MIN_DELTA_E) {
+        notes.push(`${name} exempt from ${field} separation (ΔE ${d.toFixed(1)}) — see _separation`);
+      }
       continue;
     }
     results.push({
-      what: `currents[${i}] vs ${name}`,
+      what: `${field}[${i}] vs ${name}`,
       on: 'feature separation',
+      coverage: d >= MIN_DELTA_E ? 1 : 0,
+      worst: d,
+    });
+  }
+}
+}
+
+/* The two particle ramps against each other, which only became a question
+   when wind stopped being exclusive with the currents. Both can now drift
+   over the same water at once, and drifting lines carry no shape or outline
+   to fall back on — unlike a marker against a particle, where one is a
+   filled dot and the other a thin trail. Colour is the entire separation
+   here, so it is held to the same bar. */
+for (const [i, w] of palette.wind.entries()) {
+  for (const [j, c] of palette.currents.entries()) {
+    const d = deltaE(hex(w), hex(c));
+    results.push({
+      what: `wind[${i}] vs currents[${j}]`,
+      on: 'particle separation',
       coverage: d >= MIN_DELTA_E ? 1 : 0,
       worst: d,
     });
