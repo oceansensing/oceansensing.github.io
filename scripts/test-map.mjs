@@ -835,6 +835,28 @@ const driftFar = await driftAt(5);
    probe collapsed to zero and the scale blew up by ~200x. */
 const driftGlobe = await driftAt(2);
 const drifts = [driftNear, driftFar, driftGlobe];
+
+/* Per layer, because lifetime and drift are per field now — one line
+   describing "the" particle field would be describing neither.
+
+   This went silent for a while: it read `options.particleAge`, which the
+   rewrite renamed to `particleSeconds`, so it simply stopped printing and
+   nothing said so. A diagnostic that can vanish without failing is worth
+   less than one that is checked, hence the assertion below it. */
+const particleLives = Object.values(host._map._layers)
+  .filter((l) => l.isVelocityLayer)
+  .map((l) => {
+    const o = l.options;
+    const px = (o.seconds ?? o.particleSeconds) * o.frameRate * driftFar;
+    return { seconds: o.particleSeconds, drift: o.drift, trail: px };
+  });
+for (const p of particleLives) {
+  console.log(
+    `particle life: ${p.seconds.toFixed(1)} s at drift ${p.drift} ` +
+      `— trail ~${p.trail.toFixed(0)} px at the z5 p90`
+  );
+}
+
 const driftRatio = drifts.every((d) => d > 0)
   ? Math.max(...drifts) / Math.min(...drifts)
   : Infinity;
@@ -2362,6 +2384,11 @@ const checks = [
     return /requestAnimationFrame\s*\(/.test(src) && !/setInterval\s*\(/.test(src);
   })()],
 
+  /* The lifetime/drift readout above is how these are tuned, and it broke
+     silently once already. */
+  ['the particle-life diagnostic still reads the layer',
+    particleLives.length > 0 && particleLives.every((p) => p.seconds > 0 && p.drift > 0)],
+
   /* ---- resizing ---- */
   ['the map watches its own container, not just the window',
     !!resizeWatch],
@@ -2470,20 +2497,6 @@ console.log(
   `particles: ${drawn.stroke} strokes, ${drawn.lineTo} segments — ` +
     `px/frame p10 ${at(0.1)} median ${at(0.5)} p90 ${at(0.9)} max ${at(0.999)}`
 );
-/* Speed and lifetime are only meaningful together — a trail is one times the
-   other, so an over-long life and a runaway velocity look the same on
-   screen. Print both, so tuning one is done with the other in view. */
-{
-  const cfg = Object.values(host._map._layers).find((l) => l.options?.particleAge);
-  if (cfg) {
-    const seconds = cfg.options.particleAge / cfg.options.frameRate;
-    console.log(
-      `particle life: ${cfg.options.particleAge} frames at ${cfg.options.frameRate}/s ` +
-        `= ${seconds.toFixed(1)} s — trail ~${(seconds * cfg.options.frameRate * driftFar).toFixed(0)} px ` +
-        `at the z5 p90`
-    );
-  }
-}
 console.log(
   `drift vs zoom: p90 ${driftNear.toFixed(2)} px/frame at z8, ${driftFar.toFixed(2)} at z5, ` +
     `${driftGlobe.toFixed(2)} at z2 ` +

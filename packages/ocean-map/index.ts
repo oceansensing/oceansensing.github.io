@@ -520,7 +520,16 @@ export async function createOceanMap(
      currents do — which is the point. These are alternative depictions of
      the same map, so switching between them should change the field on
      screen and not the speed it appears to move at. */
-  const DRIFT = { current: 3.0, wind: 0.11 };
+  /* Wind is drawn **25% faster than speed parity**, deliberately. Parity
+     makes the two fields drift at the same apparent rate, which is right for
+     comparing them; but the air is a smoother, larger-scale field than the
+     ocean, so its structure is circulation rather than eddies, and reading a
+     circulation means following a streak far enough to see it turn. A little
+     more speed does that. It is a legibility choice, not a measurement,
+     which is why it is a named factor over the measured ratio rather than a
+     new number that quietly disagrees with it. */
+  const WIND_BOOST = 1.25;
+  const DRIFT = { current: 3.0, wind: 0.11 * WIND_BOOST };
 
   /* How long a particle lives before it is reborn somewhere random. The
      plugin counts this in frames, which hides what it means, so it is
@@ -537,7 +546,17 @@ export async function createOceanMap(
      velocity look identical on screen. Measure the speed first: it is
      currently p90 1.0-1.7 px/frame across zooms 2 to 8, which is right,
      so this is the knob that was actually wrong. */
-  const PARTICLE_SECONDS = 4;
+  /* Per field, because the two fields have different structure to show.
+
+     Four seconds suits the ocean: currents are eddy-scale, so a longer life
+     lets particles pile into the fast cores and the picture decays from an
+     even texture into a few bright ropes. Six suits the air, which has less
+     small-scale structure — a longer streak is what makes a circulation
+     legible as a circulation rather than as scattered specks, and there are
+     no tight cores for it to collapse into. It also thins the picture without
+     touching the count: a particle that lives longer is respawned less often,
+     so fewer are being seeded into slow air at any moment. */
+  const PARTICLE_SECONDS = { current: 4, wind: 6 };
   const FRAME_RATE = 18;
 
   /* The field draws `area x particleMultiplier` particles, so with the
@@ -574,6 +593,7 @@ export async function createOceanMap(
   type FlowKind = {
     source: string;      // who published it; the credit is theirs, not the layer's
     drift: number;       // see DRIFT — wind and current are 27x apart
+    seconds: number;     // how long a particle lives; see PARTICLE_SECONDS
     maxVelocity: number; // the top of the colour ramp, in m/s
     colours: string[];
     /* What the legend calls it. Shorter than the switcher's name, which has
@@ -625,7 +645,7 @@ export async function createOceanMap(
            linear in it. It pairs with the lifetime: cutting the trails
            shortens what each particle contributes, and more of them puts the
            density back without going back to long ropes. */
-        particleSeconds: PARTICLE_SECONDS,
+        particleSeconds: kind.seconds,
         particleMultiplier: densityForView(),
         lineWidth: 2.2,
         frameRate: FRAME_RATE,
@@ -855,6 +875,7 @@ export async function createOceanMap(
     label,
     source: 'US Navy ESPC-D-V02',
     drift: DRIFT.current,
+    seconds: PARTICLE_SECONDS.current,
     // The ramp tops out well under the fastest water on the map: the Gulf
     // Stream core runs past 2 m/s, and scaling to it would leave every
     // other current in the bottom fifth of the ramp.
@@ -869,6 +890,7 @@ export async function createOceanMap(
     label: 'Wind at 10 m',
     source: 'ECMWF IFS',
     drift: DRIFT.wind,
+    seconds: PARTICLE_SECONDS.wind,
     /* 25 m/s is a strong gale, near the top of what the 0.25 degree field
        resolves outside a cyclone core — measured, the global p99 is 17.6
        and the maximum 36.9. Topping the ramp at the maximum would put

@@ -116,11 +116,20 @@ const claims = [
   /* Numbers the docs quote from the map component and the asset pipeline.
      Each of these has already gone stale once in a single working session,
      which is the argument for checking them rather than trusting a habit. */
+  /* Per field now, and both have to be stated: the whole point of splitting
+     them is that the two fields want different trail lengths, so a doc
+     quoting one number is describing a map that no longer exists. */
   {
-    what: 'particle lifetime',
+    what: 'current particle lifetime',
     file: 'packages/ocean-map/index.ts',
-    from: /const PARTICLE_SECONDS = (\d+)/,
-    doc: (v) => new RegExp(`${v} s at \\d+ fps`),
+    from: /const PARTICLE_SECONDS = \{ current: (\d+)/,
+    doc: (v) => new RegExp(`${v} s(econds)? (at \\d+ fps|suits the ocean)`),
+  },
+  {
+    what: 'wind particle lifetime',
+    file: 'packages/ocean-map/index.ts',
+    from: /const PARTICLE_SECONDS = \{ current: \d+, wind: (\d+)/,
+    doc: (v) => new RegExp(`${v} s(econds)? (for the wind|suits the air)`),
   },
   {
     what: 'Argo cycle window',
@@ -174,20 +183,43 @@ const claimDoc = fs.readFileSync('CLAUDE.md', 'utf8').replace(/\s+/g, ' ');
    moved without the other. */
 {
   const src = fs.readFileSync('packages/ocean-map/index.ts', 'utf8');
-  const drift = /const DRIFT = \{ current: ([\d.]+), wind: ([\d.]+) \}/.exec(src);
+  /* The **base** wind drift, before the deliberate boost. That base is what
+     embodies the measurement — it was chosen so the two fields drift at the
+     same apparent rate — and `WIND_BOOST` is a separate legibility choice on
+     top. Comparing the base against the measured ratio keeps the two claims
+     apart instead of letting one absorb the other. */
+  const drift = /const DRIFT = \{ current: ([\d.]+), wind: ([\d.]+) \* WIND_BOOST \}/.exec(src);
   const quoted = /(\d+(?:\.\d+)?)\*{0,2}(?:x|×) (?:the median|faster)/.exec(claimDoc);
   if (!drift) {
     problems.push('packages/ocean-map/index.ts: cannot read DRIFT');
   } else if (!quoted) {
     problems.push('CLAUDE.md: does not say how much faster the wind runs than the current');
   } else {
+    /* The wind is deliberately drawn faster than speed parity, so the drift
+       ratio is the measured ratio divided by that boost. Reading the boost
+       from the source rather than allowing slack is what keeps this a check:
+       widening the tolerance until it passes would let the two numbers drift
+       apart for any reason at all, which is the opposite of the point. */
     const constants = Number(drift[1]) / Number(drift[2]);
     const measured = Number(quoted[1]);
     if (Math.abs(constants - measured) / measured > 0.1) {
       problems.push(
-        `CLAUDE.md quotes wind at ${measured}x the current, but DRIFT is set for ` +
-        `${constants.toFixed(1)}x — one of the two moved without the other`
+        `CLAUDE.md quotes wind at ${measured}x the current, but the base DRIFT ` +
+        `is set for ${constants.toFixed(1)}x — one moved without the other`
       );
+    }
+    // And the boost is its own claim, so the prose has to carry it too.
+    const boost = /const WIND_BOOST = ([\d.]+)/.exec(src);
+    if (!boost) {
+      problems.push('packages/ocean-map/index.ts: cannot read WIND_BOOST');
+    } else {
+      const pct = Math.round((Number(boost[1]) - 1) * 100);
+      if (!new RegExp(`${pct}% faster`).test(claimDoc)) {
+        problems.push(
+          `CLAUDE.md: WIND_BOOST draws the wind ${pct}% faster than parity, ` +
+          `but the docs do not say so`
+        );
+      }
     }
   }
 }

@@ -105,10 +105,17 @@ const {
           />
         </label>
       </span>
+      <!-- The input is visually hidden and the label is the button. A bare
+           file input renders the browser's own "No file selected." beside it,
+           which cannot be styled or translated, says nothing this map does
+           not already say in the note below, and was being clipped to
+           "No fi…cted." by the width this row can spare. The label carries
+           the whole affordance instead, and names both formats. -->
       <span class="om-kmz-controls" data-kmz-controls>
-        <label>
-          Overlay
+        <label class="om-kmz-add">
+          <span>Add KML or KMZ…</span>
           <input
+            class="om-vh"
             type="file"
             data-kmz-file
             accept=".kmz,.kml,application/vnd.google-earth.kmz,application/vnd.google-earth.kml+xml"

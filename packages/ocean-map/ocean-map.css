@@ -663,6 +663,7 @@
    of invisible dependency that makes a component undroppable, and the failure
    is silent — the labels simply appear as stray words in the legend. */
 .ocean-map-figure .om-vh,
+.om-kmz-controls .om-vh,
 .om-legend .om-vh {
   position: absolute;
   width: 1px;
@@ -695,9 +696,30 @@
   gap: var(--space-2xs, 0.25rem);
 }
 
-.om-kmz-controls input[type='file'] {
-  font: inherit;
-  max-width: 11rem;
+/* The label is the control; the input inside it is visually hidden (`om-vh`,
+   so it stays focusable and operable by keyboard). Styled as a button
+   because that is what it does — the previous version showed a bare file
+   input, whose browser-supplied "No file selected." cannot be styled and was
+   being clipped mid-word by the width this row can spare. */
+.om-kmz-add {
+  cursor: pointer;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--border, #d6dbe0);
+  border-radius: var(--radius, 4px);
+  background: var(--bg, #ffffff);
+  color: var(--text, #12181f);
+  white-space: nowrap;
+}
+
+.om-kmz-add:hover {
+  background: var(--bg-subtle, #f4f6f8);
+}
+
+/* The input carries the focus, but it is the label a reader can see, so the
+   ring has to be drawn here or keyboard focus lands on nothing visible. */
+.om-kmz-add:focus-within {
+  outline: 2px solid var(--accent, #1f6feb);
+  outline-offset: 2px;
 }
 
 .om-kmz-list[hidden] {

@@ -1512,6 +1512,19 @@ Two things on the map side are easy to get wrong and both are silent:
   for wind. Getting it backwards would be exactly wrong and entirely
   plausible on screen. `test:map` blows the fixture due east and requires the
   readout to say **from 270°T**.
+- **Lifetime is per field: 4 s suits the ocean, 6 s suits the air.** Currents
+  are eddy-scale, and a longer life lets particles pile into the fast cores
+  until an even texture decays into a few bright ropes. The air has less
+  small-scale structure and no tight cores to collapse into, and its features
+  are *circulations* — which are only legible if a streak runs far enough to
+  be seen turning. The longer life also thins the picture without touching the
+  count, since a particle that lives longer is reseeded less often.
+- **The wind is drawn 25% faster than parity**, on top of that. `WIND_BOOST`
+  is a named factor over the measured ratio rather than a second number that
+  quietly disagrees with it — parity is the measurement, and this is the
+  legibility choice made against it. `check:docs` holds the two apart: the
+  base drift must still match the measured ratio, and the boost must be
+  stated here.
 - **Speed needs its own calibration.** Measured on the published grids, the
   median 10 m wind is 5.97 m/s against the median surface current's 0.22, so
   wind runs **26.7× faster**. Sharing one `DRIFT` would streak it across the
@@ -1519,7 +1532,9 @@ Two things on the map side are easy to get wrong and both are silent:
   per field, and `test:map` measures both at one view and fails if they
   diverge by more than 4×; it currently reads p90 1.41 px/frame against 1.59.
 
-  `check:docs` holds the two together, and **not** by matching the number:
+  That ratio is what the *base* constant cancels; `WIND_BOOST` is applied
+  after it. `check:docs` holds the two together, and **not** by matching the
+  number:
   the ratio above is a measurement and `DRIFT` is a pair of constants chosen
   to cancel it, so they are different quantities that happen to agree. It
   compares them numerically and fails if they drift more than a tenth apart —
