@@ -769,6 +769,62 @@ that graduates has to satisfy the gates it was exempt from, and usually has
 to be argued for here as well, because this map's constants are measured
 decisions rather than preferences.
 
+#### Particle colours chosen at runtime
+
+The first experiment, and the reason the fork exists. Production picks its two
+particle ramps once, offline, and `test:contrast` proves them against every
+water tone and every marker. `packages/ocean-map-dev/contrast.ts` does the
+same arithmetic — CIEDE2000, agreeing with `scripts/lib/colour.mjs` to 0.01 —
+**in the browser, against whatever is actually behind the particles now**: the
+colormap's stops when a scalar field is on, the sampled basemap water when it
+is not. Currents resolve first, then wind against a background that includes
+the currents' answer, so two sets of drifting lines cannot converge on the
+same region of the wheel.
+
+What it buys is measurable, and it is largest exactly where the fixed choice
+is weakest — a ramp checked against water is not checked against a colormap
+the reader turned on afterwards:
+
+| background | production ΔE | runtime ΔE |
+| --- | --- | --- |
+| GEBCO water, no field | 30.1 | 39 |
+| `cmo.matter` | **3.1** | 42 |
+| `cmo.algae` | 7.9 | 42 |
+| `jet` | 16.4 | 41 |
+| `thermal` | 46.2 | 39 |
+
+**The picker names colours; it does not offer a colour wheel.** A free picker
+lets a reader choose something that hides the layer, which is the same
+objection that keeps the colormap list curated. Asking for "blue" states an
+intent and leaves the exact stop to the search, and the readout beside it
+prints what the choice cost in the same ΔE the offline gate speaks — including
+when the honest answer is that blue over blue water is a poor idea.
+
+**A name is an exemplar colour, not a hue angle, and getting there took two
+wrong turns worth recording.** The hue band was tested inverted first, so
+every name returned its complement — blue gave olive, violet gave green — a
+palette plausible enough to survive a browser check. Fixing that exposed that
+the angles had been guessed rather than measured: Lab compresses the blues
+into 300–345° and spreads the yellow-greens over 90–180°, so "Blue 260" was
+cyan's angle and "Red 25" was orange's. And measuring them still was not
+enough, because **hue does not name a colour on its own** — deep blue and pale
+pink sit twelve degrees apart, lightness being what separates them, so a
+hue-banded search asked for blue over blue water quite reasonably returned
+`#ffb0ff`. Filtering on ΔE ≤ 18 to an exemplar constrains both axes at once,
+in the metric everything else here already speaks.
+
+The candidate set covers lightness at every chroma for that reason. Pairing
+pale with low chroma and dark with high — six profiles — left the tight balls
+around named colours empty, since deep blue is high chroma at *low* lightness.
+30 profiles × 60 hues costs 16.5 ms per search, which is a layer or colormap
+change and never a frame.
+
+`test:units` carries the one check the sandbox is not exempt from: **asking for
+a colour must return that colour**, over three deliberately awkward
+backgrounds. Nothing asked that, which is why the bug shipped twice. Mutation-
+tested against all three failure shapes — the inverted test, ignoring the
+request, and thinning the candidates.
+
 ### One map, however many pages carry it
 
 **A change to how the map looks or behaves has to reach every instance of it,

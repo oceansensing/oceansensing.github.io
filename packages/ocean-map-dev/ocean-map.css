@@ -766,3 +766,27 @@
 .om-kmz-folder {
   color: var(--text-muted, #5b6672);
 }
+
+/* Sandbox only: the adjustable particle colour control. Lives here rather
+   than in the host page for the same reason every other map style does —
+   see S7 in the production package's BOUNDARIES.md, which this fork still
+   respects even though nothing enforces it here. */
+.om-particle-colours {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs, 0.25rem);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--text-muted, #5b6672);
+}
+
+.om-particle-colours label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.om-particle-readout {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}

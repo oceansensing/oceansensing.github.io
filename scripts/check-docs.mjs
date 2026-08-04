@@ -23,6 +23,10 @@ const DOCS = [
   'packages/ocean-map/BOUNDARIES.md',
   'packages/ocean-map/EMBEDDING.md',
   'packages/ocean-map/PORTING-IOS.md',
+  /* The sandbox is exempt from the map gates, not from having docs that are
+     true. Its README is the one place saying what is currently being tried
+     in there, so a stale one is worse than none. */
+  'packages/ocean-map-dev/README.md',
 ];
 const WORKFLOW = '.github/workflows/deploy.yml';
 
@@ -173,6 +177,25 @@ const claims = [
     file: 'packages/ocean-map/velocity-layer.ts',
     from: /const VIEW_MARGIN = ([\d.]+)/,
     doc: (v) => new RegExp(`${Math.round(Number(v) * 100)}% of the viewport|${Math.round(Number(v) * 100)}% past the viewport`),
+  },
+  /* The sandbox's likeness bar. It is the whole argument that the picker's
+     labels are honest — loosen it and "Green" starts returning yellow — and
+     the docs quote it as the reason the names can be trusted. */
+  {
+    what: 'runtime ramp likeness bar',
+    file: 'packages/ocean-map-dev/contrast.ts',
+    from: /likeness = (\d+)/,
+    doc: (v) => new RegExp(`\\u0394E \\u2264 ${v} to an exemplar`),
+  },
+  /* How many lightness/chroma profiles the runtime search covers. Thinning
+     it is what emptied the tight balls around named colours the first time,
+     so a doc quoting the old count would be quoting the broken version. */
+  {
+    what: 'runtime ramp candidate profiles',
+    file: 'packages/ocean-map-dev/contrast.ts',
+    from: /for \(const chroma of \[([\d, ]+)\]\)[\s\S]*?for \(const L0 of \[([\d, ]+)\]\)/,
+    count: (chroma, lightness) => chroma.split(',').length * lightness.split(',').length,
+    doc: (n) => new RegExp(`${n} profiles`),
   },
 ];
 

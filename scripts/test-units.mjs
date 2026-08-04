@@ -32,6 +32,7 @@ import { rampColour, rampStops } from '../packages/ocean-map/ramp.ts';
 import { ParticleField, sampleVector, speedIndex } from '../packages/ocean-map/particles.ts';
 import { tileKeysFor } from '../packages/ocean-map/tiles.ts';
 import { apply, matrix3d, unitSquareTo } from '../packages/ocean-map/warp.ts';
+import { pickRamp, deltaE, hex as hexRgb } from '../packages/ocean-map-dev/contrast.ts';
 import {
   kmlColour,
   parseCoordinates,
@@ -448,9 +449,58 @@ const desc = hostile.features[0].description;
 check('a script tag does not survive', /<script|onerror|<img/i.test(desc), false);
 check('but the readable text does', desc.includes('safe text'), true);
 
+/* ---- the sandbox's runtime ramp search -------------------------------
+
+   `packages/ocean-map-dev` is exempt from the map gates by design — it is
+   where colour rules get broken on purpose. This one claim is checked
+   anyway, because it broke twice and both times looked plausible on screen:
+   the picker must return the colour it was asked for.
+
+   First the hue-band test was inverted, so every name returned its
+   complement — blue gave olive, violet gave green. Fixing that exposed the
+   deeper error: the angles had been guessed rather than measured, and Lab
+   hue does not name a colour on its own anyway, since deep blue and pale
+   pink sit twelve degrees apart. Nothing asked "does blue give a blue?", so
+   nothing objected. */
+const NAMED = [
+  ['red', '#e01000'], ['orange', '#ff8000'], ['yellow', '#ffe000'],
+  ['green', '#00b000'], ['teal', '#00b0a0'], ['cyan', '#00b8f0'],
+  ['blue', '#1030d0'], ['violet', '#8020d0'], ['pink', '#e030a0'],
+];
+/* Deliberately awkward: dark navy water, a warm colormap, and a green one.
+   A picker that ignores its argument passes over one background by luck. */
+const BACKDROPS = [
+  ['#0d2b52', '#123f6b', '#1a5580'],
+  ['#8b1a4a', '#c25a2a', '#f0e050'],
+  ['#0d2818', '#2d6b3a', '#c8e090'],
+];
+let strays = 0;
+let unmatched = 0;
+for (const backdrop of BACKDROPS) {
+  const answers = new Set();
+  for (const [, exemplar] of NAMED) {
+    const choice = pickRamp(backdrop, [], exemplar);
+    if (choice.clearance === 0) unmatched++;         // the fallback ramp
+    answers.add(choice.ramp[2]);
+    // The middle stop is what the eye takes the field to be.
+    if (deltaE(hexRgb(choice.ramp[2]), hexRgb(exemplar)) > 18) strays++;
+  }
+  check(`over one backdrop, nine names give nine ramps`, answers.size, NAMED.length);
+}
+check('every named colour returns that colour', strays, 0);
+check('and every one of them finds a candidate', unmatched, 0);
+
+/* Auto searches the whole gamut, so it must beat a constrained request over
+   a background chosen to make one name awkward — otherwise the constraint
+   is not costing anything and is not being applied. */
+const auto = pickRamp(BACKDROPS[0], [], null);
+const forced = pickRamp(BACKDROPS[0], [], '#1030d0');   // blue over navy water
+check('auto clears the background by more than a forced hue does',
+  auto.clearance > forced.clearance, true);
+
 console.log(
   failures
     ? `\n${failures} failing check(s) in the renderer-independent modules.`
-    : '\nok    geo, ramp and tiles behave as their comments claim'
+    : '\nok    geo, ramp, tiles and the sandbox ramp search behave as their comments claim'
 );
 process.exit(failures ? 1 : 0);
