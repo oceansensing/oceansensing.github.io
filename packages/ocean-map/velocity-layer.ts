@@ -55,7 +55,8 @@ export class VelocityLayer extends Layer {
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
   private field: ParticleField | null = null;
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private raf: number | null = null;
+  private lastFrame = 0;
   private stopped = false;
 
   constructor(options: VelocityLayerOptions) {
@@ -147,16 +148,41 @@ export class VelocityLayer extends Layer {
     this.stop();
     // After stop(), not before: stop() sets the flag that frame() bails on,
     // so starting without clearing it again leaves a layer with a running
-    // timer that draws nothing — every frame returns on the first line.
+    // loop that draws nothing — every frame returns on the first line.
     this.stopped = false;
-    const interval = Math.max(1, Math.round(1000 / this.options.frameRate));
-    this.timer = setInterval(() => this.frame(), interval);
+    this.lastFrame = 0;
+
+    /* **requestAnimationFrame, not setInterval**, and the difference is a
+       background tab. A hidden tab pauses rAF entirely; `setInterval` is only
+       throttled to about 1 Hz and keeps running. This layer advects up to
+       16,000 particles per step, so on a timer it would go on doing that once
+       a second forever on a page nobody is looking at — and this page is one
+       people leave open, since it refreshes itself hourly by design.
+
+       Shipped on a timer first, which is how the difference got noticed. The
+       plugin this replaced used rAF, so the behaviour was already correct
+       before and the change would have been a silent regression: nothing on
+       screen looks different, a hidden tab just keeps burning CPU.
+
+       The frame rate is a gate on top rather than a separate timer. rAF runs
+       at the display's rate, so without this the field would animate at 60 or
+       120 fps instead of the 18 it is tuned for — and particle drift is per
+       *frame*, so it would also move three to six times too fast. */
+    const loop = (now: number) => {
+      if (this.stopped) return;
+      this.raf = requestAnimationFrame(loop);
+      const interval = 1000 / this.options.frameRate;
+      if (now - this.lastFrame < interval) return;
+      this.lastFrame = now;
+      this.frame();
+    };
+    this.raf = requestAnimationFrame(loop);
   }
 
   private stop(): void {
     this.stopped = true;
-    if (this.timer !== null) clearInterval(this.timer);
-    this.timer = null;
+    if (this.raf !== null) cancelAnimationFrame(this.raf);
+    this.raf = null;
   }
 
   private frame(): void {

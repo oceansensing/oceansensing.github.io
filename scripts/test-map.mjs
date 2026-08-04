@@ -811,9 +811,12 @@ const driftAt = async (zoom) => {
      listening. */
   drawn.segments.length = 0;
   host._map.setZoom(zoom);
-  // The layer rebuilds its interpolated field after a zoom, in slices, so
-  // give it room before sampling.
-  await new Promise((r) => setTimeout(r, 3000));
+  /* 600 ms, not the 3 s this used to need. The old plugin rebuilt an
+     interpolated velocity field across the whole screen after every zoom,
+     in slices, and sampling before it finished read an empty field. This
+     layer has no rebuild — a particle is unprojected and sampled where it
+     stands — so the only wait is for enough frames to measure. */
+  await new Promise((r) => setTimeout(r, 600));
   const got = [...drawn.segments];
   const dot = Object.values(host._map._layers).find(
     (l) => l.options?.renderer && l.options?.fillColor === palette.features.argo
@@ -2344,6 +2347,19 @@ const checks = [
     if (!fs.existsSync(at)) return true;   // that page may not be built here
     const html = fs.readFileSync(at, 'utf8');
     return !/class="[^"]*container[^"]*wide/.test(html);
+  })()],
+
+  /* The animation runs on requestAnimationFrame, never a timer. A hidden tab
+     pauses rAF outright but only throttles setInterval to ~1 Hz, so a timer
+     keeps advecting up to 16,000 particles once a second on a page nobody is
+     looking at — and this page is one people leave open. Read from the source
+     because the distinction is invisible from outside: both draw the same
+     thing while the tab is in front. */
+  ['the particle loop pauses with the tab, so it uses rAF not a timer', (() => {
+    const src = fs.readFileSync('packages/ocean-map/velocity-layer.ts', 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')     // comments discuss both; code must not
+      .replace(/\/\/[^\n]*/g, '');
+    return /requestAnimationFrame\s*\(/.test(src) && !/setInterval\s*\(/.test(src);
   })()],
 
   /* ---- resizing ---- */

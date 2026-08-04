@@ -994,6 +994,26 @@ where `test:map`'s recorder watches: it read **51,115 strokes and zero
 segments**, which is indistinguishable from a field that has stopped moving.
 The batching is identical built on the context, so it is built there.
 
+**The loop is `requestAnimationFrame`, and that is the one place the
+rewrite was briefly *worse*.** It shipped on `setInterval`, which looks
+identical on screen and is not: a hidden tab pauses rAF outright but only
+throttles a timer to about 1 Hz, so the layer went on advecting up to 16,000
+particles once a second on a page nobody was looking at — and this page is
+one people leave open, since it refreshes itself hourly by design. The plugin
+had used rAF, so the behaviour was already right and the regression would
+have been silent. Measured in a hidden pane: on the timer the canvas held
+18.9% coverage and kept changing; on rAF it is 0% and static. The frame rate
+is a gate on top, because rAF runs at the display's rate and particle drift
+is per *frame* — ungated it would animate three to six times too fast.
+
+**What it costs, measured.** The advection is **1.29 ms per step at 16,000
+particles** — 2.3% of an 18 fps frame budget — so the work is the canvas's,
+not the maths. The structural win is elsewhere: the old plugin rebuilt an
+interpolated velocity field across the whole screen after every zoom, in
+slices, and `test:map` had to wait **3 seconds** before it could sample.
+There is no rebuild now — a particle is unprojected and sampled where it
+stands — and the same measurements are stable at **600 ms**.
+
 **Trail length is the fade, not the lifetime.** A particle lives
 `particleSeconds`; what a reader sees behind it is however many frames of
 stroke have not yet faded, which is the `destination-out` alpha alone. The
