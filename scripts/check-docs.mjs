@@ -165,7 +165,18 @@ const claims = [
     from: /^LEADS = \[(\d+)\]/m,
     doc: (v) => new RegExp(`T\\+${v}\\b`),
   },
+  /* How far past the viewport the field is simulated. It costs the square of
+     itself in particles, so a doc quoting the wrong margin is understating
+     the cost of the whole layer. */
+  {
+    what: 'particle view margin',
+    file: 'packages/ocean-map/velocity-layer.ts',
+    from: /const VIEW_MARGIN = ([\d.]+)/,
+    doc: (v) => new RegExp(`${Math.round(Number(v) * 100)}% of the viewport|${Math.round(Number(v) * 100)}% past the viewport`),
+  },
 ];
+
+
 /* Whitespace-normalised, because these docs are hard-wrapped: a claim like
    "four regional ERDDAPs" can straddle a line break, and a pattern with a
    literal space would then report drift that is only a newline. */
@@ -237,6 +248,32 @@ for (const claim of claims) {
     problems.push(
       `CLAUDE.md: the ${claim.what} is ${found[1]} in the pipeline, but the docs do not say so`
     );
+  }
+}
+
+/* The palette's own colours, against the prose that explains them. These have
+   moved three times in a day — amber to coral for the currents, yellow to
+   green for the wind — and each move rewrote a paragraph of reasoning. A hex
+   that no longer appears in the file it is explained by is the cheapest
+   possible signal that the explanation is about a colour nobody can see. */
+{
+  const palette = JSON.parse(fs.readFileSync('packages/ocean-map/data/map-palette.json', 'utf8'));
+  for (const field of ['currents', 'wind']) {
+    const first = palette[field]?.[0];
+    if (!first) {
+      problems.push(`map-palette.json: no ${field} ramp`);
+      continue;
+    }
+    const note = palette[`_${field}`] ?? '';
+    // The note beside a ramp has to be about *that* ramp. Naming the ramp's
+    // own first stop is the one thing that cannot survive a colour change by
+    // accident.
+    if (!note.includes(first) && !claimDoc.includes(first)) {
+      problems.push(
+        `the ${field} ramp starts at ${first}, which neither its own note nor ` +
+        `CLAUDE.md mentions — the reasoning may still be about the old colour`
+      );
+    }
   }
 }
 

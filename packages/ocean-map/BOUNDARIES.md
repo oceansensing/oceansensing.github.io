@@ -24,9 +24,10 @@ npx tsc --noEmit --ignoreConfig --strict --target es2022 \
 
 **Why:** these are what a native port keeps verbatim. Everything that moves
 into them is work an iOS app does not repeat; everything left in `index.ts` is
-work it rewrites. Measured today: **1,255 lines free of the renderer against
-3,538 in `index.ts` and 243 in `velocity-layer.ts`**, so about 25% is portable — up from 11% when only the
-first four files existed, which is the direction to keep pushing. The newest
+work it rewrites. Measured today: **1,275 lines free of the renderer against
+3,576 in `index.ts` and 361 in `velocity-layer.ts`**, so about 24% is
+portable — up from 11% when only the first four files existed, which is the
+direction to keep pushing. The newest
 of them, `particles.ts`, is the advection maths behind the animated fields;
 it arrived by *replacing a dependency*, which is the cheapest way this share
 has ever moved.
@@ -174,5 +175,5 @@ Before adding anything, ask:
 6. Does it change a measured constant? Then re-measure and rewrite the reason.
 
 `npm run verify` is the gate — a build, a type-check, a docs check and six
-test suites, ~700 assertions. CI runs exactly it, and the deploy will not run
+test suites, ~790 assertions. CI runs exactly it, and the deploy will not run
 unless it passes.

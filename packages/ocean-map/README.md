@@ -88,8 +88,9 @@ unmodified on Leaflet 1.9 and 2.0.
   matches. Fine for another deployment reading the same `dataBase`; a
   blocker for one with different platforms.
 - **`index.ts` is ~3,600 lines.** The renderer-independent parts are out —
-  `geo.ts`, `ramp.ts`, `tiles.ts`, `schema.ts`, `warp.ts`, `kmz.ts`, about a
-  fifth of the package — but what remains is one long Leaflet adapter. Splitting it further is tidiness rather than capability
+  `geo.ts`, `ramp.ts`, `tiles.ts`, `schema.ts`, `warp.ts`, `kmz.ts`,
+  `particles.ts`, about a quarter of the package — but what remains is one
+  long Leaflet adapter. Splitting it further is tidiness rather than capability
   now, since a native port rewrites that layer anyway. Keep new logic that does
   not touch `L.` out of it regardless: see S1 in `BOUNDARIES.md`.
 

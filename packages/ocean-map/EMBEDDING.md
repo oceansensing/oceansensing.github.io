@@ -126,11 +126,14 @@ saves only this copying.
   deliberately been left until a second use defines what it needs. If that is
   you, say so — the descriptor half (labels, colours, ids, data keys) is
   bounded; the rendering half is a redesign.
-- **Leaflet must be on `globalThis` before `leaflet-velocity` loads.** The
-  plugin is UMD and reads Leaflet off the global object, which a bundled ESM
-  build never sets. `index.ts` handles this with a dynamic import after
-  assigning `globalThis.L`; a static import would hoist above the assignment
-  and die in production only. Do not "tidy" it into a static import.
+- **The animated fields are this package's own layer**, not a plugin. That
+  matters for two reasons if you are porting or upgrading. There is no
+  `globalThis.L` to arrange — `leaflet-velocity` was UMD and read Leaflet off
+  the global, which a bundled ESM build never sets, so it had to be pulled in
+  by dynamic import after assigning the global, and got that wrong in
+  production only. And `velocity-layer.ts` is written in the constructor
+  style — `new Point(...)`, `Util.setOptions`, a native `class extends
+  Layer` — so it runs unmodified on Leaflet 1.9 and 2.0.
 - **A CSS reset that styles bare `svg` will erase vector layers.** The common
   `img, svg, video { max-width: 100% }` collapses an SVG inside a Leaflet pane
   to 0×0 and `overflow: hidden` clips every path away: right geometry, right

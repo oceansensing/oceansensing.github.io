@@ -775,8 +775,15 @@ const medianSegment = sortedSegments.length ? sortedSegments[Math.floor(sortedSe
 /* Every stroke on the canvas is either a particle or an Argo dot's outline
    — nothing else strokes there. Checking membership rather than "all of them
    are particle colours" keeps this precise now that the dots are outlined,
-   while still catching a particle drawn in a colour the gate never saw. */
-const allowedStrokes = new Set([...palette.currents, palette.features.argoEdge]);
+   while still catching a particle drawn in a colour the gate never saw.
+
+   **Both** particle ramps, not just the currents'. Wind is off when this is
+   measured, so listing only the currents passed — but it would have called
+   every wind stroke stray the moment the reading moved, which is a check
+   that fails for a reason unrelated to what it is testing. */
+const allowedStrokes = new Set([
+  ...palette.currents, ...palette.wind, palette.features.argoEdge,
+]);
 const paletteUsed =
   [...drawn.styles].every((c) => allowedStrokes.has(c)) &&
   palette.currents.some((c) => drawn.styles.has(c));

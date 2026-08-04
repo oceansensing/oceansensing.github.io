@@ -228,7 +228,7 @@ for (const [name, stops] of Object.entries(palette.colormaps ?? {})) {
 /* A default is normally required to be marker-safe: it is what a reader who
    never touches the picker looks at. Where one is not, it has to be named in
    defaultExempt with the reasoning, and the clearance it actually gives is
-   reported — the same bargain separationExempt strikes. Recording it beats
+   reported — the same bargain `concessions` strikes. Recording it beats
    dropping the check, which would let a default drift onto a scale that
    hides the fleet with nothing to say so. */
 const defaultExempt = new Set(palette.defaultExempt ?? []);

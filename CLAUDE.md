@@ -163,7 +163,8 @@ crosses that threshold, its harness needs updating.
 
 **The map is an npm workspace package now; the component is its placement on
 this site.** `packages/ocean-map` is `@c4po/ocean-map`, imported by name, with
-Leaflet and `leaflet-velocity` as peer dependencies. Its `exports` point
+Leaflet as its only peer dependency — the animated fields are drawn by the
+package's own layer now. Its `exports` point
 straight at the TypeScript — there is no build step for the package, because
 the only consumers are in this repo and Vite compiles it as source.
 
@@ -710,7 +711,7 @@ is the host's.
   settled.
 
 **Removing the size cap uncapped the particle count too**, which is the part
-worth not repeating. leaflet-velocity draws `area × particleMultiplier`
+worth not repeating. The field draws `area × particleMultiplier`
 particles, so measured against the 1152×800 the old maximum allowed, a 1440p
 window is 3.5× the area and a 4K one **6.4×** — about 52,000 particles
 redrawn at 18 fps. The cap had been holding that down by accident. So the
@@ -839,8 +840,8 @@ gate needs no network. Re-run `npm run data:basemaps` if a basemap changes.
 Three depictions, from two different models, all named in the layer switcher
 because they are not the same data:
 
-- **Animated surface particles** (default) — `leaflet-velocity` over u/v
-  grids built by `scripts/fetch-currents.py` from the **US Navy ESPC-D-V02**
+- **Animated surface particles** (default) — the package's own particle
+  layer over u/v grids built by `scripts/fetch-currents.py` from the **US Navy ESPC-D-V02**
   global forecast via HYCOM's OPeNDAP. Chosen because it is open; Copernicus
   publishes Mercator at the same resolution but its **numeric** access needs
   credentials, and its WMTS serves only pictures.
@@ -945,7 +946,7 @@ only. `TILES['stride']` is the one constant to change.
 #### Grid geometry
 
 - The global grid **must span a full 360° of longitude** — that is the exact
-  condition leaflet-velocity uses to wrap across the antimeridian, and
+  condition `sampleVector` uses to wrap across the antimeridian, and
   without it particles pile up against the edge.
 - Longitude is therefore indexed with a **floored modulo**: grids start at
   0°E and half the world is west of that.
@@ -959,7 +960,13 @@ only. `TILES['stride']` is the one constant to change.
 
 #### Land, and why particles used to stream across it
 
-**leaflet-velocity does not treat a null as missing.** Its grid hands back
+**This was `leaflet-velocity`'s behaviour, and it is the reason the coastal
+erosion in the pipeline exists.** The layer is ours now and treats a null
+nearest cell as no water (see `sampleVector`), so the bleed cannot recur —
+but the erosion stays, because a coarse grid still cannot represent a fjord
+and an island smaller than a cell still sits in open model water.
+
+**The plugin did not treat a null as missing.** Its grid handed back
 `[u, v]` — an array, so always truthy, so `isValue()` passes — and its
 bilinear interpolation multiplies straight through, where `null` becomes
 zero. A cell that is partly land therefore yields a reduced but *non-zero*

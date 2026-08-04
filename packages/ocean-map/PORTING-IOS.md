@@ -40,7 +40,7 @@ what make this port possible, and the same rules apply to whatever you add.
 | `data/basemap-ocean.json` | sampled water colours the palette is gated against | |
 | `../../scripts/*.py` | the six data pipelines | run unchanged, or read the same output |
 
-`scripts/test-units.mjs` is the specification for all of those — **106
+`scripts/test-units.mjs` is the specification for all of those — **126
 assertions**, each pinning a case a comment claims to handle. Port the tests
 and you will know your Swift matches.
 
@@ -50,10 +50,15 @@ backwards produces a plausible wrong answer rather than an error:
 - **A current is named for where it goes; a wind for where it comes from.** A
   southwesterly blows towards the northeast. The readout flips the bearing by
   180° for wind and not for current.
-- **Particle drift is per field.** The median 10 m wind is ~27× the median
-  surface current, so one speed constant makes one of them invisible and the
-  other a streak. The web version keeps a `DRIFT` per field and a ceiling on
-  the particle count, since the count scales with the map's area.
+- **Particle drift and lifetime are both per field.** The median 10 m wind is
+  ~27× the median surface current, so one speed constant makes one of them
+  invisible and the other a streak. The web version keeps a `DRIFT` and a
+  lifetime per field, a `WIND_BOOST` over measured parity because a
+  circulation needs a longer streak to read as one, and a ceiling on the
+  particle count, since the count scales with the map's area.
+- **The field is simulated past the visible edge** — 30% of the viewport on
+  each side. Without it, a short pan reveals unseeded water and the border
+  becomes a place where particles retire and respawn.
 - **Advection needs no projection maths.** Mercator is conformal, so a vector
   (u east, v north) is the screen direction (u, −v) and the magnitude is a
   free choice: `x += u * drift`. If your map view is Mercator, take this
@@ -128,11 +133,18 @@ wrong. Full reasoning is in `../../CLAUDE.md`.
 
 ## What does not port
 
-Leaflet, `leaflet-velocity`, the DOM chrome, the CSS, and the particle
-animation — that last one is a canvas advection loop whose scaling had to
-cancel two of the plugin's own factors and measure the projection's Jacobian
-with an unrounded API. On iOS you would do it with Metal or `CAEmitterLayer`
-and none of that arithmetic transfers.
+Leaflet, the DOM chrome, the CSS, and the *drawing* of the particle
+animation — the canvas, the trail fade, the frame loop. On iOS that is Metal
+or `CAEmitterLayer`.
+
+**The advection itself does port**, and it is a much better deal than it used
+to be. It lives in `particles.ts` with no Leaflet and no DOM: the u/v
+sampling, the particle pool, the retirement rules. The old plugin's scaling
+had to cancel two of its own factors and measure the projection's Jacobian
+with an unrounded API, and none of that transferred — but none of it was ever
+necessary. Mercator is conformal, so the whole of it is `x += u * drift`.
+Take that line verbatim if your view is Mercator; if it is a globe, that one
+line is the only place the projection enters the animation.
 
 The **basemaps** are worth planning early: the web version uses GEBCO's WMS by
 default. MapKit will not show you that, so either keep a raster tile layer or

@@ -67,7 +67,7 @@ npm run verify   # everything CI checks, in one command
 ```
 
 `npm run verify` builds, type-checks, checks the docs for drift, and runs the
-map, multimap and clock test harnesses — about 700 assertions in all. **CI runs the same command and refuses to deploy
+map, multimap and clock test harnesses — about 790 assertions in all. **CI runs the same command and refuses to deploy
 if it fails**, so running it before you push is the quickest way to find out
 whether a change will publish.
 
