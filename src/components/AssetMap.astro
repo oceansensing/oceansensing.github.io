@@ -58,6 +58,12 @@ const {
     </noscript>
   </div>
   <figcaption>
+    <!-- Where Leaflet's attribution control is moved to. It is a control,
+         so it starts inside the map floating over the bottom edge — which is
+         exactly where the graticule's longitude labels sit. The module
+         reparents it here; the control itself is untouched and goes on
+         updating its own container. -->
+    <p class="om-credit" data-map-credit></p>
     <span class="om-legend">
       <span class="om-key storm">Hurricane</span>
       <span class="om-key usv">NOAA USV</span>

@@ -841,3 +841,27 @@
 .ocean-map .map-grid-label-lon > span {
   transform: translate(-50%, -40%);
 }
+
+/* The relocated attribution. Leaflet styles it as a translucent box pinned to
+   a corner; below the map it is simply caption text, so the box goes and the
+   type matches the rest of the figure's prose. */
+.ocean-map .om-credit {
+  margin: 0.35rem 0 0;
+  font-size: var(--text-xs, 0.8125rem);
+  line-height: 1.45;
+  color: var(--text-muted, #5b6672);
+}
+
+.ocean-map .om-credit .leaflet-control-attribution {
+  background: none;
+  box-shadow: none;
+  margin: 0;
+  padding: 0;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
+.ocean-map .om-credit .leaflet-control-attribution a {
+  color: var(--link, #1b4f72);
+}

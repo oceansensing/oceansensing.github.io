@@ -208,6 +208,31 @@ export async function createOceanMap(
 
   map.attributionControl.setPrefix('');
 
+  /* **The credit is moved out of the map, into the caption below it.**
+
+     Leaflet renders attribution as a control, so it floats over the bottom
+     edge of the map — directly on top of the graticule's longitude labels,
+     which are pinned to that same edge. Two things fighting for one strip,
+     and the credit is the one that does not have to be there: nothing about
+     it is spatial.
+
+     The control is reparented, not reimplemented. It goes on owning and
+     rewriting its own container — including the semicolon override below —
+     so nothing here has to know how a credit is assembled. Leaflet's own
+     positioning classes come off, since outside the map they would place it
+     against a corner that no longer exists.
+
+     A host with no `[data-map-credit]` keeps the floating control, which is
+     what a second site embedding this gets until it adds the element. */
+  {
+    const slot = find<HTMLElement>('[data-map-credit]');
+    const box = map.attributionControl.getContainer();
+    if (slot && box) {
+      box.classList.remove('leaflet-control');
+      slot.append(box);
+    }
+  }
+
   /* **Credits are separated by semicolons, not commas.**
 
      Leaflet joins them with ", " and offers no option for it. With one

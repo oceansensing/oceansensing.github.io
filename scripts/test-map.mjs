@@ -32,6 +32,7 @@ const dom = new JSDOM(
   '<figure class="map-figure" data-ocean-map>' +
   '<div id="asset-map" data-ocean-map-canvas data-map-storage-key="asset-map-view"></div>' +
   '<figcaption>' +
+  '<p class="om-credit" data-map-credit></p>' +
   '<span class="key sst" data-sst-key hidden></span>' +
   // A bare container, as the component's markup is, seeded with text the
   // module must replace: a key that merely happened to say "current" because
@@ -1073,8 +1074,16 @@ const navyRead = host.querySelector('.om-point-readout .leaflet-popup-content')?
    — the Navy field was just switched on and the animated currents have been
    on since startup. Later the basemap changes and OISST comes back, so the
    same reading taken at the end says nothing about the case this checks. */
+/* The credit is reparented into the caption, so it is scoped through
+   `[data-ocean-map]` like the legend and the pickers — `host` is the canvas
+   and the credit is no longer inside it. Falls back to the canvas for a host
+   that has no slot and keeps Leaflet's floating control. */
+const creditText = () =>
+  host.closest('[data-ocean-map]')?.querySelector('.leaflet-control-attribution')
+  ?? host.querySelector('.leaflet-control-attribution');
+
 const sharedSourceAttribution =
-  host.querySelector('.leaflet-control-attribution')?.textContent ?? '';
+  creditText()?.textContent ?? '';
 
 const currentsOnWithNavy = [/Currents at 0m/, /Currents at 60m/].some(
   (label) => overlayLabelled(label)?.querySelector('input')?.checked === true
@@ -1343,7 +1352,7 @@ await new Promise((r) => setTimeout(r, 900));
    map is back at defaults they would report the reset state rather than what
    they were written to check. */
 const toneBeforeReset = host.dataset.basemapTone;
-const attributionBeforeReset = host.querySelector('.leaflet-control-attribution')?.textContent ?? '';
+const attributionBeforeReset = creditText()?.textContent ?? '';
 
 /* Last, and deliberately so: this one is destructive by design. It puts the
    basemap, the layers, the colour scale and the view back to defaults, so
@@ -1922,7 +1931,7 @@ if (tintSelects[0]) {
   }
 }
 
-const windAttribution = host.querySelector('.leaflet-control-attribution')?.textContent ?? '';
+const windAttribution = creditText()?.textContent ?? '';
 
 windToggle?.querySelector('input')?.click();
 await new Promise((r) => setTimeout(r, 600));

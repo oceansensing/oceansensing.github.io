@@ -814,6 +814,16 @@ tested: planting one rule in `visualization.astro` fails it.
 
 ### Map colour, and the contrast gate
 
+**The credit sits below the map, not on it.** Leaflet renders attribution as
+a control, so by default it floats over the bottom edge — which is where the
+graticule's longitude labels are pinned, and the two fought for one strip.
+The credit is the one that does not have to be there: nothing about it is
+spatial. The control is **reparented rather than reimplemented** — it goes on
+owning and rewriting its own container, so the semicolon override below still
+applies and nothing here has to know how a credit is assembled. A host page
+with no `[data-map-credit]` keeps Leaflet's floating control, which is what a
+second site embedding this gets until it adds the element.
+
 **Credits are separated by semicolons.** Leaflet joins attributions with
 `", "` and offers no option for it, which is fine for one product and
 ambiguous for several: the credits contain commas of their own — `US Navy
