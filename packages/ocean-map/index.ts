@@ -1970,7 +1970,23 @@ export async function createOceanMap(
       mapPicker.append(group);
     }
 
-    const shownField = () => ssts.find((f) => map.hasLayer(f.group))?.layer?.options?.field ?? null;
+    /* **Which field these controls drive, now that two can be on.**
+
+       It was `ssts.find(...)` — the first one built, which is arbitrary and
+       silent: with ice over temperature the reader would change a colormap
+       and watch the other field's bar move. This picks the *topmost* instead,
+       which is at least the one they are looking at and is stable.
+
+       It is a stopgap, not the answer. One set of controls per field is what
+       the legend and the readout already do, and doing it here means the
+       module cloning chrome that is currently the host's — scoped in the
+       repo's PLAN.md rather than half-built. Until then a reader can only
+       restyle the upper field, and the lower keeps its default scale. */
+    const shownField = () => {
+      const on = ssts.filter((f) => map.hasLayer(f.group));
+      const top = on.find((f) => f.layer?.options?.field?.pane === 'ice') ?? on[0];
+      return top?.layer?.options?.field ?? null;
+    };
 
     const repaint = () => {
       for (const entry of ssts) if (map.hasLayer(entry.group)) entry.layer._render?.();

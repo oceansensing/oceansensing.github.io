@@ -96,6 +96,46 @@ contrast, the rendered map, two maps on a page, and the clock.
   making them pluggable is blocked on a second use defining what it needs
   rather than on effort.
 
+### One colour scale per field, now that two can be on
+
+Ice draws in its own pane over temperature, so a reader can have two scalar
+fields up at once. The legend and the point readout were both taught to
+report every field that is on. **The colour-scale controls were not**, and
+that is the loose end.
+
+`[data-field-controls]` — colormap, min, max, Auto — is a single set of
+inputs, and `shownField()` used to hand it whichever field was built first:
+arbitrary, and silent, since a reader would change a scale and watch the
+other field's bar move. It picks the topmost now, which is at least the field
+they are looking at and is stable, but it means **the lower field cannot be
+restyled at all** while ice is over it.
+
+The fix is one set of controls per field on, which is what the legend already
+does. What makes it more than a loop is that this markup is the **host's**,
+not the module's — see `packages/ocean-map/EMBEDDING.md`. Two ways:
+
+1. **The module clones the host's element as a template**, once per field.
+   Cheap, keeps the host in charge of what the controls look like, and the
+   host writes the markup once as it does today. The template becomes load-
+   bearing markup rather than a single control, which wants saying in
+   EMBEDDING.md.
+2. **The module builds the controls itself**, as it already does for the
+   particle colour pickers and the forecast buttons. More consistent with
+   where the package has been drifting, and it is the same change
+   `packages/ocean-map/README.md` already lists as the obvious next
+   improvement — the module owning its chrome would reduce a second
+   deployment to one `<div>`.
+
+(2) is the better end state and (1) is the smaller step. Neither is started.
+
+Worth doing at the same time: **the exclusivity desync**. When one layer
+displaces another the displaced layer's checkbox stays ticked, so the control
+shows a layer that is not drawn. Confirmed to predate the ice work — SST and
+SSS, exclusive from the beginning, do it too — and it is the same
+Leaflet-re-adds-during-its-pass quirk the deferred-by-a-tick note in
+`CLAUDE.md` describes. A ticked box for an undrawn layer is exactly the
+"wrong and says nothing" shape this project keeps chasing.
+
 ### Polar stereographic, as a selectable map mode
 
 **Not started, deliberately.** Recorded here so the shape of it is known
