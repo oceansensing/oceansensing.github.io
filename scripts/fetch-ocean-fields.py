@@ -44,6 +44,9 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / 'lib'))
+from contour import contour  # noqa: E402  (after the path insert above)
+
 MAP_DIR = pathlib.Path(__file__).resolve().parent.parent / 'public' / 'map'
 
 UA = {'User-Agent': 'oceansensing.org sst map (github.com/oceansensing)'}
@@ -303,6 +306,13 @@ PRODUCTS = [
         # the range check would reject it.
         'valid': (0.0, 1.0),
         'label': 'Ice concentration (OISST analysis)',
+        # **The ice edge**, contoured from the region grids this product
+        # publishes. 15% is the convention every ice service reports extent
+        # at, so the line means the same thing here as on an NSIDC chart.
+        'edge': 0.15,
+        # Set from the screen, not from the grid — the same lesson the
+        # isobaths learned. See the measurement in CLAUDE.md.
+        'edgeTolerance': 0.02,
         'source': 'NOAA PSL OISST v2.1',
         'base': ('https://psl.noaa.gov/thredds/dodsC/Datasets/'
                  'noaa.oisst.v2.highres/icec.day.mean.{year}.nc'),
@@ -334,6 +344,13 @@ PRODUCTS = [
         # the same scale as the analysis above, so the two are comparable.
         'valid': (0.0, 1.0),
         'label': 'Ice concentration (Navy ESPC forecast)',
+        # **The ice edge**, contoured from the region grids this product
+        # publishes. 15% is the convention every ice service reports extent
+        # at, so the line means the same thing here as on an NSIDC chart.
+        'edge': 0.15,
+        # Set from the screen, not from the grid — the same lesson the
+        # isobaths learned. See the measurement in CLAUDE.md.
+        'edgeTolerance': 0.02,
         'source': 'US Navy ESPC-D-V02',
         'base': ('https://tds.hycom.org/thredds/dodsC/'
                  'FMRC_ESPC-D-V02_ice/FMRC_ESPC-D-V02_ice_best.ncd'),
@@ -961,6 +978,76 @@ def build_product(product: dict, tiles_only: bool) -> None:
                   west=region.get('west', -180.0), east=region.get('east', 180.0),
                   stride=product['strides']['region'], wrap=region['wrap'],
                   run=lead_run, extra={'lead': lead})
+
+        if product.get('edge'):
+            build_edge(product, name, at_lead, lead, lead_valid, lead_run)
+
+
+def build_edge(product: dict, name: str, at_lead, lead: int,
+               valid: str, run: str) -> None:
+    """The ice edge, contoured from the region grids just published.
+
+    **Read back off disk rather than recomputed from the fetch**, and that is
+    deliberate: it makes it impossible for the line and the field under it to
+    disagree. A separately-fetched edge would drift the first time a stride or
+    a valid time changed on one side only, and the symptom would be a contour
+    sitting a cell away from the colour it is supposed to bound — visible,
+    but easy to read as a rendering artefact rather than as two different
+    downloads.
+
+    The region grids and not the global one, because the global grid is
+    0.96 degrees and an edge drawn on it is a staircase. The regions are the
+    two polar bands, which is exactly where ice is — so the finest data and
+    the whole of the phenomenon happen to coincide here, which is not true
+    of any other field in this file.
+    """
+    threshold = product['edge']
+    paths = []
+    for region in regions_for(product):
+        path = MAP_DIR / (at_lead(name + '-' + region['name'], lead) + '.json')
+        if not path.exists():
+            continue
+        grid = json.loads(path.read_text())
+        head = grid['header']
+        nx, ny = head['nx'], head['ny']
+        flat = grid['data']
+        rows_of = [flat[y * nx:(y + 1) * nx] for y in range(ny)]
+        # `la1` is the **north** edge and the rows run southward — the GRIB
+        # convention these files follow — so the latitude step is negative
+        # walking down the array. Passing +dy would contour a grid mirrored
+        # about its own middle latitude: the same shape, in the wrong
+        # hemisphere, which over a polar band is a line that looks entirely
+        # plausible until you notice it is upside down.
+        for line in contour(
+            rows_of, threshold,
+            lat0=head['la1'], dlat=-head['dy'],
+            lon0=head['lo1'], dlon=head['dx'],
+            tolerance=product.get('edgeTolerance', 0.0),
+            # None is "no ice" on both products: the analysis masks open
+            # water as missing and the forecast writes a real 0 there. See
+            # the note in contour.segments.
+            absent=0.0,
+        ):
+            paths.append([[round(x, 4), round(y, 4)] for x, y in line])
+
+    out = {
+        'type': 'FeatureCollection',
+        'header': {
+            'product': product['label'], 'source': product['source'],
+            'valid': valid, 'threshold': threshold, 'lead': lead,
+            **({'modelRun': run} if run else {}),
+        },
+        'features': [
+            {'type': 'Feature', 'properties': {'c': threshold},
+             'geometry': {'type': 'LineString', 'coordinates': line}}
+            for line in paths
+        ],
+    }
+    dest = MAP_DIR / (at_lead(name + '-edge', lead) + '.json')
+    dest.write_text(json.dumps(out, separators=(',', ':')))
+    vertices = sum(len(line) for line in paths)
+    print(f'  {dest.name}: {len(paths)} lines, {vertices} vertices, '
+          f'{dest.stat().st_size // 1024} KB')
 
 
 def main() -> int:

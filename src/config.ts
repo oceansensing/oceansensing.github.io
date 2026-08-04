@@ -86,7 +86,7 @@ export const MAP_DATA = 'https://oceansensing.org/ocean-data-repo/map/';
  *
  * It costs the build-time image pipeline. Astro resized these through
  * `astro:assets`; it cannot now, and should not — this site rebuilds hourly,
- * and re-encoding 95 photographs every hour to emit last hour's bytes is work
+ * and re-encoding 125 photographs every hour to emit last hour's bytes is work
  * nobody sees. hab-data-repo makes the webp derivatives once, at the widths
  * `HAB_WIDTHS` names, and this site links them.
  *

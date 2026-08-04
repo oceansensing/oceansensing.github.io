@@ -16,6 +16,225 @@ cover:
     Dense orange-brown water swirling offshore of a green, wooded shoreline
     on the York River.
 surveys:
+  - date: 2026-08-04
+    location: Lower York River, Gloucester Point
+    # Photos carry no timezone tag. UTC-4 confirmed the same way as the
+    # 31 July flight: this survey's MP4 creation time (15:54:12 UTC)
+    # against the same instant in its SRT telemetry clock (11:54:12).
+    timezone: EDT
+    note: >-
+      Drone survey, 11:55-12:14, from the VIMS campus across the Coleman
+      Bridge to the Yorktown waterfront and back.
+    photos:
+      - src: hab-2026-08-04-01.jpg
+        alt: >-
+          The Coleman Bridge under low cloud, with dark reddish-brown
+          water filling the river beyond it and greener water inshore.
+        time: '11:55'
+        camera: { lat: 37.24662, lon: -76.50108, alt: 119 }
+      - src: hab-2026-08-04-02.jpg
+        alt: >-
+          Bands of dark reddish-brown water converging toward a rock
+          breakwater and beach beside the Coleman Bridge.
+        time: '11:55'
+        camera: { lat: 37.24603, lon: -76.50076, alt: 119 }
+        center: { lat: 37.24476, lon: -76.50306 }
+      - src: hab-2026-08-04-03.jpg
+        alt: >-
+          The Coleman Bridge along its length, with reddish-brown water
+          beneath the span and a pale streak curving toward the shore.
+        time: '11:56'
+        camera: { lat: 37.24466, lon: -76.50031, alt: 119 }
+        center: { lat: 37.24468, lon: -76.50327 }
+      - src: hab-2026-08-04-04.jpg
+        alt: >-
+          A sharp foam-marked edge between dark reddish-brown water and
+          green water, running toward a beach and breakwater.
+        time: '11:56'
+        camera: { lat: 37.24465, lon: -76.50100, alt: 119 }
+        center: { lat: 37.24471, lon: -76.50228 }
+      - src: hab-2026-08-04-05.jpg
+        alt: >-
+          The bridge roadway from above with traffic crossing, and a
+          foam line along the edge of reddish-brown water beneath.
+        time: '11:57'
+        camera: { lat: 37.24474, lon: -76.50374, alt: 119 }
+        center: { lat: 37.24489, lon: -76.50489 }
+      - src: hab-2026-08-04-06.jpg
+        alt: >-
+          Boats moored along the docks of a marina basin beside the
+          bridge approach, the water inside olive green.
+        time: '11:58'
+        camera: { lat: 37.24726, lon: -76.50466, alt: 119 }
+        center: { lat: 37.24796, lon: -76.50412 }
+      - src: hab-2026-08-04-07.jpg
+        alt: >-
+          The Coleman Bridge from above, with a dark reddish-brown band
+          crossing beneath it and foam along its edge.
+        time: '11:59'
+        camera: { lat: 37.24702, lon: -76.50515, alt: 119 }
+        center: { lat: 37.24556, lon: -76.50535 }
+      - src: hab-2026-08-04-08.jpg
+        alt: >-
+          Looking straight down at the boundary between dark reddish-
+          brown water and lighter green water, with foam gathered along
+          it.
+        time: '11:59'
+        camera: { lat: 37.24556, lon: -76.50584, alt: 119 }
+        center: { lat: 37.24556, lon: -76.50584 }
+      - src: hab-2026-08-04-09.jpg
+        alt: >-
+          A close view of the edge between dark reddish-brown and green
+          water, breaking into patches along a foam line.
+        time: '11:59'
+        camera: { lat: 37.24552, lon: -76.50588, alt: 119 }
+        center: { lat: 37.24574, lon: -76.50663 }
+      - src: hab-2026-08-04-10.jpg
+        alt: >-
+          The bridge and the Gloucester Point shoreline, with patchy
+          reddish-brown water spreading downriver.
+        time: '11:59'
+        camera: { lat: 37.24551, lon: -76.50618, alt: 119 }
+        center: { lat: 37.24416, lon: -76.50737 }
+      - src: hab-2026-08-04-11.jpg
+        alt: >-
+          Crescent beaches behind rock breakwaters, with dark reddish-
+          brown water offshore.
+        time: '12:01'
+        camera: { lat: 37.24075, lon: -76.50946, alt: 120 }
+        center: { lat: 37.24044, lon: -76.51052 }
+      - src: hab-2026-08-04-12.jpg
+        alt: >-
+          The bridge approach and a waterfront of piers and brick
+          walkways, with dark water alongside.
+        time: '12:02'
+        camera: { lat: 37.24044, lon: -76.50941, alt: 120 }
+        center: { lat: 37.23971, lon: -76.50852 }
+      - src: hab-2026-08-04-13.jpg
+        alt: >-
+          Docks and moored boats at a waterfront, the water around them
+          dark reddish-brown.
+        time: '12:02'
+        camera: { lat: 37.23922, lon: -76.50684, alt: 120 }
+        center: { lat: 37.23878, lon: -76.50749 }
+      - src: hab-2026-08-04-14.jpg
+        alt: >-
+          A wide view over the waterfront and the bridge, with dark
+          water reaching upriver into the haze.
+        time: '12:03'
+        camera: { lat: 37.23786, lon: -76.50487, alt: 120 }
+        center: { lat: 37.23857, lon: -76.50785 }
+      - src: hab-2026-08-04-15.jpg
+        alt: >-
+          A row of crescent beaches behind breakwaters, with dark
+          reddish-brown water washing against them.
+        time: '12:04'
+        camera: { lat: 37.23673, lon: -76.50424, alt: 120 }
+        center: { lat: 37.23625, lon: -76.50540 }
+      - src: hab-2026-08-04-16.jpg
+        alt: >-
+          A long pier reaching from a beach out into dark reddish-brown
+          water.
+        time: '12:05'
+        camera: { lat: 37.23516, lon: -76.50325, alt: 119 }
+        center: { lat: 37.23510, lon: -76.50427 }
+      - src: hab-2026-08-04-17.jpg
+        alt: >-
+          Parallel streaks of dark reddish-brown water in the open
+          river.
+        time: '12:05'
+        camera: { lat: 37.23490, lon: -76.50286, alt: 120 }
+        center: { lat: 37.23582, lon: -76.50183 }
+      - src: hab-2026-08-04-18.jpg
+        alt: >-
+          A dark reddish-brown patch with a sharp lobed edge, sunlight
+          glinting off the water beside it.
+        time: '12:06'
+        camera: { lat: 37.23649, lon: -76.50272, alt: 120 }
+        center: { lat: 37.23701, lon: -76.50226 }
+      - src: hab-2026-08-04-19.jpg
+        alt: >-
+          Lobes and filaments of dark reddish-brown water threading
+          through greener water.
+        time: '12:06'
+        camera: { lat: 37.23868, lon: -76.50017, alt: 120 }
+        center: { lat: 37.23954, lon: -76.49975 }
+      - src: hab-2026-08-04-20.jpg
+        alt: >-
+          A branching front between dark reddish-brown water and green
+          water.
+        time: '12:07'
+        camera: { lat: 37.23849, lon: -76.49881, alt: 120 }
+        center: { lat: 37.23961, lon: -76.49883 }
+      - src: hab-2026-08-04-21.jpg
+        alt: >-
+          Streaks of dark reddish-brown water drawn out in parallel
+          bands.
+        time: '12:08'
+        camera: { lat: 37.23981, lon: -76.49886, alt: 120 }
+        center: { lat: 37.24038, lon: -76.50009 }
+      - src: hab-2026-08-04-22.jpg
+        alt: >-
+          The Gloucester Point shoreline and the VIMS campus from
+          downriver, with dark water along the near shore.
+        time: '12:08'
+        camera: { lat: 37.24131, lon: -76.49849, alt: 120 }
+        center: { lat: 37.24436, lon: -76.50042 }
+      - src: hab-2026-08-04-23.jpg
+        alt: >-
+          The bridge, the campus and the shoreline, with broad streaks
+          of dark reddish-brown water in the foreground.
+        time: '12:09'
+        camera: { lat: 37.24181, lon: -76.49832, alt: 120 }
+        center: { lat: 37.24410, lon: -76.49973 }
+      - src: hab-2026-08-04-24.jpg
+        alt: >-
+          Dense parallel streaks of dark reddish-brown water beside
+          clearer green water.
+        time: '12:10'
+        camera: { lat: 37.24408, lon: -76.49814, alt: 120 }
+        center: { lat: 37.24475, lon: -76.49910 }
+      - src: hab-2026-08-04-25.jpg
+        alt: >-
+          A pier and beach with a sharp front between dark reddish-brown
+          and green water running alongside.
+        time: '12:10'
+        camera: { lat: 37.24447, lon: -76.50090, alt: 120 }
+        center: { lat: 37.24517, lon: -76.50182 }
+      - src: hab-2026-08-04-26.jpg
+        alt: >-
+          The bridge from above with a truck crossing, and reddish-brown
+          water and foam beneath the span.
+        time: '12:11'
+        camera: { lat: 37.24503, lon: -76.50315, alt: 120 }
+        center: { lat: 37.24504, lon: -76.50464 }
+      - src: hab-2026-08-04-27.jpg
+        alt: >-
+          Long streaks of dark reddish-brown water along the Gloucester
+          Point shoreline, with piers and a boat wake.
+        time: '12:11'
+        camera: { lat: 37.24548, lon: -76.50212, alt: 120 }
+        center: { lat: 37.24618, lon: -76.49941 }
+      - src: hab-2026-08-04-28.jpg
+        alt: >-
+          Broad curving streaks of reddish-brown water offshore of the
+          shoreline.
+        time: '12:12'
+        camera: { lat: 37.24563, lon: -76.50219, alt: 120 }
+        center: { lat: 37.24540, lon: -76.49936 }
+      - src: hab-2026-08-04-29.jpg
+        alt: >-
+          The VIMS Gloucester Point campus and its research pier, with
+          dark water offshore.
+        time: '12:12'
+        camera: { lat: 37.24660, lon: -76.50184, alt: 108 }
+        center: { lat: 37.24761, lon: -76.50095 }
+      - src: hab-2026-08-04-30.jpg
+        alt: >-
+          The Coleman Bridge from its northern end, with reddish-brown
+          water beneath and a beach below.
+        time: '12:13'
+        camera: { lat: 37.24681, lon: -76.50176, alt: 103 }
   - date: 2026-07-31
     location: Lower York River, Gloucester Point
     # Photos carry no timezone tag. UTC-4 confirmed from the flight video:

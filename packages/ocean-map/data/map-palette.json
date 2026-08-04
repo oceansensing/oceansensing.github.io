@@ -340,15 +340,17 @@
     "earth",
     "mono"
   ],
-  "_defaultColormap": "Which map each field starts on. A reader can change it; this is the opening choice, and both are the scales oceanography actually reads these fields with \u2014 jet for temperature, cmo.haline for salinity. Neither is in markerSafe: measured, jet's worst clearance from a marker is 6.4 and cmo.haline's is 11.2, against the bar of 22. So a platform sitting on the wrong stop of the opening view has less separation than the gate demands everywhere else. That is a deliberate trade of familiarity against separation \u2014 the markers keep their dark outlines, which is what carries them on a background the fill contrast does not, and the five markerSafe scales stay one click away in the picker.",
+  "_defaultColormap": "Which map each field starts on. A reader can change it; this is the opening choice, and both are the scales oceanography actually reads these fields with \u2014 jet for temperature, cmo.haline for salinity. Neither is in markerSafe: measured, jet's worst clearance from a marker is 6.4 and cmo.haline's is 11.2, against the bar of 22. So a platform sitting on the wrong stop of the opening view has less separation than the gate demands everywhere else. That is a deliberate trade of familiarity against separation \u2014 the markers keep their dark outlines, which is what carries them on a background the fill contrast does not, and the five markerSafe scales stay one click away in the picker. Ice concentration opens on cmo.ice for the same reason: it is the scale sea ice is read with, near-black through blue to white, and white at the top is what makes a full pack look like one. Its worst clearance from a marker is 6.6, so it is exempt alongside the other two \u2014 and the exemption costs less here than it looks, because the layer only paints above 15% concentration, which is a tenth of the ocean and not where the gliders are.",
   "defaultColormap": {
     "sst": "jet",
-    "sss": "cmo.haline"
+    "sss": "cmo.haline",
+    "sic": "cmo.ice"
   },
   "_defaultExempt": "Fields whose default colormap is knowingly not marker-safe. Named here rather than reclassified, so scripts/test-contrast.mjs reports the cost on every run instead of it disappearing. Drop a field from this list and the gate fails until its default is a safe map again.",
   "defaultExempt": [
     "sst",
-    "sss"
+    "sss",
+    "sic"
   ],
   "_measure": "The measuring line. Dark rather than bright because it is drawn over everything and must not be mistaken for a platform or a current; charcoal was the only candidate clearing both bathymetries while staying clear of every feature colour. It carries a light halo, which like the track casings is an outline rather than a feature colour and so is themed in CSS rather than gated here.",
   "_concessions": "Every place a colour on this map knowingly sits under the \u0394E 22 bar, with the measured distance and the reason. Recorded here rather than by lowering the threshold, which would quietly cover every future clash as well. scripts/test-contrast.mjs reports each on every run and checks the list **both ways**: a pair under the bar with no concession fails, and a concession for a pair that actually clears fails too. Without the second half the list rots \u2014 a clash that got fixed would still be listed, and the listing would stop meaning anything. Same bargain markerSafe strikes with the colormaps. What makes these tolerable is that a particle is a thin moving trail and the things it is close to are either filled dots with dark outlines or a whole-field raster: form and motion separate them where colour does not. That argument has limits, and the honest place to see them is this list getting longer.",

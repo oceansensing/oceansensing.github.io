@@ -493,7 +493,7 @@ place it can be.
 
 Also not here. `HAB_DATA` in `src/config.ts` points at
 [`oceansensing/hab-data-repo`](https://github.com/oceansensing/hab-data-repo),
-which holds the 95 aerial photographs the harmful-algal-bloom page shows.
+which holds the 125 aerial photographs the harmful-algal-bloom page shows.
 
 **Same split, weaker reason, and the docs should not pretend otherwise.** The
 ocean data had to move: it was rewritten hourly and banked every version
@@ -504,22 +504,32 @@ forever. These were committed once and never touched — 27 MB live against
 **`astro:assets` no longer touches them, and that is the substantive cost.**
 It was making 361 responsive webp derivatives at build time. It cannot now —
 the files are not here — and it should not, because this site rebuilds
-*hourly* and re-encoding 95 photographs every hour to emit last hour's bytes
+*hourly* and re-encoding 125 photographs every hour to emit last hour's bytes
 is work nobody sees. `hab-data-repo` runs sharp once per change and publishes
 `w800` and `w1400`; `HAB_WIDTHS` here and that workflow **must agree**, since
 a `srcset` does not negotiate — a width in one place only is a broken image,
 not a smaller one.
 
 The widths stop at 1400 because the largest thing published is the source
-file, and it is **not one size**: 57 of the 95 are 2000 px, re-exported from
-camera originals with their GPS and capture times restored, and 38 are the
+file, and it is **not one size**: 87 of the 125 are 2000 px and 38 are the
 older 1600 px web exports whose originals have not been found. So the
 lightbox and the download button take the file itself.
+
+The 2000 px files come by two routes, and the difference is worth keeping.
+The 57 oldest were **re-exported from camera originals** and had to be
+*matched* to them by image content and confirmed against the camera position
+in this page's frontmatter — adjacent frames in a drone pass are near
+identical, so neither test alone would do. The 30 from 2026-08-04 were
+resized straight from the camera JPEGs, so their EXIF is native rather than
+restored and there was nothing to match: verified after resizing at GPS
+within 1 m of the source and `DateTimeOriginal` intact on all 30. That is
+the cheaper path, and it is the one available whenever the originals have
+not been through a web export first.
 
 Each served file carries copyright, creator and usage terms in EXIF, IPTC and
 XMP, written by that repository on publish rather than into the copies in
 git — so a photograph that leaves the site says who made it, and the wording
-can change without rewriting 95 binaries. The year comes from the
+can change without rewriting 125 binaries. The year comes from the
 photograph's own filename: a 2017 bloom is not a 2026 work.
 
 The **cover** is the one photograph still here, so the observation card's
@@ -2171,6 +2181,123 @@ layer takes a floor below which it draws nothing.
 and ice occupies about a tenth of it, so ~150 of the 162 tiles would publish
 open water. The polar bands are regions already, at 0.16°, which is finer
 than a pack edge is meaningful at.
+
+#### The ice edge
+
+The 15% concentration contour, cut in `fetch-ocean-fields.py` from the very
+region grids the concentration layer draws — **read back off disk rather than
+recomputed from the fetch**, so the line and the field under it cannot
+disagree. 15% is what every ice service reports extent at, so it means the
+same thing here as on an NSIDC chart.
+
+**A line, not a filled field, and that is the whole reason it is worth
+having.** A filled ice raster shares the scalar pane, so it has to be
+exclusive with SST — and ice edge over SST is exactly the pair a reader
+wants. A line composes over anything. It sits in its own pane at z-index 247:
+above every scalar raster so it reads over a temperature field, below the
+flow so a static line never crosses moving water, and separate from `bathy`
+so the isobath opacity slider does not drag it along — the same thing the
+shoreline needed.
+
+Its colour is in CSS, not the palette, for the same reason the isobaths' is:
+it is linework whose legibility comes from a casing. Gating it would fail
+anyway — it is drawn over the colour scales, so "every colormap" is its
+background, and against a grey one no light line clears the bar. It gets its
+own variable rather than sharing the isobaths', because the two are on screen
+together over the same water and one colour would make the 20 m contour and
+the pack edge the same line. **Its halo does not flip on a dark basemap**,
+unlike the isobaths': a grey contour on dark water needs a light casing to be
+seen, and a near-white ice line already clears dark water — giving it a light
+halo would smear it into a glow.
+
+**Marching squares in the standard library** (`scripts/lib/contour.py`).
+`fetch-bathymetry.py` contours with matplotlib and can, because the seafloor
+is computed once by hand on a workstation. The ice edge moves daily and runs
+in the hourly build, where `eccodes` is the only dependency anyone has been
+willing to add and it is paid for by a format nobody can decode in forty
+lines. Seventeen levels with per-depth speckle filtering would have earned
+matplotlib; one threshold is about a hundred lines.
+
+Three details in it are load-bearing:
+
+- **`None` counts as no ice, not as no data.** The analysis masks open water
+  as missing and the forecast writes a real 0, and reading None as 0
+  collapses that difference exactly where it does not matter. The
+  consequence, stated rather than discovered: it also puts an edge where ice
+  meets *land*, which is true — that is where the pack is landfast — but it
+  means the line runs along the coast in places the shoreline layer already
+  draws.
+- **`la1` is the north edge and the rows run southward**, so the contour
+  takes a *negative* latitude step. Passing `+dy` contours the grid mirrored
+  about its own middle latitude: the same shape, in the wrong hemisphere,
+  which over a polar band looks entirely plausible until you notice it is
+  upside down.
+- **Endpoints are joined at rounded precision.** Two cells sharing an edge
+  compute the same crossing from the same corners but reach it by different
+  arithmetic, and at 1e-16 they sometimes differ; joining on exact equality
+  left one line in several hundred pieces.
+
+**The tolerance is chosen to be free, not to fix the look — which is the
+opposite of the isobaths.** There the tolerance was binding and had to be
+tightened. Here the *grid* binds: the analysis is 0.25°, which is 22.8 px at
+zoom 7, and the contour's median segment is 14.7 px, already under a cell. So
+0.02° is set to strip collinear runs at a cost of 0.46 px of deviation —
+imperceptible — and it halves the file. No tolerance makes this line smoother,
+because nothing can draw a 0.25° product smoother than 0.25°.
+
+It is cheap: 53 lines and 4,052 vertices for the analysis (74 KB raw), 436 and
+9,955 for the forecast (188 KB), against the isobaths' 2.95 MB gzipped. It is
+**fetched only when switched on**, through the same `whenChosen` latch the
+offline coastline uses, and drawn as one multi-line polyline — one DOM node,
+not 436.
+
+#### The ice layers on the map
+
+Three entries in the switcher: `SIC (OISST)`, `SIC (ESPC)` and `Ice edge`.
+The two concentration layers join the scalar exclusivity group, because they
+share the `sst` pane and the upper would simply hide the lower; the edge
+deliberately does not.
+
+**`drawAbove` is new and is what makes the two products draw the same
+thing.** A scalar field with a floor below which nothing is painted has no
+analogue in temperature or salinity — every reading there is the ocean, and
+covering all of it is the point. Ice is the opposite: most of the sea has
+none, and drawn literally the forecast would paint the entire ocean in the
+ramp's bottom colour while the analysis of the same hour painted only the
+pack. The floor is 0.15, the same number the edge is cut at.
+
+**The range is pinned by `autoClamp` to the whole scale rather than bounded
+to the view.** Per-view is right for temperature, where a basin spans ten of
+the ocean's thirty degrees and a fixed scale wastes the ramp. It is wrong
+here: 15–100% *is* the scale, and rescaling to whatever pack is on screen
+would make one colour mean a different concentration in every view. Ice is
+read as "how packed", not "how packed relative to here".
+
+It opens on `cmo.ice` — near-black through blue to white, the scale ice is
+conventionally read with, and white at the top is what makes a full pack look
+like one. Not marker-safe (worst ΔE 6.6), so it is named in `defaultExempt`
+beside `jet` and `cmo.haline` and the gate reports the cost on every run.
+
+**Displayed in percent, stored as a fraction.** Every ice service reports the
+edge as "the 15% contour" and a full floe as "90% ice"; a legend reading
+"0.15 to 1" is the number the file holds and not the number anybody says. The
+conversion is display-only — data, pinned range and contour threshold stay
+fractions — so a unit label can never come to disagree with the values, which
+is precisely the trap `icec` itself fell into.
+
+Two bugs found by opening the page rather than by any gate, both worth
+recording:
+
+- **Every field in `FIELDS` needs a matching entry in `choices`.** The
+  coupling is invisible: `choiceFor` indexes `choices` by the field's key and
+  the legend reads `.map` off the result, so a field added to one and not the
+  other throws on the first repaint rather than falling back to a default.
+- **A step that is not a binary fraction did not survive the range
+  rounding.** `Math.floor(0.15 / 0.05) * 0.05` is 0.1, and the ceiling of the
+  same pair overshoots to 0.15000000000000002 — which the legend then printed
+  verbatim. Temperature steps by 1 and salinity by 0.5, both exact, so this
+  was latent from the beginning and ice is simply the first field with a
+  fractional step.
 
 #### Never hardcode an index into the aggregation
 

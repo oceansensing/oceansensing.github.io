@@ -22,15 +22,21 @@ an experiment, it is a broken deploy.
 
 ## What is being tried right now
 
-**Nothing.** The fork is back in sync with production — `diff -r` shows only
-this README and `package.json`, which is the resting state and the right one
-to leave it in.
+**Sea ice.** Two concentration layers — the OISST analysis and the ESPC
+forecast — plus the 15% edge as linework in its own pane. The data comes from
+the shared pipelines like everything else; what is being tried here is how to
+draw a field that covers a tenth of the ocean rather than all of it, which is
+the first scalar on this map that is mostly absent.
 
-The last experiment, runtime particle colours, **graduated**: it is in
+Two things in it may or may not deserve promotion, and that is the question:
+`drawAbove`, a floor below which a scalar paints nothing, and a range pinned
+to the whole scale rather than to the view. Both are right for ice and both
+would be wrong for temperature, so the interesting part is whether they
+generalise or are ice-shaped.
+
+The previous experiment, runtime particle colours, **graduated** — it is in
 `packages/ocean-map/contrast.ts` now, gated by `test:contrast` over every
-background the map can present and by `test:units` for the picker's labels.
-Promotion is what success looks like here, and the fork going quiet is the
-evidence.
+background the map can present.
 
 ## How to read it
 
