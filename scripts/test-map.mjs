@@ -174,6 +174,9 @@ const files = {
   'currents-arctic-60m': JSON.parse(fs.readFileSync('scripts/fixtures/map/currents-arctic-60m.json', 'utf8')),
   argo: JSON.parse(fs.readFileSync('scripts/fixtures/map/argo.json', 'utf8')),
   'sss-navy': JSON.parse(fs.readFileSync('scripts/fixtures/map/sss-navy.json', 'utf8')),
+  'sic-oisst': JSON.parse(fs.readFileSync('scripts/fixtures/map/sic-oisst.json', 'utf8')),
+  'sic-navy': JSON.parse(fs.readFileSync('scripts/fixtures/map/sic-navy.json', 'utf8')),
+  'sit-navy': JSON.parse(fs.readFileSync('scripts/fixtures/map/sit-navy.json', 'utf8')),
   'sst-oisst': JSON.parse(fs.readFileSync('scripts/fixtures/map/sst-oisst.json', 'utf8')),
   'sst-oisst-atlantic': JSON.parse(fs.readFileSync('scripts/fixtures/map/sst-oisst-atlantic.json', 'utf8')),
   'sst-oisst-arctic': JSON.parse(fs.readFileSync('scripts/fixtures/map/sst-oisst-arctic.json', 'utf8')),
@@ -1035,6 +1038,34 @@ const offRamp = ([r, g, b]) => {
    assembled grid and the readout has no temperature to report — which is a
    property of the fixture, not of the map. */
 host._map.setView([10, -50], 4, { animate: false });
+await new Promise((r) => setTimeout(r, 400));
+
+/* ---- sea ice -------------------------------------------------------
+
+   Turning concentration on must turn temperature off — they share the `sst`
+   pane, so the upper would hide the lower. And the draw floor is measured
+   rather than assumed: the fixture's forecast writes a real 0 over open
+   water, so a layer without a floor paints the tropics. */
+const iceOn = overlayLabelled(/SIC \(ESPC\)/)?.querySelector('input');
+const sstWasOn = overlayLabelled(/SST \(ESPC\)/)?.querySelector('input')?.checked;
+if (iceOn && !iceOn.checked) iceOn.click();
+await new Promise((r) => setTimeout(r, 500));
+const iceExclusive =
+  sstWasOn !== true ||
+  overlayLabelled(/SST \(ESPC\)/)?.querySelector('input')?.checked === false;
+
+/* The draw floor cannot be observed here: jsdom does no layout, so the
+   raster never paints and `getRange()` stays null. It is verified in a
+   browser instead — ice draws over the pack and nothing over open water.
+   What jsdom *can* see is the coupling that actually broke while building
+   this: a field in FIELDS with no matching entry in `choices` throws on the
+   first repaint rather than falling back, because the legend reads `.map`
+   off the result of indexing one by the other. */
+const iceFieldsWired = (() => {
+  const shown = host.closest('[data-ocean-map]')?.querySelector('[data-sst-key]');
+  return !!shown && !/undefined|NaN/.test(shown.textContent ?? '');
+})();
+if (iceOn?.checked) iceOn.click();
 await new Promise((r) => setTimeout(r, 400));
 
 const sstOisstToggle = overlayLabelled(/OISST/);
@@ -2413,6 +2444,23 @@ const checks = [
   ['SST reaches native 1/12° resolution, not a regional subsample',
     nativeSst.dx === 0.08 && nativeSst.value === 21.5],
   ['an SST layer is offered for each source', !!sstOisstToggle && !!sstNavyToggle],
+  /* ---- sea ice -------------------------------------------------------
+     These graduated from the sandbox, so they are held to the gates they
+     were exempt from there. */
+  ['the ice layers are offered, all three off by default',
+    ['SIC (OISST)', 'SIC (ESPC)', 'SIT (ESPC)'].every((n) => {
+      const box = overlayLabelled(new RegExp(n.replace(/[()]/g, '\\$&')));
+      return !!box && box.querySelector('input')?.checked === false;
+    })],
+  /* Ice shares the scalar pane, so it must be exclusive with temperature —
+     the upper raster simply hides the lower, and the map would name two
+     fields while showing one. */
+  ['ice concentration is exclusive with temperature', iceExclusive],
+  /* The floor is what makes the two products draw the same thing: the
+     analysis masks open water as missing and the forecast writes a real 0,
+     so without it the forecast paints the whole ocean in the ramp's bottom
+     colour while the analysis paints only the pack. */
+  ['every ice field has a colour-scale entry, so the legend builds', iceFieldsWired],
   /* Staleness has to be visible. The currents served a two-day-old model run
      while every check stayed green, and the only thing that gave it away was
      the run printed in the attribution. */

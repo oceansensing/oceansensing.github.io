@@ -36,6 +36,7 @@
     --map-border: #4a525c;
     --map-border-state: #6b7480;
     --map-grid: #7f8c9b;
+    --map-credit: #4c5865;
     --map-grid-label: #46525f;
     --map-grid-label-halo: rgba(255, 255, 255, 0.95);
     --map-casing: #0d1218;
@@ -47,10 +48,6 @@
     --map-measure-halo: #ffffff;
     --map-bathy: #97a2b3;
     --map-bathy-halo: rgba(9, 14, 21, 0.65);
-    /* A cold near-white: ice reads as white, and the halo is what carries
-       it over a pale colour scale. */
-    --map-ice-edge: #dcecff;
-    --map-ice-edge-halo: rgba(9, 20, 34, 0.75);
     --map-coast: brightness(0.55) contrast(1.3);
     --map-coast-halo: rgba(255, 255, 255, 0.6);
     --map-currents-blend: multiply;
@@ -88,8 +85,7 @@
       --map-border: #97a3b2;
       --map-border-state: #7d8896;
       --map-grid: #6d7a88;
-    --map-grid-label: #d7e0ea;
-    --map-grid-label-halo: rgba(6, 12, 20, 0.95);
+      --map-credit: #aab4c2;
       --map-grid-label: #d7e0ea;
       --map-grid-label-halo: rgba(6, 12, 20, 0.95);
       --map-casing: #05080c;
@@ -100,8 +96,6 @@
       --map-eez: saturate(0.5) brightness(1.4);
       --map-bathy: #aab4c2;
       --map-bathy-halo: rgba(4, 8, 13, 0.7);
-      --map-ice-edge: #e8f3ff;
-      --map-ice-edge-halo: rgba(2, 6, 12, 0.8);
       --map-currents-blend: multiply;
       --map-measure-halo: #e8eef5;
     }
@@ -113,6 +107,12 @@
     --map-border: #97a3b2;
     --map-border-state: #7d8896;
     --map-grid: #6d7a88;
+    --map-credit: #aab4c2;
+    /* These lived in the prefers-color-scheme block and not here, so the
+       theme *toggle* left the labels at their light colour on a dark
+       page — the same split the isobath halo was caught by. */
+    --map-grid-label: #d7e0ea;
+    --map-grid-label-halo: rgba(6, 12, 20, 0.95);
     --map-casing: #05080c;
     --map-casing-opacity: 0.55;
     --map-asset-edge: #05080c;
@@ -121,8 +121,6 @@
     --map-eez: saturate(0.5) brightness(1.4);
     --map-bathy: #aab4c2;
     --map-bathy-halo: rgba(4, 8, 13, 0.7);
-    --map-ice-edge: #e8f3ff;
-    --map-ice-edge-halo: rgba(2, 6, 12, 0.8);
     --map-currents-blend: multiply;
     --map-measure-halo: #ffffff;
   }
@@ -153,14 +151,6 @@
        what a label is seen against is the basemap, not the page. */
     --map-grid-label: #e6edf5;
     --map-grid-label-halo: rgba(4, 9, 16, 0.95);
-
-    /* **Not** flipped to a light halo the way the isobaths' is, and the
-       difference is the stroke. A grey contour on dark water needs a light
-       casing to be seen at all; a near-white ice line already clears dark
-       water, and giving it a light halo would smear it into a glow. It
-       keeps its dark casing, which is what separates it from the pale
-       shelf tones GEBCO paints and from a pale colour scale above them. */
-    --map-ice-edge-halo: rgba(2, 6, 12, 0.85);
 
     /* The shoreline needs the same treatment for the same reason, and went
        out without it. Its tint was keyed to the theme while the thing it has
@@ -342,25 +332,6 @@
 
   .ocean-map .leaflet-bathy-pane {
     filter: drop-shadow(0 0 0.6px var(--map-bathy-halo));
-  }
-
-  /* The sea ice edge. Linework, so it is themed here rather than gated in
-     the palette — same argument as the isobaths, and the gate would fail it
-     anyway: it is drawn over the scalar fields, so "every colour scale" is
-     its background, and against a grey scale no light line clears the bar.
-
-     Its own variable rather than the isobaths', because the two are on
-     screen together over the same water and a shared colour would make the
-     20 m contour and the pack edge one line. */
-  .ocean-map .map-ice-edge {
-    fill: none;
-    stroke: var(--map-ice-edge);
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .ocean-map .leaflet-ice-edge-pane {
-    filter: drop-shadow(0 0 0.8px var(--map-ice-edge-halo));
   }
 
   /* Vectors in a custom pane render as nothing without this, and nothing is
@@ -884,7 +855,12 @@
   margin: 0.35rem 0 0;
   font-size: var(--text-xs, 0.8125rem);
   line-height: 1.45;
-  color: var(--text-muted, #5b6672);
+  /* **Themed by this package, not inherited from the host.** It read
+     `var(--text-muted, #5b6672)`, and one fallback cannot serve two schemes:
+     a host that does not define the token gets a near-black credit on a dark
+     page. Declared in all three theme blocks, as every other theme-sensitive
+     value here is. */
+  color: var(--map-credit, #4c5865);
 }
 
 .ocean-map .om-credit .leaflet-control-attribution {

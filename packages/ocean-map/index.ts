@@ -489,6 +489,9 @@ export async function createOceanMap(
   const sstOisst = L.layerGroup();
   const sstNavy = L.layerGroup();
   const sssNavy = L.layerGroup();
+  const iceOisst = L.layerGroup();
+  const iceNavy = L.layerGroup();
+  const iceThickness = L.layerGroup();
   const ssts: { group: L.LayerGroup; layer: ScalarLayer }[] = [];
   /* Both animated fields, so the point readout can sample whichever one
      the reader has on rather than a fixed depth. */
@@ -1119,6 +1122,10 @@ export async function createOceanMap(
      are the same kind of thing — a value per cell, drawn as a raster — so
      they share the layer, the tier machinery and the readout, and differ
      only in what is listed here. */
+  /** Whether a value falls under its field's draw floor. */
+  const below = (field: FieldDescriptor | undefined, v: number) =>
+    field?.drawAbove !== undefined && v < field.drawAbove;
+
   const FIELDS: Record<string, FieldDescriptor> = {
     // "Sea surface" alone stopped being unambiguous the moment a second
     // surface field existed.
@@ -1139,6 +1146,28 @@ export async function createOceanMap(
        labelled in psu. A range the reader pins by hand is untouched — this
        bounds what "Auto" chooses, not what they are allowed to ask for. */
     sss: { key: 'sss', unit: 'psu', step: 0.5, label: 'Salinity', autoClamp: [29, 39] },
+    /* Sea ice concentration, as a fraction. The range is pinned by
+       `autoClamp` to the whole of it rather than bounded to the view: a
+       per-view range is right for temperature, where a basin spans ten of
+       the ocean's thirty degrees and a fixed scale would waste the ramp,
+       and wrong here, because 0.15-1.0 *is* the whole scale and rescaling
+       it to whatever pack happens to be on screen would make the same
+       colour mean a different concentration in every view. Ice is read as
+       "how packed", not "how packed relative to here". */
+    sic: {
+      key: 'sic', unit: '%', step: 0.05, label: 'Ice concentration',
+      autoClamp: [0.15, 1], drawAbove: 0.15, percent: true,
+    },
+    /* Thickness in metres. Unlike concentration this is *not* pinned to a
+       fixed scale: 0-15 m spans ridged multi-year ice that almost no view
+       contains, so a fixed bar would leave a typical Arctic summer view in
+       the bottom fifth of the ramp. It bounds the automatic range instead,
+       the way salinity does. The floor is 0.1 m — thinner than that is
+       nominal ice the concentration field already shows better. */
+    sit: {
+      key: 'sit', unit: 'm', step: 0.25, label: 'Ice thickness',
+      autoClamp: [0, 8], drawAbove: 0.1,
+    },
   };
 
   /* What the reader has chosen, per field rather than per layer: the two
@@ -1150,6 +1179,13 @@ export async function createOceanMap(
   const choices: Record<string, FieldChoice> = {
     sst: { map: palette.defaultColormap?.sst ?? 'thermal', range: null },
     sss: { map: palette.defaultColormap?.sss ?? 'haline', range: null },
+    /* Every field in FIELDS needs an entry here, and the coupling is not
+       obvious: `choiceFor` indexes this by the field's key and the legend
+       reads `.map` off the result, so a field added to FIELDS alone throws
+       on the first repaint rather than falling back to a default. Adding
+       `sic` without this is exactly what happened. */
+    sic: { map: palette.defaultColormap?.sic ?? 'cmo.ice', range: null },
+    sit: { map: palette.defaultColormap?.sit ?? 'cmo.ice', range: null },
   };
   /* What a scalar layer needs to know about the quantity it is painting.
      `FIELDS` below is the whole set; a new scalar is an entry there and one in
@@ -1163,6 +1199,36 @@ export async function createOceanMap(
     /** Bounds the *automatic* range, where the extremes are not ocean — see
         the salinity note in FIELDS. A pinned range ignores it. */
     autoClamp?: [number, number];
+    /** Shown as a percentage rather than as the fraction it is stored as.
+
+        Ice concentration is published 0–1 and reported by every ice service
+        in percent — the edge is "the 15% contour", a full floe is "90%
+        ice". A legend reading "0.15 to 1" is the number the file holds and
+        not the number anybody says. Display only: the data, the pinned
+        range and the contour threshold all stay fractions, so nothing has
+        to be converted back and the trap that `icec` fell into — a unit
+        label disagreeing with the values — cannot be reintroduced here. */
+    percent?: boolean;
+    /** Below this the field is not drawn at all, and is not counted when the
+        automatic range is measured.
+
+        Temperature and salinity have no such value: every reading is the
+        ocean, and a raster covering all of it is the point. Ice
+        concentration is the opposite — most of the sea has none, and the two
+        products do not even agree on how to say so. The analysis masks open
+        water as missing; the forecast writes a real 0, so 37,530 cells that
+        one omits the other reports as ice-free ocean. Drawn literally, the
+        forecast layer paints the entire ocean in the ramp's bottom colour
+        and hides the basemap, while the analysis of the same hour paints
+        only the pack — two renderings of one quantity that look nothing
+        alike.
+
+        Discarding it upstream was the alternative and is worse: 0 is true,
+        and the edge contour is cut from exactly that 0-to-non-0 boundary.
+        So the pipeline publishes what the model says and the floor lives
+        here, at the same 15% the edge uses, which also makes the two
+        products draw the same thing. */
+    drawAbove?: number;
   }
 
   const choiceFor = (field?: FieldDescriptor) => choices[field?.key ?? 'sst']!;
@@ -1240,8 +1306,15 @@ export async function createOceanMap(
         if (v > hi) hi = v;
       }
       const step = this.options.field?.step ?? 1;
-      lo = Math.floor(lo / step) * step;
-      hi = Math.ceil(hi / step) * step;
+      /* Snapped back to the step's own precision after the arithmetic.
+         `Math.floor(0.15 / 0.05) * 0.05` is 0.1 and the ceil of the same
+         pair overshoots to 0.15000000000000002 — a step that is not a
+         binary fraction cannot survive the round trip. Temperature steps by
+         1 and salinity by 0.5, both exact, so this was invisible until ice
+         arrived with 0.05 and printed its own range into the legend. */
+      const snap = (v: number) => Number(v.toFixed(6));
+      lo = snap(Math.floor(snap(lo / step)) * step);
+      hi = snap(Math.ceil(snap(hi / step)) * step);
       /* Some fields have automatic bounds worth holding to a sensible
          window — see the salinity note in FIELDS. Applied after rounding
          so the clamp lands exactly on the stated numbers. */
@@ -1368,7 +1441,7 @@ export async function createOceanMap(
           const u = cols[x]!;
           if (u < 0) continue;
           const v = sample(u, rowV[y]!);
-          if (v !== null) seen.push(v);
+          if (v !== null && !below(this.options.field, v)) seen.push(v);
         }
       }
       // A range the reader has pinned wins over the view.
@@ -1388,6 +1461,8 @@ export async function createOceanMap(
           if (u < 0) continue;
           const v = sample(u, vRow);
           if (v === null) continue;              // land, ice, or no data
+          // Below a field's floor there is nothing to draw — see `drawAbove`.
+          if (below(this.options.field, v)) continue;
           const rgb = rampColour(stopsFor(this.options.field), v, lo, hi);
           const k = (y * w + x) * 4;
           out[k] = rgb[0]!;
@@ -1587,6 +1662,9 @@ export async function createOceanMap(
   buildField(`${DATA}sst-oisst.json`, sstOisst, FIELDS.sst);
   buildField(`${DATA}sst-navy.json`, sstNavy, FIELDS.sst);
   buildField(`${DATA}sss-navy.json`, sssNavy, FIELDS.sss);
+  buildField(`${DATA}sic-oisst.json`, iceOisst, FIELDS.sic);
+  buildField(`${DATA}sic-navy.json`, iceNavy, FIELDS.sic);
+  buildField(`${DATA}sit-navy.json`, iceThickness, FIELDS.sit);
 
   /* The legend key is built from the same palette the renderer reads, so
      the two cannot drift, and it stays hidden until a temperature layer is
@@ -1608,8 +1686,10 @@ export async function createOceanMap(
       // two scalars sharing one key would otherwise mislabel one of them.
       const hexes = (palette.colormaps ?? {})[choiceFor(field).map] ?? [];
       sstKey.style.setProperty('--sst-ramp', `linear-gradient(to right, ${hexes.join(', ')})`);
+      const shown = (v: number) =>
+        field?.percent ? String(Math.round(v * 100)) : String(v);
       sstKey.textContent = range
-        ? `${range[0]} to ${range[1]} ${field?.unit ?? ''}`.trim()
+        ? `${shown(range[0])} to ${shown(range[1])} ${field?.unit ?? ''}`.trim()
         : (field?.label ?? 'ocean field');
     };
     map.on('overlayadd overlayremove moveend zoomend', showKey);
@@ -2621,6 +2701,16 @@ export async function createOceanMap(
     'SST (OISST analysis)': sstOisst,
     'SST (ESPC)': sstNavy,
     'SSS (ESPC)': sssNavy,
+    /* Ice concentration, named for the product like every other scalar.
+       `SIC` is the standard acronym, so it takes the same shape as SST and
+       SSS rather than being spelled out. */
+    'SIC (OISST)': iceOisst,
+    'SIC (ESPC)': iceNavy,
+    /* Thickness, and it replaced the ice edge. The edge drew the boundary of
+       a field already on screen; this is a quantity the concentration does
+       not carry — 90% cover of 0.3 m new ice and 90% of 2 m multi-year ice
+       are the same picture and very different ocean. */
+    'SIT (ESPC)': iceThickness,
     ...(MERCATOR_RASTER ? { 'Current speed (Mercator)': currents } : {}),
     'Hurricanes': storms,
     'NOAA USVs': usvs,
@@ -2941,7 +3031,12 @@ export async function createOceanMap(
     [flow, flowDeep],
     // Every scalar raster: they share a pane, so the upper one simply
     // hides the lower and the map would name two fields while showing one.
-    [sstOisst, sstNavy, sssNavy],
+    /* Ice concentration joins them: it is another scalar raster in the same
+       pane, so the upper one would simply hide the lower and the map would
+       name two fields while showing one. The ice *edge* is deliberately not
+       here — it is a line in its own pane, and edge-over-SST is the pair
+       worth reading. */
+    [sstOisst, sstNavy, sssNavy, iceOisst, iceNavy, iceThickness],
   ];
 
   /* A scalar field going on or off swaps the background wholesale — from the
@@ -3288,7 +3383,7 @@ export async function createOceanMap(
       /* Only when a temperature layer is on. With none loaded there is no
          grid to miss, and "no data" would claim something untrue about the
          ocean rather than about the map. */
-      (temp ? `<dt>${temp.label}</dt><dd>${temp.value.toFixed(1)} ${temp.unit}</dd>` : '') +
+      (temp ? `<dt>${temp.label}</dt><dd>${temp.text}</dd>` : '') +
       `</dl>`
     );
   };
@@ -3703,9 +3798,22 @@ export async function createOceanMap(
     const j = Math.round((h.la1 - ll.lat) / h.dy);
     if (i < 0 || j < 0 || j >= h.ny) return null;
     const v = grid.data[j * h.nx + i];
-    return typeof v === 'number'
-      ? { value: v, unit: h.units === 'psu' ? 'psu' : '°C', label: field?.label ?? 'Sea surface' }
-      : null;
+    if (typeof v !== 'number') return null;
+    /* **The unit comes from the field, not from a guess at the data.** This
+       read `h.units === 'psu' ? 'psu' : '°C'`, which is a two-way guess in a
+       place that now has three answers: ice publishes `fraction`, fell into
+       the else, and the readout reported a concentration of 0.9 as "0.9 °C".
+       `FIELDS` already states the unit and whether to show it as a
+       percentage — the same descriptor the colour bar reads — so there is
+       nothing to infer.
+
+       Formatted here rather than by the caller, because the caller cannot
+       know that a fraction is shown times a hundred without asking the same
+       descriptor again. */
+    const text = field?.percent
+      ? `${Math.round(v * 100)} ${field.unit ?? '%'}`
+      : `${v.toFixed(1)} ${field?.unit ?? ''}`.trim();
+    return { text, label: field?.label ?? 'Sea surface' };
   };
 
   /* **Every** animated field that is on, not the first one found.

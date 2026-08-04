@@ -779,7 +779,14 @@ that graduates has to satisfy the gates it was exempt from, and usually has
 to be argued for here as well, because this map's constants are measured
 decisions rather than preferences.
 
-#### The first experiment graduated
+#### Two experiments have graduated
+
+**Sea ice** — concentration from both sources and thickness — was built here
+and is in production now, along with `drawAbove`, the floor below which a
+scalar paints nothing. That floor was the open question when it was a
+sandbox: it is right for ice and would be wrong for temperature, so whether
+it generalised or was ice-shaped had to be seen. It generalises as an opt-in
+per field, which is why it graduated as one.
 
 Runtime particle colours were built here and are **in production now** — see
 "Particle colours are chosen against what is behind them". The fork is back

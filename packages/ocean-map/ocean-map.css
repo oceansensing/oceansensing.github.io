@@ -36,6 +36,7 @@
     --map-border: #4a525c;
     --map-border-state: #6b7480;
     --map-grid: #7f8c9b;
+    --map-credit: #4c5865;
     --map-grid-label: #46525f;
     --map-grid-label-halo: rgba(255, 255, 255, 0.95);
     --map-casing: #0d1218;
@@ -84,8 +85,7 @@
       --map-border: #97a3b2;
       --map-border-state: #7d8896;
       --map-grid: #6d7a88;
-    --map-grid-label: #d7e0ea;
-    --map-grid-label-halo: rgba(6, 12, 20, 0.95);
+      --map-credit: #aab4c2;
       --map-grid-label: #d7e0ea;
       --map-grid-label-halo: rgba(6, 12, 20, 0.95);
       --map-casing: #05080c;
@@ -107,6 +107,12 @@
     --map-border: #97a3b2;
     --map-border-state: #7d8896;
     --map-grid: #6d7a88;
+    --map-credit: #aab4c2;
+    /* These lived in the prefers-color-scheme block and not here, so the
+       theme *toggle* left the labels at their light colour on a dark
+       page — the same split the isobath halo was caught by. */
+    --map-grid-label: #d7e0ea;
+    --map-grid-label-halo: rgba(6, 12, 20, 0.95);
     --map-casing: #05080c;
     --map-casing-opacity: 0.55;
     --map-asset-edge: #05080c;
@@ -849,7 +855,12 @@
   margin: 0.35rem 0 0;
   font-size: var(--text-xs, 0.8125rem);
   line-height: 1.45;
-  color: var(--text-muted, #5b6672);
+  /* **Themed by this package, not inherited from the host.** It read
+     `var(--text-muted, #5b6672)`, and one fallback cannot serve two schemes:
+     a host that does not define the token gets a near-black credit on a dark
+     page. Declared in all three theme blocks, as every other theme-sensitive
+     value here is. */
+  color: var(--map-credit, #4c5865);
 }
 
 .ocean-map .om-credit .leaflet-control-attribution {
