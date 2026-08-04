@@ -2239,9 +2239,13 @@ export async function createOceanMap(
      graticule label is read at a glance and sits over the map, so "60°N"
      beats "60° 00.00′ N"; the readout is where a position is read exactly. */
   const gridLabel = (v: number, pos: string, neg: string, pad: number) => {
-    const w = wrapLongitude(v);
-    const d = Math.abs(pad === 3 ? w : v);
-    const hemi = (pad === 3 ? w : v) === 0 ? '' : (pad === 3 ? w : v) > 0 ? pos : neg;
+    const at = pad === 3 ? wrapLongitude(v) : v;
+    const d = Math.abs(at);
+    /* Neither pole of the axis takes a hemisphere: 0 is the equator or the
+       prime meridian and 180 is the antimeridian, and "180°W" is both wrong
+       and, one line further east, contradicted by "180°E" for the same
+       meridian. */
+    const hemi = d === 0 || d === 180 ? '' : at > 0 ? pos : neg;
     return `${String(Math.round(d)).padStart(pad, '0')}°${hemi}`;
   };
 
@@ -2272,8 +2276,15 @@ export async function createOceanMap(
     const inset = (bounds.getEast() - west) * 0.012;
     const insetY = (bounds.getNorth() - south) * 0.012;
 
+    /* **One copy of the world, however many the view shows.** Below about
+       zoom 3 a wide window spans more than 360°, and walking the raw bounds
+       then draws every meridian twice — two labels reading 150°E on the same
+       screen, which is worse than no label. Leaflet repeats the basemap
+       tiles across copies but a vector lives in one, so the second pass was
+       drawing lines nobody could tell from the first. */
+    const east = Math.min(bounds.getEast(), west + 360);
     const first = Math.ceil(west / step) * step;
-    for (let lon = first; lon <= bounds.getEast(); lon += step) {
+    for (let lon = first; lon <= east; lon += step) {
       L.polyline([[-85, lon], [85, lon]], { weight: 0.7, interactive: false,
         className: 'map-grid' }).addTo(graticule);
       label([south + insetY, lon], gridLabel(lon, 'E', 'W', 3), 'lon');
