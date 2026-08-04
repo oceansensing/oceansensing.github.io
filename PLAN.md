@@ -96,6 +96,89 @@ contrast, the rendered map, two maps on a page, and the clock.
   making them pluggable is blocked on a second use defining what it needs
   rather than on effort.
 
+### Polar stereographic, as a selectable map mode
+
+**Not started, deliberately.** Recorded here so the shape of it is known
+before anyone commits: this is the largest change proposed to the map so far,
+and it is not a setting. Web Mercator is assumed in more places than the
+projection layer.
+
+The ask is a mode selector — Mercator by default, north polar and south polar
+as alternatives — applying to every product rather than to ice alone. It is
+the right way to look at ice: Mercator puts the pole at infinity, so a polar
+band is drawn at the one aspect ratio that makes it unreadable, which is
+exactly what the ice layers now show.
+
+**What carries over.** Leaflet takes a custom `L.CRS`, and polar stereographic
+is closed form — roughly forty lines, no proj4, the same bargain
+`fetch-coastline.py` struck with the shapefile reader. It is also
+**conformal**, like Mercator, so the particle layer's central claim survives:
+a vector still maps to the screen scaled by one local factor, and
+`x += u * drift` is still the whole of the advection.
+
+**What does not, worst first:**
+
+- **Basemaps.** GEBCO, Esri and OSM tiles are Web Mercator and cannot be
+  reprojected client side. GEBCO's WMS can serve EPSG:3413/3031 directly, so
+  that one survives; OSM cannot, and `coastline.json` would need rebuilding
+  or reprojecting. **This decides whether the mode is usable at all**, so it
+  is the thing to establish first — before any map code is written.
+- **Particle direction.** Conformality preserves the scale factor and *not*
+  the rotation: north is only up along one meridian. Every velocity needs
+  rotating by the grid convergence angle before it is advected. Get it wrong
+  and the field looks entirely plausible while flowing the wrong way — the
+  failure shape the whole "four ways it went wrong" section of `CLAUDE.md` is
+  a catalogue of, and the reason this must be measured rather than eyeballed.
+- **The antimeridian machinery stops meaning anything.** `rehome()`,
+  `rehomeBathy()`, the 360-degree folding and `worldCopyJump` all exist
+  because Mercator repeats east-west. A polar view has no such seam, and has
+  instead a pole singularity Mercator never has.
+- **`tiles.ts`** picks tiles from a lat/lon lattice by viewport bounds, and a
+  polar viewport's bounds are not a lat/lon rectangle.
+
+**Suggested staging**, so the question gets answered before the cost is paid:
+do it in `packages/ocean-map-dev`, and scope the first pass to **ice only,
+over GEBCO's WMS, with no particles**. That answers what the mode exists to
+answer — is the ice legible this way — without touching any of the four above
+bar the basemap. Everything else follows only if the answer is yes.
+
+**Two decisions needed before starting:**
+
+1. Whether "all products" really means all. SST and ice in a polar view are
+   legitimate and cheap; currents and wind drag in the rotation work.
+2. Whether north and south are two modes or one mode with a hemisphere
+   toggle. Two CRSs either way, but it changes the control and what a saved
+   view has to record.
+
+### The polar band gap, reported and diagnosed but not fixed
+
+Near the pole the products disagree about where they stop, so a band of
+latitude gets one field drawn and not another — reported as gappy bands, and
+it is exactly that.
+
+Measured on the published files:
+
+| grid | northern edge |
+| --- | --- |
+| `sst-navy` / `sic-navy` global, 0.96 deg stride | 84.16 N |
+| `sst-navy-arctic` / `sic-navy-arctic`, 0.16 deg | 84.88 N |
+| `sic-oisst-arctic`, 0.25 deg | 85.125 N |
+
+**Nothing sets those.** `REGIONS` asks for `north: 85.0` and each grid then
+lands wherever its own stride reaches walking up from `lat0` — so three
+products end nearly a degree apart from one another, and the reader sees the
+seams between them.
+
+The model runs to 90 N, so the data is there. The 85 cap is the Mercator
+convention (Leaflet cannot draw past ~85.05 anyway) and the stride landing
+eats most of another degree below it.
+
+The fix is to make the northern extent an **explicit shared bound every
+product snaps to** rather than an accident of arithmetic — and while doing
+it, to check the coarse global grid is not claiming water the fine tiers
+cover better. Not done here because it changes every published field's
+extent at once and deserves its own pass with the schema check watching.
+
 ### Decisions to make
 
 - **Vessel density has no source that covers this basin.** EMODnet Human
