@@ -2107,6 +2107,71 @@ renormalised. Refusing to interpolate beside land was the first attempt and
 it left the open ocean smooth while the whole continental shelf stayed a grid
 of squares.
 
+#### Sea ice
+
+Two products, both already-trusted hosts, added as `PRODUCTS` entries like any
+other scalar — `npm run data:fields` builds them.
+
+- **Ice concentration (OISST analysis)** — NOAA PSL, and it is the *same
+  dataset* the OISST temperature comes from: `icec.day.mean.<year>.nc` sits
+  beside `sst.day.mean.<year>.nc`, same quarter degree, same daily cadence,
+  same days-from-1800 axis. Every quirk already solved for temperature — the
+  per-year file, the January fallback, the IPv4 preference — was solved for
+  this too.
+- **Ice concentration (Navy ESPC forecast)** — ESPC's own ice aggregation
+  (`FMRC_ESPC-D-V02_ice`), a different file from `ts3z` but the same model,
+  run and grid, so the ice and the water under it are one ocean at one hour.
+  It also carries `sih` (thickness) and `siu`/`siv` (drift), which are the
+  obvious next layers off the same fetch.
+
+**Three things about it were traps, and all three are silent.**
+
+`icec` declares `units "percent"` and contains a **0–1 fraction** —
+`valid_range` is 0,1 and the southern pack measures 0.88–0.93. Believing the
+units string puts every value in the bottom hundredth of the ramp, which
+draws an ice-free ocean rather than an error.
+
+Its missing value is **`-9.96921E36`, not `NaN`** — a third convention after
+ERDDAP's empty field and THREDDS's `NaN`, and the only one that *parses as a
+number*. Nothing upstream of the `valid` range check would reject it, which
+is what that field is for.
+
+And **the level index was attached to the transport rather than to the
+dataset**, which is the same mistake the `analysis` flag was introduced to
+undo. `ts3z` is `water_temp[time][depth][lat][lon]` so the DODS branch always
+indexed a depth; the ice aggregation is `sic[time][lat][lon]` on the same
+host in the same dialect off the same model, so every request 400'd and the
+pipeline reported the product unavailable rather than mis-shaped. `levelled`
+is now stated per product.
+
+**The regions were not bipolar and the ice is.** Everything before this was
+built for the Atlantic hurricane fleet, so the Southern Ocean had no region —
+which does not show on a temperature map and shows badly on ice: measured on
+2026-08-04, the southern band holds **55,342 wet points against the Arctic's
+41,869**, so the larger pack would have been drawn at 0.96° beside an Arctic
+at 0.16°. There is a Southern Ocean band now, and `regions_for()` makes the
+set **per product** — a region is a promise to serve that box finer, and
+giving temperature a Southern grid it never asked for is a file per field per
+lead for water its readers are not looking at.
+
+**The two sources agree on the ice and disagree on the sea.** Above 15%
+concentration they are within 1.7% of each other by cell count — 6,235 for
+the analysis against 6,342 for the forecast, which is a genuine cross-check of
+two independent products. But PSL masks open water as *missing* while ESPC
+writes a legitimate **0**, so 37,530 cells that the analysis omits the
+forecast reports as ice-free ocean. Drawn naively that paints the whole ocean
+in the ramp's bottom colour and hides the basemap.
+
+The fix belongs on the map, not in the pipeline: 0 concentration is true, and
+the ice edge is contoured from exactly that 0-to-non-0 boundary, so
+discarding it upstream would cost the layer that needs it most. The scalar
+layer takes a floor below which it draws nothing.
+
+**No tile tier for either.** Tiles buy native resolution over the whole globe
+and ice occupies about a tenth of it, so ~150 of the 162 tiles would publish
+open water. The polar bands are regions already, at 0.16°, which is finer
+than a pack edge is meaningful at.
+
 #### Never hardcode an index into the aggregation
 
 Both pipelines asked for `time[0:1:128]`, which worked until the FMRC "best"

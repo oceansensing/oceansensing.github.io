@@ -104,7 +104,43 @@ REGIONS = [
         'south': 50.0, 'north': 85.0,
         'minZoom': 4,
     },
+    {
+        # **Sea ice is bipolar and the regions were not.** Everything above
+        # was built for the Atlantic hurricane fleet, so the Southern Ocean
+        # had no region at all — which does not show on a temperature map,
+        # where the globe grid is a fair depiction of a smooth field, and
+        # shows badly on ice: in August the southern pack is the *larger* of
+        # the two, measured at 0.88-0.93 concentration off Queen Maud Land,
+        # and it would have been drawn at 0.96 degrees beside an Arctic
+        # rendered at 0.16.
+        #
+        # A band over every longitude for the same reason the Arctic is one:
+        # the ice goes all the way round, and adding a box per complaint does
+        # not converge. It overlaps nothing, since nothing else reaches -50.
+        'name': 'antarctic',
+        'label': 'Southern Ocean',
+        'wrap': True,
+        'south': -78.0, 'north': -50.0,
+        'minZoom': 4,
+    },
 ]
+
+
+def regions_for(product: dict) -> list[dict]:
+    """The regions this product publishes.
+
+    Per product rather than global, because a region is a promise to serve
+    that box at a finer stride and not every field wants every box. Ice needs
+    both poles and does not care about the Gulf of Mexico; temperature and
+    salinity are the reverse, and giving them a Southern Ocean grid they were
+    never asked for would add a file per field per lead for a part of the
+    world their readers are not looking at.
+
+    Defaults to all of them, so a product that says nothing behaves as every
+    product did before this existed.
+    """
+    wanted = product.get('regions')
+    return [r for r in REGIONS if wanted is None or r['name'] in wanted]
 
 TILES = {
     'size': 20.0,
@@ -135,6 +171,8 @@ PRODUCTS = [
         # temperature of 40 is a fill value.
         'valid': (-5.0, 45.0),
         'label': 'SST (OISST analysis)',
+        # The two this field was built for; see regions_for().
+        'regions': ['atlantic', 'arctic'],
         'source': 'NOAA PSL OISST v2.1',
         # NOAA PSL rather than NCEI's ERDDAP, and the reason is freshness
         # measured rather than assumed: on 2026-08-03 PSL's newest day was
@@ -169,6 +207,10 @@ PRODUCTS = [
         # source while the log said the new one was fine.
         'analysis': True,
         'var': 'sst',
+        # sst[time][lat][lon]: no level axis. Indexing one past the end
+        # would not error — it would read the latitude axis as the level
+        # and hand back a grid of the wrong shape.
+        'levelled': False,
         # Its own grid: 1/4 degree, longitude 0-360 like the Navy model's.
         'lat0': -89.875, 'dlat': 0.25, 'nlat': 720,
         'lon0': 0.125, 'dlon': 0.25, 'nlon': 1440,
@@ -185,11 +227,15 @@ PRODUCTS = [
         'prefix': 'sst',
         'valid': (-5.0, 45.0),
         'label': 'SST (Navy ESPC forecast)',
+        # The two this field was built for; see regions_for().
+        'regions': ['atlantic', 'arctic'],
         'source': 'US Navy ESPC-D-V02',
         'base': ('https://tds.hycom.org/thredds/dodsC/'
                  'FMRC_ESPC-D-V02_ts3z/FMRC_ESPC-D-V02_ts3z_best.ncd'),
         'kind': 'dods',
         'var': 'water_temp',
+        # water_temp[time][depth][lat][lon]; index 0 is the surface.
+        'levelled': True,
         # The same grid the current layers are built on.
         'lat0': -80.0, 'dlat': 0.04, 'nlat': 4251,
         'lon0': 0.0, 'dlon': 0.08, 'nlon': 4500,
@@ -218,16 +264,95 @@ PRODUCTS = [
         # reading, a negative salinity is a fill value.
         'valid': (0.0, 45.0),
         'label': 'SSS (Navy ESPC forecast)',
+        # The two this field was built for; see regions_for().
+        'regions': ['atlantic', 'arctic'],
         'source': 'US Navy ESPC-D-V02',
         'base': ('https://tds.hycom.org/thredds/dodsC/'
                  'FMRC_ESPC-D-V02_ts3z/FMRC_ESPC-D-V02_ts3z_best.ncd'),
         'kind': 'dods',
         'var': 'salinity',
+        'levelled': True,
         'unit': 'psu',
         'lat0': -80.0, 'dlat': 0.04, 'nlat': 4251,
         'lon0': 0.0, 'dlon': 0.08, 'nlon': 4500,
         'strides': {'global': (12, 24), 'region': (2, 4), 'tile': (1, 2)},
         'tiles': True,
+    },
+    {
+        # ---- sea ice concentration ------------------------------------
+        #
+        # The analysis, and it comes out of the *same dataset* the OISST
+        # temperature does: PSL publishes icec.day.mean.<year>.nc beside
+        # sst.day.mean.<year>.nc, on the same quarter-degree grid, the same
+        # daily cadence and the same days-since-1800 axis. So every quirk
+        # already solved for OISST — the per-year file, the January
+        # fallback, the IPv4 preference — is solved for this too.
+        'key': 'oisst',
+        'prefix': 'sic',
+        # **A fraction, despite what the file says.** `icec` declares
+        # units "percent" and contains 0-1: valid_range is 0,1 and the
+        # southern pack measures 0.88-0.93. Believing the units string would
+        # put every value in the bottom hundredth of the ramp, which draws an
+        # ice-free ocean rather than an error — the failure shape this
+        # project keeps meeting. The range here is what makes that a
+        # decision rather than an accident.
+        #
+        # It also guards a third missing-value convention. ERDDAP writes an
+        # empty field and THREDDS writes NaN; this file writes
+        # -9.96921E36, which *parses as a number*, so nothing upstream of
+        # the range check would reject it.
+        'valid': (0.0, 1.0),
+        'label': 'Ice concentration (OISST analysis)',
+        'source': 'NOAA PSL OISST v2.1',
+        'base': ('https://psl.noaa.gov/thredds/dodsC/Datasets/'
+                 'noaa.oisst.v2.highres/icec.day.mean.{year}.nc'),
+        'kind': 'psl',
+        'analysis': True,
+        'var': 'icec',
+        'levelled': False,
+        'unit': 'fraction',
+        'lat0': -89.875, 'dlat': 0.25, 'nlat': 720,
+        'lon0': 0.125, 'dlon': 0.25, 'nlon': 1440,
+        'regions': ['arctic', 'antarctic'],
+        # Native in a region, as OISST is, so no tile tier could add
+        # anything — see the note on the temperature entry.
+        'strides': {'global': (4, 4), 'region': (1, 1)},
+        'tiles': False,
+    },
+    {
+        # The forecast, off ESPC's own ice aggregation — a different file
+        # from ts3z but the same model, the same run and the same grid, so
+        # the ice and the water below it are one ocean at one hour, exactly
+        # as temperature and salinity are.
+        #
+        # It publishes hourly where ts3z is 3-hourly. Nothing here needs to
+        # know: lead_steps picks a step by its offset from its own run, so a
+        # finer axis simply means the offset lands exactly.
+        'key': 'navy',
+        'prefix': 'sic',
+        # sea_ice_area_fraction, units "1" — genuinely a fraction here, and
+        # the same scale as the analysis above, so the two are comparable.
+        'valid': (0.0, 1.0),
+        'label': 'Ice concentration (Navy ESPC forecast)',
+        'source': 'US Navy ESPC-D-V02',
+        'base': ('https://tds.hycom.org/thredds/dodsC/'
+                 'FMRC_ESPC-D-V02_ice/FMRC_ESPC-D-V02_ice_best.ncd'),
+        'kind': 'dods',
+        'var': 'sic',
+        # sic[time][lat][lon] — the ice aggregation carries no depth axis,
+        # unlike ts3z on the same host. This is why `levelled` is stated.
+        'levelled': False,
+        'unit': 'fraction',
+        'lat0': -80.0, 'dlat': 0.04, 'nlat': 4251,
+        'lon0': 0.0, 'dlon': 0.08, 'nlon': 4500,
+        'regions': ['arctic', 'antarctic'],
+        'strides': {'global': (12, 24), 'region': (2, 4)},
+        # **No tile tier, unlike the Navy temperature.** Tiles buy native
+        # resolution over the whole globe, and ice occupies about a tenth of
+        # it: 150 of the 162 tiles would be open water publishing nothing.
+        # The polar bands are regions already, at 0.16 degrees, which is
+        # finer than the edge of a pack is meaningful at.
+        'tiles': False,
     },
 ]
 
@@ -431,17 +556,18 @@ def fetch(product: dict, when: str, y0: int, y1: int, x0: int, x1: int,
     """One rectangle of the field, at one stride."""
     var = product['var']
     span = f'[{y0}:{stride_lat}:{y1}][{x0}:{stride_lon}:{x1}]'
-    if product['kind'] == 'erddap':
-        # ERDDAP wants the surface level named; the dataset carries a single
-        # zlev, so index 0 is it.
-        url = f'{base_url(product)}.asc?{var}[{when}][0]{span}'
-    elif product['kind'] == 'psl':
-        # sst[time][lat][lon] — no zlev. Indexing one past the end of the
-        # dimensions would not error, it would read the latitude axis as if
-        # it were the level and return a grid of the wrong shape.
-        url = f'{base_url(product)}.ascii?{var}[{when}]{span}'
-    else:
-        url = f'{base_url(product)}.ascii?{var}[{when}][0]{span}'
+    # **Whether there is a level axis to index past is the dataset's
+    # property, not the transport's**, and conflating the two is a mistake
+    # this file has already made once — see the note on `analysis`. It was
+    # made again here: the depth index was attached to "not psl", which held
+    # only while every DODS product was a 3-D water column. ESPC's ice
+    # aggregation is on the same host, in the same dialect, off the same
+    # model, and is sic[time][lat][lon] with no depth at all — so every
+    # request for it was a 400, and the pipeline reported the product
+    # unavailable rather than mis-shaped.
+    level = '[0]' if product['levelled'] else ''
+    suffix = '.asc' if product['kind'] == 'erddap' else '.ascii'
+    url = f'{base_url(product)}{suffix}?{var}[{when}]{level}{span}'
     width = (x1 - x0) // stride_lon + 1
     low, high = product.get('valid', (-5.0, 45.0))
     grid = rows(get(encode(url)), width, low, high)
@@ -800,7 +926,7 @@ def build_product(product: dict, tiles_only: bool) -> None:
                 'deg': round(min(product['dlon'] * product['strides']['region'][0],
                                  product['dlat'] * product['strides']['region'][1]), 4),
             }
-            for region in REGIONS
+            for region in regions_for(product)
         ]
 
     # `frames` was resolved above: one step for an analysis, which is why the
@@ -828,7 +954,7 @@ def build_product(product: dict, tiles_only: bool) -> None:
               stride=product['strides']['global'], wrap=True, run=lead_run,
               extra={**extra, 'lead': lead})
 
-        for region in REGIONS:
+        for region in regions_for(product):
             build(product, step, lead_valid,
                   MAP_DIR / (at_lead(name + '-' + region['name'], lead) + '.json'),
                   south=region['south'], north=region['north'],
