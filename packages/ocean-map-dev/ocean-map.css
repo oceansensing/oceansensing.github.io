@@ -889,3 +889,18 @@
   gap: var(--space-xs, 0.5rem);
   align-items: center;
 }
+
+/* The row holding one colour-scale control set per field on. */
+.ocean-map .om-field-controls-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs, 0.5rem);
+  align-items: center;
+}
+
+/* Shown only when two fields are on, so a reader can tell which set edits
+   which. With one field the colour bar above already says. */
+.ocean-map .om-field-name {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--text-muted, #5b6672);
+}

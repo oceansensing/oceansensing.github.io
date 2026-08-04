@@ -39,9 +39,9 @@ const dom = new JSDOM(
   // the markup did would prove nothing.
   '<span data-flow-key>STALE</span>' +
   '<span class="om-particle-colours" data-particle-colours></span>' +
-  '<span class="field-controls" data-field-controls hidden>' +
-  '<select data-field-map></select><input type="number" data-field-min />' +
-  '<input type="number" data-field-max /><button type="button" data-field-auto></button></span>' +
+  // A bare container, as the component's markup is: the module builds one
+  // set of colour-scale inputs per field into it.
+  '<span class="field-controls" data-field-controls hidden></span>' +
   '<span class="forecast-controls" data-forecast-controls hidden></span>' +
   '<span class="bathy-controls" data-bathy-controls hidden>' +
   '<input type="range" data-bathy-opacity min="10" max="100" step="5" /></span>' +
@@ -1250,8 +1250,19 @@ const salinity = await (async () => {
     return g ? g.data.some((v) => typeof v === 'number' && v < 29) : false;
   })();
 
-  const minIn2 = document.querySelector('[data-field-min]');
-  const maxIn2 = document.querySelector('[data-field-max]');
+  /* Scoped to the field that is on, for the same reason as the block below:
+     there is a control set per field now, and the first in the document is
+     not necessarily the one whose layer is showing. */
+  const salinityBox = () => {
+    const key = Object.values(host._map._layers).find(
+      (l) => typeof l.getRange === 'function' && host._map.hasLayer(l)
+    )?.options?.field?.key;
+    return host.closest('[data-ocean-map]')?.querySelector(
+      `[data-field-controls] [data-field="${key}"]`
+    );
+  };
+  const minIn2 = salinityBox()?.querySelector('[data-field-min]');
+  const maxIn2 = salinityBox()?.querySelector('[data-field-max]');
   if (minIn2 && maxIn2) {
     minIn2.value = '10';
     maxIn2.value = '40';
@@ -1262,7 +1273,7 @@ const salinity = await (async () => {
       (l) => typeof l.getRange === 'function' && host._map.hasLayer(l)
     );
     out.pinnedOutsideWindow = pinnedLayer?.getRange?.() ?? null;
-    document.querySelector('[data-field-auto]')?.click();
+    salinityBox()?.querySelector('[data-field-auto]')?.click();
     await new Promise((r) => setTimeout(r, 600));
   }
 
@@ -1276,13 +1287,22 @@ const salinity = await (async () => {
    checks: the colormap actually changes the pixels, a pinned range survives a
    pan that would otherwise rescale it, and Auto gives the view back. */
 const scaleControls = await (async () => {
-  const picker = document.querySelector('[data-field-map]');
-  const minIn = document.querySelector('[data-field-min]');
-  const maxIn = document.querySelector('[data-field-max]');
-  const auto = document.querySelector('[data-field-auto]');
   const on = () => Object.values(host._map._layers).find(
     (l) => typeof l.getRange === 'function' && host._map.hasLayer(l)
   );
+  /* **The control set belonging to the field that is on**, not the first in
+     the document. The module builds one set per field now — ice can be read
+     over temperature, so a single set would have had to pick one — and
+     `document.querySelector('[data-field-map]')` grabbed whichever field was
+     built first while `on()` measured the layer actually showing. Two
+     different fields, so a pinned range never appeared to hold. */
+  const box = host.closest('[data-ocean-map]')?.querySelector(
+    `[data-field-controls] [data-field="${on()?.options?.field?.key}"]`
+  );
+  const picker = box?.querySelector('[data-field-map]');
+  const minIn = box?.querySelector('[data-field-min]');
+  const maxIn = box?.querySelector('[data-field-max]');
+  const auto = box?.querySelector('[data-field-auto]');
   const paint = () => {
     drawn.images.length = 0;
     on()?._render?.();

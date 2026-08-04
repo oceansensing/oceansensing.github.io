@@ -1938,113 +1938,191 @@ export async function createOceanMap(
     forecast.render.push(draw);
   }
 
+  /* ---- colour-scale controls, one set per field ----------------------
+
+     **The module builds these, where it used to find them in the host's
+     markup.** Ice draws in its own pane over temperature, so two scalar
+     fields can be on at once, and a single set of inputs then had to pick
+     one of them — it took whichever was built first, so a reader changed a
+     colormap and watched the other field's bar move. Arbitrary and silent.
+
+     One set per field is the fix, and the reason it could not be a loop over
+     the host's element is that the markup *was* the host's. Cloning it as a
+     template was the cheaper alternative and was measured against building:
+     33 nodes a set, 0.063 ms to clone against 0.085 ms to build, so 0.04 ms
+     apart for the two fields that can actually be on. Performance decided
+     nothing, so it went the way the package has been drifting anyway — the
+     particle pickers and forecast buttons are already built here.
+
+     **Built once per field, then shown or hidden.** Rebuilding on every
+     layer toggle would destroy an open dropdown mid-gesture, which is the
+     same hazard `syncControls` already guards by skipping focused inputs.
+     A set costs 33 nodes; keeping four of them parked is nothing. */
   const controls = find<HTMLElement>('[data-field-controls]');
-  const mapPicker = controls?.querySelector<HTMLSelectElement>('[data-field-map]');
-  const minInput = controls?.querySelector<HTMLInputElement>('[data-field-min]');
-  const maxInput = controls?.querySelector<HTMLInputElement>('[data-field-max]');
-  const autoButton = controls?.querySelector<HTMLButtonElement>('[data-field-auto]');
-
-  if (controls && mapPicker && minInput && maxInput && autoButton) {
-    /* Two groups, and the split is measured rather than editorial: the
-       first are the scales whose every stop clears the markers by ΔE 22,
-       the second are the standard oceanographic and matplotlib maps, which
-       do not — a full-gamut colormap passes near a marker colour somewhere
-       along it, necessarily. They are offered regardless. They are not the
-       default, the markers keep their dark outlines, and which scale to
-       read the ocean with is the reader's call, not the gate's. */
-    const safe = new Set<string>(palette.markerSafe ?? []);
-    const groups: [string, string[]][] = [
-      ['High contrast', Object.keys(COLORMAPS).filter((n) => safe.has(n))],
-      ['Standard', Object.keys(COLORMAPS).filter((n) => !safe.has(n))],
-    ];
-    for (const [caption, names] of groups) {
-      if (!names.length) continue;
-      const group = document.createElement('optgroup');
-      group.label = caption;
-      for (const name of names) {
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        group.append(option);
-      }
-      mapPicker.append(group);
-    }
-
-    /* **Which field these controls drive, now that two can be on.**
-
-       It was `ssts.find(...)` — the first one built, which is arbitrary and
-       silent: with ice over temperature the reader would change a colormap
-       and watch the other field's bar move. This picks the *topmost* instead,
-       which is at least the one they are looking at and is stable.
-
-       It is a stopgap, not the answer. One set of controls per field is what
-       the legend and the readout already do, and doing it here means the
-       module cloning chrome that is currently the host's — scoped in the
-       repo's PLAN.md rather than half-built. Until then a reader can only
-       restyle the upper field, and the lower keeps its default scale. */
-    const shownField = () => {
-      const on = ssts.filter((f) => map.hasLayer(f.group));
-      const top = on.find((f) => f.layer?.options?.field?.pane === 'ice') ?? on[0];
-      return top?.layer?.options?.field ?? null;
-    };
+  if (controls && Object.keys(COLORMAPS).length) {
+    /* Captured, because `syncControls` below is a function *declaration* —
+       hoisted, so it is outside the narrowing this `if` gives and TypeScript
+       stops believing `controls` is non-null inside it. It is declared
+       rather than assigned because the per-field handlers built above it
+       call it. */
+    const box = controls;
+    box.textContent = '';
 
     const repaint = () => {
       for (const entry of ssts) if (map.hasLayer(entry.group)) entry.layer._render?.();
     };
 
+    type FieldControls = {
+      field: FieldDescriptor;
+      root: HTMLElement;
+      name: HTMLElement;
+      picker: HTMLSelectElement;
+      min: HTMLInputElement;
+      max: HTMLInputElement;
+      auto: HTMLButtonElement;
+    };
+
+    const buildFor = (field: FieldDescriptor): FieldControls => {
+      const root = document.createElement('span');
+      root.className = 'om-field-controls';
+      root.dataset.field = field.key;
+
+      /* Named only when more than one set is on screen — with a single
+         field the bar above says which it is, and repeating it is noise.
+         Same rule the legend follows. */
+      const name = document.createElement('span');
+      name.className = 'om-field-name';
+      name.textContent = field.label;
+      name.hidden = true;
+      root.append(name);
+
+      const picker = document.createElement('select');
+      /* The `data-field-*` hooks stay, even though the module builds these
+         now rather than finding them. They were the contract — a host
+         styles against them and `test:map` drives them — and only who
+         creates the element has changed. */
+      picker.dataset.fieldMap = '';
+      picker.setAttribute('aria-label', `${field.label} colour scale`);
+      /* Two groups, and the split is measured rather than editorial: the
+         first clear every marker at every stop, the second are the standard
+         oceanographic and matplotlib maps, which cannot — a full-gamut
+         colormap passes near a marker colour somewhere along it,
+         necessarily. They are offered regardless. They are not the default,
+         the markers keep their dark outlines, and which scale to read the
+         ocean with is the reader's call, not the gate's. */
+      const safe = new Set<string>(palette.markerSafe ?? []);
+      for (const [caption, names] of [
+        ['High contrast', Object.keys(COLORMAPS).filter((n) => safe.has(n))],
+        ['Standard', Object.keys(COLORMAPS).filter((n) => !safe.has(n))],
+      ] as [string, string[]][]) {
+        if (!names.length) continue;
+        const group = document.createElement('optgroup');
+        group.label = caption;
+        for (const cmap of names) {
+          const option = document.createElement('option');
+          option.value = cmap;
+          option.textContent = cmap;
+          group.append(option);
+        }
+        picker.append(group);
+      }
+      root.append(picker);
+
+      const number = (label: string) => {
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.step = String(field.step);
+        input.setAttribute('aria-label', `${field.label} scale ${label}`);
+        return input;
+      };
+      const min = number('minimum');
+      min.dataset.fieldMin = '';
+      const max = number('maximum');
+      max.dataset.fieldMax = '';
+      const dash = document.createElement('span');
+      dash.setAttribute('aria-hidden', 'true');
+      dash.textContent = '–';
+      const auto = document.createElement('button');
+      auto.dataset.fieldAuto = '';
+      auto.type = 'button';
+      auto.textContent = 'Auto';
+      root.append(min, dash, max, auto);
+
+      const set = { field, root, name, picker, min, max, auto };
+
+      picker.addEventListener('change', () => {
+        choiceFor(field).map = picker.value;
+        repaint();
+        syncControls();
+        // The colour scale *is* the background when a field is on, so the
+        // particles have to be re-picked against it.
+        resolveParticleColours();
+      });
+
+      const pin = () => {
+        const lo = Number(min.value);
+        const hi = Number(max.value);
+        // An inverted or empty range would paint one flat colour; leave the
+        // current scale alone until the pair makes sense.
+        if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return;
+        choiceFor(field).range = [lo, hi];
+        repaint();
+        syncControls();
+      };
+      min.addEventListener('change', pin);
+      max.addEventListener('change', pin);
+
+      auto.addEventListener('click', () => {
+        choiceFor(field).range = null;
+        repaint();
+        syncControls();
+      });
+
+      box.append(root);
+      return set;
+    };
+
+    /* One set per *field*, not per layer: two layers can paint the same
+       quantity — OISST and Navy temperature both use FIELDS.sst — and they
+       share a `choices` entry, so they must share the control that edits
+       it. Built for every field the map offers, whether or not its layer is
+       on, so the first toggle shows a control rather than making one. */
+    const sets: FieldControls[] = [];
+    for (const key of [...new Set(ssts.map((f) => f.layer?.options?.field?.key))]) {
+      const field = ssts.find((f) => f.layer?.options?.field?.key === key)?.layer?.options?.field;
+      if (field) sets.push(buildFor(field));
+    }
+
     /* Reflect the live state into the inputs. Skipped while a field is
        focused, or typing "3" on the way to "35" would be read back as 3 and
        the caret would jump. */
-    const syncControls = () => {
-      const field = shownField();
-      controls.hidden = !field;
-      if (!field) return;
-      const choice = choiceFor(field);
-      mapPicker.value = choice.map;
-      minInput.step = String(field.step);
-      maxInput.step = String(field.step);
-      autoButton.disabled = choice.range === null;
-      autoButton.textContent = choice.range === null ? 'Auto' : 'Reset';
-      const live = ssts.find((f) => map.hasLayer(f.group))?.layer?.getRange?.();
-      if (live && document.activeElement !== minInput && document.activeElement !== maxInput) {
-        minInput.value = String(live[0]);
-        maxInput.value = String(live[1]);
+    function syncControls() {
+      const live = new Map<string, [number, number] | null | undefined>();
+      for (const entry of ssts) {
+        const key = entry.layer?.options?.field?.key;
+        if (key && map.hasLayer(entry.group)) live.set(key, entry.layer?.getRange?.());
       }
-    };
-
-    mapPicker.addEventListener('change', () => {
-      const field = shownField();
-      if (!field) return;
-      choiceFor(field).map = mapPicker.value;
-      repaint();
-      syncControls();
-      // The colour scale *is* the background when a field is on, so the
-      // particles have to be re-picked against it.
-      resolveParticleColours();
-    });
-
-    const pin = () => {
-      const field = shownField();
-      if (!field) return;
-      const lo = Number(minInput.value);
-      const hi = Number(maxInput.value);
-      // An inverted or empty range would paint one flat colour; leave the
-      // current scale alone until the pair makes sense.
-      if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return;
-      choiceFor(field).range = [lo, hi];
-      repaint();
-      syncControls();
-    };
-    minInput.addEventListener('change', pin);
-    maxInput.addEventListener('change', pin);
-
-    autoButton.addEventListener('click', () => {
-      const field = shownField();
-      if (!field) return;
-      choiceFor(field).range = null;
-      repaint();
-      syncControls();
-    });
+      let showing = 0;
+      for (const set of sets) {
+        const on = live.has(set.field.key);
+        set.root.hidden = !on;
+        if (on) showing += 1;
+      }
+      box.hidden = showing === 0;
+      for (const set of sets) {
+        if (set.root.hidden) continue;
+        set.name.hidden = showing < 2;
+        const choice = choiceFor(set.field);
+        set.picker.value = choice.map;
+        set.auto.disabled = choice.range === null;
+        set.auto.textContent = choice.range === null ? 'Auto' : 'Reset';
+        const range = live.get(set.field.key);
+        if (range && document.activeElement !== set.min && document.activeElement !== set.max) {
+          set.min.value = String(range[0]);
+          set.max.value = String(range[1]);
+        }
+      }
+    }
 
     map.on('overlayadd overlayremove moveend zoomend', syncControls);
     for (const entry of ssts) entry.layer.on('rangechange', syncControls);

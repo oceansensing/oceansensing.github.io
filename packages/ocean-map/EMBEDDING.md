@@ -102,7 +102,7 @@ isobath opacity slider and status line are the host's markup**, found by
 | `[data-ocean-map-canvas]` | the container the map is built in |
 | `[data-map-status]` | the "N assets reporting" line |
 | `[data-sst-key]` | the colour bar |
-| `[data-field-controls]` | colormap picker, min, max, Auto |
+| `[data-field-controls]` | a **bare container**; the module builds one colormap/min/max/Auto set into it per scalar field that is on |
 | `[data-bathy-controls]` | isobath opacity slider |
 | `[data-storm-status]` | the active-storm line, if you render one |
 | `[data-kmz-controls]` | wrapper for the overlay upload |

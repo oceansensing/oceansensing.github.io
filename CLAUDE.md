@@ -2002,6 +2002,31 @@ tier, a plausible-value range and a file prefix. `FIELDS` in the component is
 the matching half — a ramp, a unit and a rounding step. Adding another scalar
 means one entry in each, not another layer.
 
+#### One control set per field, built by the module
+
+Ice draws over temperature, so two scalars can be on, and a single set of
+inputs had to pick one — it took whichever field was built first, so a reader
+changed a colormap and watched the other field's bar move. Arbitrary and
+silent.
+
+The markup was the host's, so this could not be a loop. Cloning the host's
+element as a template was the cheaper route and was measured against building
+from scratch: 33 nodes a set, **0.063 ms to clone against 0.085 ms to
+build** — 0.04 ms apart for the two fields that can actually be on.
+Performance decided nothing, which is what made this a design choice rather
+than a trade-off, and it went the way the package has been drifting: the
+particle pickers and the forecast buttons were already built here.
+
+Built **once per field and then shown or hidden**, not rebuilt on toggle —
+rebuilding a `<select>` destroys an open dropdown mid-gesture, the same hazard
+`syncControls` guards by skipping focused inputs. One set per *field* rather
+than per layer, because OISST and Navy temperature share `FIELDS.sst` and so
+share the `choices` entry the control edits. The `data-field-*` hooks stay:
+they were the contract with the host and with `test:map`, and only who creates
+the element changed — which is also what `test:map` had to learn, since
+`document.querySelector('[data-field-map]')` now finds whichever field was
+built first rather than the one showing.
+
 #### The reader sets the colour scale
 
 Colormap, range and a way back to automatic, per field, in the legend row

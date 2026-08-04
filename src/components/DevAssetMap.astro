@@ -85,22 +85,11 @@ const {
            can be two. It carries no `om-key` class of its own, or it
            draws a swatch in front of the ones it holds. -->
       <span data-sst-key hidden></span>
-      <span class="om-field-controls" data-field-controls hidden>
-        <label>
-          <span class="om-vh">Colour scale</span>
-          <select data-field-map aria-label="Colour scale"></select>
-        </label>
-        <label>
-          <span class="om-vh">Minimum</span>
-          <input type="number" data-field-min step="any" aria-label="Scale minimum" />
-        </label>
-        <span aria-hidden="true">–</span>
-        <label>
-          <span class="om-vh">Maximum</span>
-          <input type="number" data-field-max step="any" aria-label="Scale maximum" />
-        </label>
-        <button type="button" data-field-auto>Auto</button>
-      </span>
+      <!-- A container, not a control. The module fills it with one set of
+           colour-scale inputs per scalar field that is on — ice draws over
+           temperature, so there can be two, and a single set would have to
+           pick one of them. -->
+      <span class="om-field-controls-row" data-field-controls hidden></span>
       <!-- The forecast hour. Built by the module from the frames the data
            advertises, so the buttons cannot name an hour nobody published. -->
       <span class="om-forecast-controls" data-forecast-controls hidden>
