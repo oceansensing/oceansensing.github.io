@@ -1014,6 +1014,26 @@ slices, and `test:map` had to wait **3 seconds** before it could sample.
 There is no rebuild now — a particle is unprojected and sampled where it
 stands — and the same measurements are stable at **600 ms**.
 
+**A pan carries the field; it does not reseed it.** The first version blanked
+the canvas at `movestart` and dropped every particle at `moveend`, so the
+field vanished for the whole drag and then rebuilt from nothing — reported as
+"a flash when I stop", and as the map appearing to slide back, which is what
+a field rebuilding under a still map looks like. Measured across a 220 px
+pan: canvas coverage **58.3% → 4.5%**.
+
+It now **freezes** during the gesture rather than clearing — the canvas is
+placed at a *layer point*, so the pane carries it and the trails stay over the
+water they were drawn for — and at `moveend` the canvas is repositioned, the
+particles slid by the same offset (`ParticleField.shift`), and the existing
+trails slid with them by copying the canvas onto itself. Same pan: **65.9% →
+54.5%**, the dip being only the newly exposed strip that has no trails yet.
+
+Two details in that are load-bearing. The canvas is resized **only when the
+size actually changed**, because assigning `width` clears it and doing that on
+every pan is the flash by another route. And a **zoom still resets**, because
+screen distance stops meaning the same thing and a trail drawn at the old
+scale is the wrong length.
+
 **Trail length is the fade, not the lifetime.** A particle lives
 `particleSeconds`; what a reader sees behind it is however many frames of
 stroke have not yet faded, which is the `destination-out` alpha alone. The

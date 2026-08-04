@@ -17,7 +17,7 @@
    import would hoist above the assignment and die in `dist/` only. This is a
    normal module. */
 
-import { Bounds, DomUtil, Layer, Util, type Map as LeafletMap } from 'leaflet';
+import { DomUtil, Layer, Util, type Point, type Map as LeafletMap } from 'leaflet';
 import { ParticleField, speedIndex, type ComponentGrid } from './particles';
 
 export interface VelocityLayerOptions {
@@ -58,6 +58,13 @@ export class VelocityLayer extends Layer {
   private raf: number | null = null;
   private lastFrame = 0;
   private stopped = false;
+  /** Where the canvas currently sits, in layer points. Kept so a pan can be
+      measured and the field carried across it rather than reseeded. */
+  private corner: Point | null = null;
+  /** True between movestart and moveend. The field freezes rather than
+      clearing: the canvas translates with the pane during a drag, so the
+      trails stay over the water they belong to and simply come along. */
+  private moving = false;
 
   constructor(options: VelocityLayerOptions) {
     super();
@@ -73,9 +80,9 @@ export class VelocityLayer extends Layer {
     this.canvas.style.pointerEvents = 'none';
     this.ctx = this.canvas.getContext('2d');
     this.stopped = false;
-    this.resize();
+    this.reposition(true);
     map.on('moveend zoomend resize', this.onViewChange, this);
-    map.on('movestart zoomstart', this.pause, this);
+    map.on('movestart zoomstart', this.freeze, this);
     this.start();
     return this;
   }
@@ -83,7 +90,7 @@ export class VelocityLayer extends Layer {
   onRemove(map: LeafletMap): this {
     this.stop();
     map.off('moveend zoomend resize', this.onViewChange, this);
-    map.off('movestart zoomstart', this.pause, this);
+    map.off('movestart zoomstart', this.freeze, this);
     this.canvas?.remove();
     this.canvas = null;
     this.ctx = null;
@@ -112,32 +119,74 @@ export class VelocityLayer extends Layer {
     return (this as unknown as { _map?: LeafletMap })._map ?? null;
   }
 
-  private resize(): void {
+  /** Put the canvas back over the viewport, and carry the field with it.
+
+      The canvas is placed at a **layer point**, so during a drag it is
+      translated by the pane along with everything else and the trails stay
+      over the water they were drawn for. At the end of the gesture it has to
+      be moved back to cover the new viewport — and that move is the whole
+      problem this method exists to solve, because naively it means throwing
+      the field away.
+
+      A pan does not invalidate anything: the water has not moved, only the
+      window onto it. So the particles are slid by the same offset the canvas
+      moved, and the already-drawn trails are slid with them by copying the
+      canvas onto itself. Nothing is lost and nothing has to rebuild.
+
+      A **zoom or a resize** does reset, because screen distance stops meaning
+      the same thing — a trail drawn at the old scale would be the wrong
+      length, and the canvas is cleared by resizing it in any case. */
+  private reposition(reset: boolean): void {
     const map = this.map;
-    if (!map || !this.canvas) return;
+    const canvas = this.canvas;
+    if (!map || !canvas) return;
     const size = map.getSize();
-    this.canvas.width = size.x;
-    this.canvas.height = size.y;
-    this.canvas.style.width = `${size.x}px`;
-    this.canvas.style.height = `${size.y}px`;
-    // The pane is translated as the map moves; put the canvas back at the
-    // container's top-left so its pixels are screen pixels.
-    const corner = map.containerPointToLayerPoint(new Bounds([0, 0], [size.x, size.y]).min!);
-    DomUtil.setPosition(this.canvas, corner);
+
+    // Only when it actually changed: assigning width clears the canvas, and
+    // doing that on every pan is exactly the flash this is here to avoid.
+    const resized = canvas.width !== size.x || canvas.height !== size.y;
+    if (resized) {
+      canvas.width = size.x;
+      canvas.height = size.y;
+      canvas.style.width = `${size.x}px`;
+      canvas.style.height = `${size.y}px`;
+    }
+
+    const corner = map.containerPointToLayerPoint([0, 0]);
+    const previous = this.corner;
+    DomUtil.setPosition(canvas, corner);
+    this.corner = corner;
+
+    if (reset || resized || !previous) {
+      this.field?.clear();
+      this.clearCanvas();
+      return;
+    }
+
+    const dx = previous.x - corner.x;
+    const dy = previous.y - corner.y;
+    if (!dx && !dy) return;
+    this.field?.shift(dx, dy);
+    if (this.ctx) {
+      // `copy` rather than the default, or the shifted image would be
+      // composited over the original and every trail would be drawn twice.
+      this.ctx.globalCompositeOperation = 'copy';
+      this.ctx.drawImage(canvas, dx, dy);
+      this.ctx.globalCompositeOperation = 'source-over';
+    }
   }
 
-  private pause(): void {
-    // Nothing is drawn mid-gesture: the pane is being translated under us, so
-    // a trail laid down now would smear across the drag.
-    this.clearCanvas();
+  private freeze(): void {
+    // Frozen, not blanked. The canvas rides along with the pane, so the field
+    // stays visible and correctly placed for the whole gesture; advecting it
+    // would be wrong, because canvas coordinates stop matching container
+    // coordinates the moment the pane starts moving.
+    this.moving = true;
   }
 
-  private onViewChange(): void {
-    this.resize();
-    // Positions are screen pixels, so every one of them means something else
-    // after a move. Drop them rather than teleporting them.
-    this.field?.clear();
-    this.clearCanvas();
+  private onViewChange(e?: { type?: string }): void {
+    this.reposition(e?.type === 'zoomend' || e?.type === 'resize');
+    this.moving = false;
   }
 
   private clearCanvas(): void {
@@ -189,7 +238,7 @@ export class VelocityLayer extends Layer {
     const map = this.map;
     const ctx = this.ctx;
     const canvas = this.canvas;
-    if (!map || !ctx || !canvas || this.stopped) return;
+    if (!map || !ctx || !canvas || this.stopped || this.moving) return;
     const [u, v] = this.options.data ?? [];
     if (!u || !v) return;
 

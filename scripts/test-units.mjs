@@ -220,6 +220,20 @@ const still = grid([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
   check('a particle carried out of the view is retired', gone.live[0], 0);
 }
 
+{
+  /* A pan must carry the field, not reseed it: reseeding is what a reader
+     sees as a flash — the whole field vanishing and rebuilding over a second.
+     Both the live position and the previous one move, or the next frame
+     strokes a trail back to where the particle used to be on the old screen. */
+  const zero = grid([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  const f = new ParticleField(2, 100, () => 0.5);
+  f.step(view, zero, zero, 1);
+  const before = [f.x[0], f.y[0], f.px[0], f.py[0]];
+  f.shift(-7, 4);
+  check('a pan slides the particle with it', [f.x[0], f.y[0]], [before[0] - 7, before[1] + 4]);
+  check('and slides its trail tail too', [f.px[0], f.py[0]], [before[2] - 7, before[3] + 4]);
+}
+
 check('speed maps into the ramp', speedIndex(0.5, 1, 10), 5);
 check('and clamps at the top rather than running off it', speedIndex(9, 1, 10), 9);
 check('a zero range does not divide by it', speedIndex(1, 0, 10), 0);

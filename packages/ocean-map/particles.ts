@@ -163,6 +163,26 @@ export class ParticleField {
     this.live.fill(0);
   }
 
+  /** Slide every particle by a screen offset.
+
+      A pan does not invalidate the field — the water has not moved, only the
+      window onto it — so the particles are carried across rather than thrown
+      away and reseeded. Reseeding is what a reader sees as a flash: the field
+      vanishes and rebuilds from nothing over the next second. Trails are
+      shifted by the renderer with the same offset, so the two stay together.
+
+      A **zoom** is different and does still reset: screen distance stops
+      meaning the same thing, so the trails behind each particle would be the
+      wrong length. */
+  shift(dx: number, dy: number): void {
+    for (let i = 0; i < this.count; i++) {
+      this.x[i] += dx;
+      this.y[i] += dy;
+      this.px[i] += dx;
+      this.py[i] += dy;
+    }
+  }
+
   private seed(i: number, view: ParticleView): void {
     this.x[i] = this.random() * view.width;
     this.y[i] = this.random() * view.height;
