@@ -23,7 +23,7 @@ surveys:
     # against the same instant in its SRT telemetry clock (11:54:12).
     timezone: EDT
     note: >-
-      Drone survey, 11:55-12:14, from the VIMS campus across the Coleman
+      Drone survey, 11:55–12:14, from the VIMS campus across the Coleman
       Bridge to the Yorktown waterfront and back.
     photos:
       - src: hab-2026-08-04-01.jpg
