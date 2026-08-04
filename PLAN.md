@@ -150,35 +150,6 @@ bar the basemap. Everything else follows only if the answer is yes.
    toggle. Two CRSs either way, but it changes the control and what a saved
    view has to record.
 
-### The polar band gap, reported and diagnosed but not fixed
-
-Near the pole the products disagree about where they stop, so a band of
-latitude gets one field drawn and not another — reported as gappy bands, and
-it is exactly that.
-
-Measured on the published files:
-
-| grid | northern edge |
-| --- | --- |
-| `sst-navy` / `sic-navy` global, 0.96 deg stride | 84.16 N |
-| `sst-navy-arctic` / `sic-navy-arctic`, 0.16 deg | 84.88 N |
-| `sic-oisst-arctic`, 0.25 deg | 85.125 N |
-
-**Nothing sets those.** `REGIONS` asks for `north: 85.0` and each grid then
-lands wherever its own stride reaches walking up from `lat0` — so three
-products end nearly a degree apart from one another, and the reader sees the
-seams between them.
-
-The model runs to 90 N, so the data is there. The 85 cap is the Mercator
-convention (Leaflet cannot draw past ~85.05 anyway) and the stride landing
-eats most of another degree below it.
-
-The fix is to make the northern extent an **explicit shared bound every
-product snaps to** rather than an accident of arithmetic — and while doing
-it, to check the coarse global grid is not claiming water the fine tiers
-cover better. Not done here because it changes every published field's
-extent at once and deserves its own pass with the schema check watching.
-
 ### Decisions to make
 
 - **Vessel density has no source that covers this basin.** EMODnet Human

@@ -2344,6 +2344,56 @@ recording:
   was latent from the beginning and ice is simply the first field with a
   fractional step.
 
+#### Every grid must reach the bound it claims
+
+Reported as gappy bands near the pole, and that is what they were: not
+missing data but **three different edges stacked**. Measured before the fix,
+one request for "north 85" produced 84.16 from the 0.96° global grid, 84.88
+from the 0.16° Arctic one and 85.125 from OISST's quarter degree — and the
+currents, a separate pipeline, gave 84.16 and 84.92 against wind's 90. Between
+any two of those latitudes one field was drawn over another that had ended.
+
+**Nothing set those numbers.** `fetch` walks `y0:stride:y1`, so the last row
+sampled is `y0 + floor((y1-y0)/stride)*stride` — up to `stride-1` cells below
+the requested north, which on the global grid is 0.92° silently dropped. Each
+grid landed wherever its own lattice happened to reach, so the files were
+individually consistent and disagreed only with each other, which is why
+nothing caught it.
+
+`MAX_LAT = 85.0` is now stated once per pipeline and the top index rounds
+**outward** to the stride, so every grid covers at least that far and usually
+a little past. The overshoot is not waste: the map's bilinear sampling
+degenerates on the last row, so a row beyond the visible limit is what lets
+the topmost visible row interpolate. 85 because Web Mercator cannot draw past
+about 85.05 anyway. Costs one row per grid.
+
+**Two checks now hold it**, and the second is the general form of the first:
+
+- Every grid claiming the pole — the globals, the polar regions, the
+  currents, the wind — must have `la1 ≥ 85`. Run against the pre-fix files it
+  reports all six failures.
+- **Every region must cover the box its own global file advertises.** The
+  global header lists each region's bounds in `details`, and the map switches
+  to a region only when the viewport is *inside* them, so a region that stops
+  short leaves a strip where the map has handed over to a grid with no data
+  there. Both numbers are published, so they are simply compared — no
+  constant to keep in step.
+
+Two things that bit while writing the second check. A region grid keeps the
+model's **0–360 longitudes** while `details` is in −180..180, so the Atlantic
+region reads 260..350 against an advertised −100..−10 — the same span,
+reported as a 360° discrepancy until both sides were folded. And an advertised
+region that is simply *absent* is not a failure when the check runs against
+`scripts/fixtures/map`, which is a deliberate subset; it has teeth against the
+real directory, which is where the data repository runs it.
+
+**Refreshing the fixtures is not a copy.** They are one coherent snapshot: the
+shared-source check asserts that the currents and the Navy fields, which come
+off one aggregation at one step, credit ESPC once. Refreshing some files and
+not others split that line — and so did the synthetic `sst-navy` stub in
+`test:map`, which carries hardcoded timestamps whose own comment says they
+must match the currents fixture. Both had to move together.
+
 #### Never hardcode an index into the aggregation
 
 Both pipelines asked for `time[0:1:128]`, which worked until the FMRC "best"

@@ -198,6 +198,95 @@ for (const name of ['currents', 'currents-60m', 'wind']) {
 
 // ---- tile indices -----------------------------------------------------
 
+/* **Every grid that claims the pole must actually reach it.**
+
+   This is the check the polar banding needed and did not have. Each grid used
+   to end wherever its own stride landed walking up from `lat0`, so one
+   request for "north 85" gave 84.16, 84.88 and 85.125 across three products,
+   and a reader saw bands where one field was drawn and another was not.
+   Nothing said so: each file was internally consistent and the disagreement
+   only existed between them.
+
+   85 is Web Mercator's limit, so a grid short of it leaves visible map with
+   no data on it. Checked against the global files and the polar regions —
+   not the Atlantic one, which legitimately stops at 55. */
+const POLAR_BOUND = 85.0;
+for (const name of [
+  'sst-oisst', 'sst-navy', 'sss-navy', 'sic-oisst', 'sic-navy',
+  'sic-oisst-arctic', 'sic-navy-arctic', 'sst-navy-arctic', 'sss-navy-arctic',
+  // The currents are a separate pipeline that had the identical defect, and
+  // nothing was checking them either — measured at 84.16 and 84.92 against
+  // wind's 90, which is the seam of particles running on above a field that
+  // had ended.
+  'currents', 'currents-arctic', 'currents-60m', 'currents-arctic-60m', 'wind',
+]) {
+  const file = read(`${name}.json`);
+  // A velocity grid is a two-element array, u then v; both carry the header.
+  const g = Array.isArray(file) ? file[0] : file;
+  if (!g?.header) continue;
+  checked++;
+  if (!(g.header.la1 >= POLAR_BOUND)) {
+    fail(`${name}.json`, `reaches only ${g.header.la1}°N; every grid claiming the pole must ` +
+      `cover ${POLAR_BOUND}°N, or it bands against the ones that do`);
+  }
+}
+
+/* **Every region must cover the box its own global file advertises.**
+
+   The polar banding was one instance of a general fault: a tier that stops
+   short of what it claims. The global header lists each region's bounds in
+   `details` and the map switches to a region only when the viewport is
+   *inside* those bounds — so a region that does not actually reach them
+   leaves a strip where the map has handed over to a grid with no data there,
+   which is a gap in exactly the place nothing else looks.
+
+   Checked from the files themselves rather than against a constant: the
+   advertised box and the delivered extent are both published, so they can
+   simply be compared. Half a cell of slack, because a grid samples on a
+   lattice and its edge lands on the nearest node, not on the request. */
+for (const name of ['sst-oisst', 'sst-navy', 'sss-navy', 'sic-oisst', 'sic-navy',
+                    'currents', 'currents-60m']) {
+  const file = read(`${name}.json`);
+  const g = Array.isArray(file) ? file[0] : file;
+  for (const d of g?.header?.details ?? []) {
+    const leaf = String(d.url).split('/').pop();
+    const rf = read(leaf);
+    const r = Array.isArray(rf) ? rf[0] : rf;
+    // Absent is not a failure *here*: the fixtures are a deliberate subset,
+    // so a region outside the snapshot has nothing to compare. Against the
+    // real directory every advertised region exists, which is where this
+    // check has teeth.
+    if (!r?.header) continue;
+    checked++;
+    const h = r.header;
+    const north = h.la1;
+    const south = h.la1 - (h.ny - 1) * h.dy;
+    const slackY = h.dy / 2;
+    const spansGlobe = h.nx * h.dx >= 359.9;
+    if (north < d.north - slackY) {
+      fail(leaf, `reaches ${north}°N but ${name}.json advertises it to ${d.north}°N`);
+    }
+    if (south > d.south + slackY) {
+      fail(leaf, `starts at ${south}°N but ${name}.json advertises it from ${d.south}°N`);
+    }
+    if (!spansGlobe) {
+      /* **Both sides folded to 0-360 before comparing.** A region grid keeps
+         the model's own longitudes, so the Atlantic one starts at 260; the
+         `details` block the map reads is in -180..180 and calls the same
+         edge -100. Comparing them raw reported a 360-degree discrepancy on a
+         grid that is exactly where it says it is. */
+      const turn = (v) => ((v % 360) + 360) % 360;
+      const west = turn(h.lo1);
+      const east = west + (h.nx - 1) * h.dx;
+      const slackX = h.dx / 2;
+      if (west > turn(d.west) + slackX || east < turn(d.east) - slackX) {
+        fail(leaf, `covers ${west}..${east}°E but ${name}.json advertises ` +
+          `${turn(d.west)}..${turn(d.east)}°E in the same convention`);
+      }
+    }
+  }
+}
+
 /* The ice edge. A FeatureCollection like the isobaths, but with a header,
    because unlike the seafloor it has a date — an edge with no valid time is
    a line nobody can tell from last winter's. Concentration is a fraction

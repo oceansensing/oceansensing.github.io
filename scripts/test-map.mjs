@@ -364,8 +364,8 @@ files['tiles-60m/index'] = { ...files['tiles/index'], depth: 60 };
          reason production does not have and the shared-source check has
          nothing left to catch. The hour was 08-01 12Z here — the run time,
          picked arbitrarily — until the valid time went into the credit. */
-      refTime: '2026-08-03T15:00:00Z', source: 'US Navy ESPC-D-V02', units: 'degC',
-      modelRun: '2026-08-01T12:00:00Z',
+      refTime: '2026-08-05T00:00:00Z', source: 'US Navy ESPC-D-V02', units: 'degC',
+      modelRun: '2026-08-03T12:00:00Z',
       details: [], tileIndex: '/map/tiles-sst-navy/index.json',
     },
     data: Array.from({ length: nx * ny }, () => 7.5),

@@ -47,6 +47,12 @@ BASE = ('https://tds.hycom.org/thredds/dodsC/'
 LON0, DLON, NLON = 0.0, 0.08, 4500
 LAT0, DLAT, NLAT = -80.0, 0.04, 4251
 
+# The northern edge every grid must reach; see the long note on MAX_LAT in
+# fetch-ocean-fields.py. Both pipelines had the same defect and it showed as
+# one banding against the other.
+MAX_LAT = 85.0
+
+
 GLOBAL = {
     'name': 'currents.json',
     # Longitude wraps the whole way round, which leaflet-velocity handles
@@ -54,7 +60,7 @@ GLOBAL = {
     # onto the end so particles cross the antimeridian instead of piling up
     # against it. Latitude stops at 85, past which Web Mercator cannot draw.
     'wrap': True,
-    'south': -80.0, 'north': 85.0,
+    'south': -80.0, 'north': MAX_LAT,
     'stride': (12, 24),
 }
 
@@ -89,7 +95,7 @@ DETAILS = [
         # region to use it, so a band starting at 60 dropped any view
         # straddling that line — including most of the Norwegian coast —
         # back onto the coarse grid.
-        'south': 50.0, 'north': 85.0,
+        'south': 50.0, 'north': MAX_LAT,
         # Longitude is cheap up here and latitude is what binds: at 66N a
         # 0.48 deg cell is 22 km wide, while 0.12 deg of latitude is 13 km.
         # Spending the samples on latitude is what resolves a coastline.
@@ -109,7 +115,7 @@ TILES = {
     'size': 20.0,
     'west': -180.0,
     'south': -80.0,
-    'north': 85.0,
+    'north': MAX_LAT,
     'minZoom': 7,
     # 0.08 x 0.08 — true 1/12 degree, and isotropic. The model carries 0.04
     # in latitude, but taking it doubles the deployed site to 205 MB for a
@@ -451,6 +457,17 @@ def build(spec: dict, t: int, level: dict, valid: str, run: str,
     y0 = axis_index(spec['south'], LAT0, DLAT, NLAT)
     y1 = axis_index(spec['north'], LAT0, DLAT, NLAT)
 
+    # **Round the top outward to the stride.** See the same note in
+    # fetch-ocean-fields.py: the fetch walks y0:stride:y1, so the last row
+    # sampled is up to stride-1 cells below y1 — 0.92 deg on the global grid
+    # — and each grid therefore stopped somewhere different. Measured before
+    # the fix: currents 84.16, currents-arctic 84.92, the scalar fields 84.16
+    # and 84.88, wind 90. Every one of those boundaries was a band where one
+    # layer was drawn over another that had ended.
+    span = y1 - y0
+    if span % stride_lat:
+        y1 = min(y0 + (span // stride_lat + 1) * stride_lat, NLAT - 1)
+
     if spec['wrap']:
         slabs = [(0, NLON - 1)]
     else:
@@ -542,6 +559,10 @@ def build_tile(t: int, level: dict, valid: str, run: str,
 
     y0 = axis_index(south, LAT0, DLAT, NLAT)
     y1 = axis_index(north, LAT0, DLAT, NLAT)
+    stride_lon, stride_lat = TILES['stride']
+    span = y1 - y0
+    if span % stride_lat:                       # see the note in region_grid
+        y1 = min(y0 + (span // stride_lat + 1) * stride_lat, NLAT - 1)
     x0 = axis_index(west % 360, LON0, DLON, NLON)
     x1 = axis_index(east % 360, LON0, DLON, NLON)
     if x0 <= x1:
@@ -549,8 +570,6 @@ def build_tile(t: int, level: dict, valid: str, run: str,
     else:
         taken = (NLON - 1 - x0) // TILES['stride'][0] + 1
         slabs = [(x0, NLON - 1), (x0 + taken * TILES['stride'][0] - NLON, x1)]
-
-    stride_lon, stride_lat = TILES['stride']
 
     def grab(name: str) -> list[list[float | None]]:
         parts = [

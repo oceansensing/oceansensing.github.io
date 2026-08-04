@@ -83,6 +83,23 @@ socket.getaddrinfo = _ipv4_first
 # product because they are indices into that product's own grid, and the two
 # have different native resolutions — the point of the finest tier is to reach
 # native resolution, not some fixed number of degrees.
+# The northern edge every grid must reach.
+#
+# **Stated once, because it used to be three different numbers by accident.**
+# Each grid ended wherever its own stride happened to land walking up from
+# `lat0`, so the same request for "north 85" produced 84.16 from the 0.96 deg
+# global grid, 84.88 from the 0.16 deg Arctic one and 85.125 from OISST's
+# quarter degree — and between those latitudes one product was drawn and
+# another was not. Reported as gappy bands near the pole, and that is exactly
+# what they were: not missing data but three different edges stacked.
+#
+# 85 because Web Mercator cannot draw past about 85.05 anyway. Grids round
+# *outward* to it (see `build`), so each one covers at least this far and
+# usually a little past — which is not waste: the map's bilinear sampling
+# degenerates on the last row, so a row beyond the visible limit is what lets
+# the topmost visible row interpolate properly.
+MAX_LAT = 85.0
+
 REGIONS = [
     {
         'name': 'atlantic',
@@ -104,7 +121,7 @@ REGIONS = [
         # Overlaps the Atlantic region rather than meeting it: the map needs
         # the whole viewport inside a region to use one, so a band starting
         # where the other stopped drops every straddling view to the globe.
-        'south': 50.0, 'north': 85.0,
+        'south': 50.0, 'north': MAX_LAT,
         'minZoom': 4,
     },
     {
@@ -149,7 +166,7 @@ TILES = {
     'size': 20.0,
     'west': -180.0,
     'south': -80.0,
-    'north': 85.0,
+    'north': MAX_LAT,
     # Native resolution everywhere, from the zoom where it can first be seen.
     #
     # 7 was inherited from the current tiles, where a tile carries u *and* v.
@@ -637,6 +654,16 @@ def build(product: dict, when: str, valid: str, out: pathlib.Path,
     stride_lon, stride_lat = stride
     y0 = axis_index(south, product['lat0'], product['dlat'], product['nlat'])
     y1 = axis_index(north, product['lat0'], product['dlat'], product['nlat'])
+# **Round the top outward to the stride, or the grid stops short of what
+    # was asked for.** `fetch` walks y0:stride:y1, so the last row sampled is
+    # y0 + floor((y1-y0)/stride)*stride — up to stride-1 cells *below* y1,
+    # which on the 0.96 deg global grid is 0.92 deg of latitude silently
+    # dropped. Three grids each dropping a different amount is what put bands
+    # of one-product-only coverage under the pole. Extending instead of
+    # truncating costs one row and guarantees every grid reaches MAX_LAT.
+    span = y1 - y0
+    if span % stride_lat:
+        y1 = min(y0 + (span // stride_lat + 1) * stride_lat, product['nlat'] - 1)
     slabs = slabs_for(product, west, east, stride_lon, wrap)
 
     parts = [fetch(product, when, y0, y1, a, b, stride_lat, stride_lon) for a, b in slabs]
@@ -985,7 +1012,7 @@ def build_product(product: dict, tiles_only: bool) -> None:
         # The global file advertises the finer tiers, so the map learns them
         # from the data rather than repeating the bounds in the component.
         build(product, step, lead_valid, MAP_DIR / f'{at_lead(name, lead)}.json',
-              south=-80.0, north=85.0, west=-180.0, east=180.0,
+              south=-80.0, north=MAX_LAT, west=-180.0, east=180.0,
               stride=product['strides']['global'], wrap=True, run=lead_run,
               extra={**extra, 'lead': lead})
 
