@@ -115,8 +115,19 @@ kbd {
   max-width: none;
 }
 
-.container.wide > :not(.map-figure) {
+.container.wide > :not(.map-figure, .topline) {
   max-width: var(--content-width);
+}
+
+/* The topline is the map's caption above the map: an eyebrow on the left and
+   the UTC clock on the right. It spans the figure rather than the prose
+   measure so those two land on the map's own left and right edges — a clock
+   stopping short of the map, in the middle of a wide screen, reads as
+   belonging to nothing.
+   Scoped to `.wide`, so the observation pages without a map — the same
+   template renders them — keep the eyebrow and clock sitting together. */
+.container.wide > .topline {
+  justify-content: space-between;
 }
 
 /* long-form markdown content */

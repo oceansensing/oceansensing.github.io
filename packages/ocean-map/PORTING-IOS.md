@@ -5,22 +5,22 @@ website, and you should not change it.
 
 ## What you are porting
 
-An interactive map of ocean observing platforms and the water they work in:
-storm tracks and forecast cones, gliders, saildrones, ~4,000 Argo floats,
-animated currents at two depths, sea-surface temperature and salinity,
-isobaths from 20 m to 10,000 m, a coastline and EEZ boundaries — plus distance
-and bearing measurement and a point readout of depth, current, temperature and
-jurisdiction.
+An interactive map of ocean observing platforms and the water and weather they
+work in: storm tracks and forecast cones, gliders, saildrones, ~4,000 Argo
+floats, animated currents at two depths, animated 10 m wind, sea-surface
+temperature and salinity, isobaths from 20 m to 10,000 m, a coastline and EEZ
+boundaries — plus distance and bearing measurement and a point readout of
+depth, current, wind, temperature and jurisdiction.
 
 Live: <https://oceansensing.org/observations/hurricanes/>
 
 ## The one thing to understand first
 
-**Roughly two-thirds of this is not about drawing.** The web version is
-~2,700 lines of Leaflet adapter sitting on top of four data pipelines, a
-schema, a colour system, and about thirty measured decisions. You reimplement
-the drawing. You **reuse** everything else, and reusing it is the difference
-between a month and a week.
+**Most of this is not about drawing.** The web version is ~3,600 lines of
+Leaflet adapter sitting on top of six data pipelines, a schema, a colour
+system, and about forty measured decisions. You reimplement the drawing. You
+**reuse** everything else, and reusing it is the difference between a month
+and a week.
 
 Read `BOUNDARIES.md` before anything else — the separations it describes are
 what make this port possible, and the same rules apply to whatever you add.
@@ -30,16 +30,29 @@ what make this port possible, and the same rules apply to whatever you add.
 | file | what it gives you | notes |
 | --- | --- | --- |
 | `schema.ts` | the shape of every published file | mirror as Swift `Codable` |
-| `geo.ts` | great-circle bearing, degrees-and-decimal-minutes, spans, timestamps | pure functions |
+| `geo.ts` | great-circle bearing, degrees-and-decimal-minutes, spans, timestamps, hours-ahead | pure functions |
 | `ramp.ts` | colour-ramp interpolation | pure |
 | `tiles.ts` | which tiles a view needs | pure; floored modulo, mind the antimeridian |
-| `data/map-palette.json` | every colour, and 25 colour scales | with the reasoning in `_`-prefixed keys |
+| `warp.ts` | the homography behind `gx:LatLonQuad` image overlays | pure; falls back to affine when the quad is a parallelogram |
+| `kmz.ts` | KMZ/KML decode — ZIP, geometry, styles, ground overlays | pure; **inject** an XML parser, do not import one |
+| `data/map-palette.json` | every colour, 25 colour scales, and every conceded clash | with the reasoning in `_`-prefixed keys |
 | `data/basemap-ocean.json` | sampled water colours the palette is gated against | |
-| `../../scripts/*.py` | the four data pipelines | run unchanged, or read the same output |
+| `../../scripts/*.py` | the six data pipelines | run unchanged, or read the same output |
 
-`scripts/test-units.mjs` is the specification for `geo`, `ramp` and `tiles` —
-47 assertions, each pinning a case a comment claims to handle. Port the tests
+`scripts/test-units.mjs` is the specification for all of those — **106
+assertions**, each pinning a case a comment claims to handle. Port the tests
 and you will know your Swift matches.
+
+Two conventions in there are worth reading twice, because getting either
+backwards produces a plausible wrong answer rather than an error:
+
+- **A current is named for where it goes; a wind for where it comes from.** A
+  southwesterly blows towards the northeast. The readout flips the bearing by
+  180° for wind and not for current.
+- **Particle drift is per field.** The median 10 m wind is ~27× the median
+  surface current, so one speed constant makes one of them invisible and the
+  other a streak. The web version keeps a `DRIFT` per field and a ceiling on
+  the particle count, since the count scales with the map's area.
 
 ## The data
 

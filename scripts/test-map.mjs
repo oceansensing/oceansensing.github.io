@@ -2312,6 +2312,20 @@ const checks = [
     const viz = page('visualization');
     return wide(viz, 'article') === true && /<header[^>]*>[\s\S]{0,400}?container inner wide/.test(viz ?? '');
   })()],
+  /* The eyebrow and the UTC clock are the map's caption above the map, so the
+     topline spans the figure rather than the prose measure — otherwise the
+     clock stops short of the map in the middle of a wide screen and reads as
+     belonging to nothing. Two rules do it, and both are needed: the topline
+     is exempt from the width cap, and it spreads its two children apart. */
+  ['the topline spans the map, so the clock lands on its right edge', (() => {
+    const css = fs.readdirSync('dist/_astro')
+      .filter((f) => f.endsWith('.css'))
+      .map((f) => fs.readFileSync(path.join('dist/_astro', f), 'utf8'))
+      .join('\n');
+    const exempt = /\.container\.wide>:not\([^)]*\.topline[^)]*\)/.test(css.replace(/\s+/g, ''));
+    const spread = /\.container\.wide>\.topline\{[^}]*space-between/.test(css.replace(/\s+/g, ''));
+    return exempt && spread;
+  })()],
   /* And a page without one does not, which is the half that would rot: the
      same template renders the photo-panel observations, and widening those
      would stretch their prose across a 2000px screen. */

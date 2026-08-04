@@ -27,6 +27,17 @@ mountOceanMaps();
 That is a working map. The stylesheet comes with the module; there is nothing
 to import separately and no design tokens to define.
 
+**It sizes itself to its container.** Width is whatever you give it; height
+comes from the package stylesheet — `max(30rem, 77.5svh)` on a desktop
+viewport, `max(24rem, 62svh)` below 48rem — with a floor and no ceiling, so it
+grows with the window. It also watches the container with a `ResizeObserver`
+and refits, which matters because Leaflet's own `trackResize` only listens on
+`window.resize`: a sidebar opening or a font finishing loading changes the
+map's width with the window perfectly still, and the failure is silent — tiles
+simply stop short of the container's edge. If you want a different height,
+override it on `.ocean-map`; that is the one rule here a host is expected to
+have an opinion about.
+
 ## Options
 
 Passed in code, or as `data-*` on the container. Code wins over the attribute,
@@ -67,7 +78,9 @@ build. You are depending on that host staying up and on its update cadence,
 and you should ask before leaning on someone else's bandwidth.
 
 **Run the pipelines.** `../../scripts/*.py` produce everything; `../../README.md`
-lists the commands. Standard library only except for the two local tools. Two
+lists the commands. Standard library only except for the two local tools and
+the wind, which needs `eccodes` — ECMWF packs its open GRIB2 with CCSDS/AEC
+and nothing in Python's standard library decodes that. Two
 things to know before you start: the isobaths need a 7.5 GB GEBCO grid you
 download once, and the full data set is ~186 MB, of which 123 MB is isobath
 tiles. `TILE_STRIDE` in `fetch-bathymetry.py` halves that for roughly 4 px
@@ -129,5 +142,6 @@ saves only this copying.
   palette. Dark mode keys off `prefers-color-scheme` **plus** a
   `data-theme` attribute; a theme-sensitive rule needs both forms.
 - **Attribution is not optional.** GEBCO, EMODnet, Marine Regions, NOAA, the
-  US Navy, IOOS, Ifremer and the other sources are credited on the map itself.
-  Leave the attribution control in place.
+  US Navy, ECMWF, IOOS, Ifremer and the other sources are credited on the map
+  itself. Leave the attribution control in place. Several are also licensed on
+  condition of it — ECMWF's open data is CC BY 4.0.

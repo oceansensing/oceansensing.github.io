@@ -67,19 +67,21 @@ npm run verify   # everything CI checks, in one command
 ```
 
 `npm run verify` builds, type-checks, checks the docs for drift, and runs the
-map and clock test harnesses. **CI runs the same command and refuses to deploy
+map, multimap and clock test harnesses — about 700 assertions in all. **CI runs the same command and refuses to deploy
 if it fails**, so running it before you push is the quickest way to find out
 whether a change will publish.
 
 The individual pieces, if you want one on its own:
 
 ```sh
-npm run check         # type-check
-npm run check:docs    # docs reference real scripts, real paths, the right URL
-npm run test:units      # the map's renderer-independent modules
-npm run test:contrast # map colours stay visible on both bathymetries
-npm run test:map      # asset map, against the built bundle
-npm run test:clock    # UTC clock, against the built bundle
+npm run check          # type-check
+npm run check:docs     # docs reference real scripts, real paths, the right URL
+npm run test:units     # the map's renderer-independent modules, with no DOM at all
+npm run test:schema    # every published data file against the contract in schema.ts
+npm run test:contrast  # map colours stay visible, and every conceded clash is named
+npm run test:map       # asset map, against the built bundle
+npm run test:multimap  # two maps on one page stay out of each other's way
+npm run test:clock     # UTC clock, against the built bundle
 ```
 
 The test harnesses read from `dist/`, so build first or they test stale code.

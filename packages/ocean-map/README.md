@@ -1,12 +1,15 @@
 # ocean-map
 
-An interactive map of ocean observing platforms and the water they are working
-in: storm tracks and forecast cones, gliders, saildrones, Argo floats, animated
-currents at two depths, sea-surface temperature and salinity, isobaths, a
-coastline and EEZ boundaries — with distance/bearing measurement, a
-right-click readout of depth, current, temperature and jurisdiction, and a
-reader's own KMZ or KML — vectors and georeferenced images — drawn over the
-top and kept between visits.
+An interactive map of ocean observing platforms and the water and weather they
+are working in: storm tracks and forecast cones, gliders, saildrones, Argo
+floats, animated currents at two depths, animated 10 m wind, sea-surface
+temperature and salinity, isobaths, a coastline and EEZ boundaries — with
+distance/bearing measurement, a right-click readout of depth, current, wind,
+temperature and jurisdiction, and a reader's own KMZ or KML — vectors and
+georeferenced images — drawn over the top and kept between visits.
+
+The map fills whatever container it is given, in both axes, and refits itself
+when that container changes size rather than only when the window does.
 
 Built for <https://oceansensing.org/observations/hurricanes/>, and kept free of
 that site so it can be dropped somewhere else.
@@ -63,8 +66,8 @@ The module supplies behaviour only. The host page provides:
   Colours read CSS variables with fallbacks, so a host defining the site's
   design tokens gets its own palette and one that does not still gets a
   legible map.
-- **Data** — the generated grids under `dataBase`. There are ~150 MB of them,
-  so they are not shipped here. Point `dataBase` at a host that already serves
+- **Data** — the generated grids under `dataBase`. There are a few hundred MB
+  of them, most of it isobath and current tiles, so they are not shipped here. Point `dataBase` at a host that already serves
   them, or build your own with the scripts in `scripts/`. `schema.ts` says
   exactly what each file must contain, and `npm run test:schema` checks a
   directory against it — which is also the definition a native port mirrors.
@@ -82,9 +85,9 @@ Leaflet's own CSS with it.
   hurricanes, NOAA USVs, ocean gliders and Argo floats, and the layer switcher
   matches. Fine for another deployment reading the same `dataBase`; a
   blocker for one with different platforms.
-- **`index.ts` is still ~2,700 lines.** The renderer-independent parts are
-  out — `geo.ts`, `ramp.ts`, `tiles.ts`, `schema.ts` — but what remains is one
-  long Leaflet adapter. Splitting it further is tidiness rather than capability
+- **`index.ts` is ~3,600 lines.** The renderer-independent parts are out —
+  `geo.ts`, `ramp.ts`, `tiles.ts`, `schema.ts`, `warp.ts`, `kmz.ts`, about a
+  fifth of the package — but what remains is one long Leaflet adapter. Splitting it further is tidiness rather than capability
   now, since a native port rewrites that layer anyway. Keep new logic that does
   not touch `L.` out of it regardless: see S1 in `BOUNDARIES.md`.
 

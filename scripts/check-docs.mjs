@@ -138,15 +138,65 @@ const claims = [
     doc: (v) =>
       new RegExp(`\\b${['zero', 'one', 'two', 'three', 'four', 'five', 'six'][+v] ?? v}\\*{0,2}\\s+regional ERDDAPs`),
   },
+  /* The map's size is no longer capped, so the particle count would not be
+     either — it is the map's area times a constant. The ceiling is the thing
+     standing between a 4K window and ~52,000 particles at 18 fps, and the
+     docs quote it twice. */
+  {
+    what: 'particle ceiling',
+    file: 'packages/ocean-map/index.ts',
+    from: /const MAX_PARTICLES = (\d+)/,
+    doc: (v) => new RegExp(`${Number(v).toLocaleString('en-US')}[- ]particle ceiling|MAX_PARTICLES = ${v}|above \\*{0,2}\`?MAX_PARTICLES = ${v}\`?`),
+  },
+  /* The forecast lead, which is the difference between a map showing the
+     present and one showing tomorrow. It is quoted as T+36 throughout. */
+  {
+    what: 'forecast lead',
+    file: 'scripts/fetch-currents.py',
+    from: /^LEADS = \[(\d+)\]/m,
+    doc: (v) => new RegExp(`T\\+${v}\\b`),
+  },
 ];
 /* Whitespace-normalised, because these docs are hard-wrapped: a claim like
    "four regional ERDDAPs" can straddle a line break, and a pattern with a
    literal space would then report drift that is only a newline. */
 const claimDoc = fs.readFileSync('CLAUDE.md', 'utf8').replace(/\s+/g, ' ');
+
+/* The two particle drift rates, against the measured speed ratio the docs
+   justify them with. This one is **not** a string match, because the two
+   numbers are different quantities: the prose quotes the measured ratio of
+   median speeds (wind against surface current) and `DRIFT` is a pair of
+   constants chosen to cancel it. Requiring them to be equal to the decimal
+   would be requiring the measurement to be rounded to the constant, which is
+   backwards. What has to hold is that the constants still embody the
+   measurement — so they are compared numerically, with room for the rounding
+   that separates them. Diverge by more than a tenth and one of the two has
+   moved without the other. */
+{
+  const src = fs.readFileSync('packages/ocean-map/index.ts', 'utf8');
+  const drift = /const DRIFT = \{ current: ([\d.]+), wind: ([\d.]+) \}/.exec(src);
+  const quoted = /(\d+(?:\.\d+)?)\*{0,2}(?:x|×) (?:the median|faster)/.exec(claimDoc);
+  if (!drift) {
+    problems.push('packages/ocean-map/index.ts: cannot read DRIFT');
+  } else if (!quoted) {
+    problems.push('CLAUDE.md: does not say how much faster the wind runs than the current');
+  } else {
+    const constants = Number(drift[1]) / Number(drift[2]);
+    const measured = Number(quoted[1]);
+    if (Math.abs(constants - measured) / measured > 0.1) {
+      problems.push(
+        `CLAUDE.md quotes wind at ${measured}x the current, but DRIFT is set for ` +
+        `${constants.toFixed(1)}x — one of the two moved without the other`
+      );
+    }
+  }
+}
 for (const claim of claims) {
   const source = fs.readFileSync(claim.file, 'utf8');
   const raw = claim.from.exec(source);
-  const found = raw && [raw[0], claim.count ? String(claim.count(raw[1])) : raw[1]];
+  // Every capture, not just the first: a claim derived from two constants
+  // — the ratio between the two particle drift rates — needs both.
+  const found = raw && [raw[0], claim.count ? String(claim.count(...raw.slice(1))) : raw[1]];
   if (!found) {
     problems.push(`${claim.file}: cannot read the ${claim.what}`);
     continue;

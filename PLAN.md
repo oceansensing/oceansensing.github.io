@@ -18,16 +18,18 @@ The hurricane page carries a live map: NHC forecast tracks and cones with
 10-day observed storm history, NOAA saildrones, ~50 gliders from four national
 data centres (US, UK, Canada, Sweden), ~4,000 Argo floats, animated global
 currents at the surface and 60 m that sharpen to 1/12° as you zoom in,
-sea-surface temperature from both an observed analysis (OISST) and the Navy
-forecast, Navy sea-surface salinity, isobaths from 20 m to 10,000 m with an opacity the reader
-sets, a detailed coastline, and EEZ boundaries. The ESPC fields are T+36
+ECMWF 10 m wind, sea-surface temperature from both an observed analysis
+(OISST) and the Navy forecast, Navy sea-surface salinity, isobaths from 20 m
+to 10,000 m with an opacity the reader sets, a detailed coastline, and EEZ
+boundaries. The map fills the window in both axes and the page's text aligns
+to its edges. The ESPC fields are T+36
 from the newest run rather than its nowcast hour — the run lands a day or so
 late, so T+36 is about the present — and the attribution says which hour
 they are valid for and how far ahead of now that is. Twenty-five colour
 scales, with the range either following the view or pinned by hand, and a
 reset that puts everything back. Hovering an asset names it; clicking one
-reports its details plus the depth, current, temperature and — when the EEZ
-layer is on — the jurisdiction of the water it is in; right-click or
+reports its details plus the depth, current, wind, temperature and — when the
+EEZ layer is on — the jurisdiction of the water it is in; right-click or
 long-press does the same anywhere. There is a distance and bearing tool.
 Above the map, an active-storm status line that updates without a reload;
 beside that, a server-synchronised UTC clock. The page refreshes itself when

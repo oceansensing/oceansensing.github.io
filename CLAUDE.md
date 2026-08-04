@@ -276,9 +276,11 @@ The remaining seams, in order of what they unlock:
   the site's own utility deliberately — leaning on a host to define it is the
   kind of invisible dependency whose failure is silent.
 - **Still to do**: the chrome markup is the host's, so a second site
-  reproduces the legend and controls; the module is one 2,700-line file; and
+  reproduces the legend and controls; the module is one 3,600-line file; and
   the fleet is assumed — the legend names hurricanes, USVs, ocean gliders and
-  Argo, and the layer switcher matches.
+  Argo, and the layer switcher matches. Against that, the renderer-independent
+  half has kept growing — `geo`, `ramp`, `tiles`, `schema`, `warp`, `kmz`, now
+  about a fifth of the package by line count.
 
 Moving the stylesheet turned up **two fetches that ignored `dataBase`** — the
 isobath tiles and the hourly refresh poll. Both are template literals, and the
@@ -585,9 +587,10 @@ to, and finding there was no answer.
 
 ### Data pipeline (`scripts/fetch-ocean-assets.py`)
 
-Standard library only, so CI needs no Python dependencies. Aggregates NHC
-storms (via KMZ), NOAA PMEL saildrones, and gliders from **four** regional
-ERDDAPs into one JSON.
+Standard library only — as every pipeline here is bar the wind, which needs
+`eccodes` for ECMWF's CCSDS-packed GRIB2 and is the sole reason CI installs
+anything. Aggregates NHC storms (via KMZ), NOAA PMEL saildrones, and gliders
+from **four** regional ERDDAPs into one JSON.
 
 Gliders are national, so one server does not see the fleet: `GLIDER_SOURCES`
 lists IOOS (US), NOC/BODC (UK), OTN (Canada) and VOTO (Sweden), taken from
@@ -1414,11 +1417,17 @@ Two things on the map side are easy to get wrong and both are silent:
   plausible on screen. `test:map` blows the fixture due east and requires the
   readout to say **from 270°T**.
 - **Speed needs its own calibration.** Measured on the published grids, the
-  median 10 m wind is 5.97 m/s against the median surface current's 0.22 —
-  **26.7×**. Sharing one `DRIFT` would streak the wind across the map, the
-  same runaway the zoom scaling already has a note about. `DRIFT` is per
-  field, and `test:map` measures both at one view and fails if they diverge
-  by more than 4×; it currently reads p90 1.41 px/frame against 1.59.
+  median 10 m wind is 5.97 m/s against the median surface current's 0.22, so
+  wind runs **26.7× faster**. Sharing one `DRIFT` would streak it across the
+  map, the same runaway the zoom scaling already has a note about. `DRIFT` is
+  per field, and `test:map` measures both at one view and fails if they
+  diverge by more than 4×; it currently reads p90 1.41 px/frame against 1.59.
+
+  `check:docs` holds the two together, and **not** by matching the number:
+  the ratio above is a measurement and `DRIFT` is a pair of constants chosen
+  to cancel it, so they are different quantities that happen to agree. It
+  compares them numerically and fails if they drift more than a tenth apart —
+  requiring the measurement to be rounded to the constant would be backwards.
 
 **Wind and a current can be drawn together, and that is what its colour is
 for.** It is deliberately *not* in the currents' exclusivity group: wind over

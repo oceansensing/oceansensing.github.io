@@ -12,19 +12,27 @@ behind it, and every one was learned by breaking it.
 
 ## Structural
 
-### S1. `geo.ts`, `ramp.ts`, `tiles.ts` and `schema.ts` never import Leaflet or the DOM
+### S1. `geo.ts`, `ramp.ts`, `tiles.ts`, `schema.ts`, `warp.ts` and `kmz.ts` never import Leaflet or the DOM
 
 They typecheck standalone:
 
 ```sh
 npx tsc --noEmit --ignoreConfig --strict --target es2022 \
   --moduleResolution bundler --module esnext \
-  packages/ocean-map/{geo,ramp,tiles,schema}.ts
+  packages/ocean-map/{geo,ramp,tiles,schema,warp,kmz}.ts
 ```
 
 **Why:** these are what a native port keeps verbatim. Everything that moves
 into them is work an iOS app does not repeat; everything left in `index.ts` is
-work it rewrites. The split is currently about 16% renderer-bound.
+work it rewrites. Measured today: **1,030 lines free of the renderer against
+3,606 in `index.ts`**, so about 22% is portable — up from 11% when only the
+first four files existed, which is the direction to keep pushing.
+
+`kmz.ts` is the pattern to copy when something *seems* to need the DOM: it
+parses XML, which in a browser means `DOMParser`, so the parser is **injected**
+rather than imported. That keeps the file testable in Node and portable to
+Swift, and it is why `warp.ts` — the projective transform behind
+`gx:LatLonQuad` overlays — could follow it out.
 
 **So:** new logic that does not need `L.` goes in one of these files, not in
 `index.ts`. A `Point` is `{lat, lng}` — a plain pair, which `L.LatLng`
@@ -72,6 +80,13 @@ exception and lives in CSS variables instead, because its legibility comes from
 a casing rather than from hue. If you add some, define the variable in **all
 three** theme blocks; adding it to only the dark ones leaves light mode
 stroking with no colour.
+
+**A colour that cannot clear the bar is named in `concessions`, not waved
+through.** Each entry records the pair, its measured ΔE and the reason, and the
+gate checks the list **both ways**: an unlisted clash fails, and a concession
+for a pair that actually clears fails with "remove it". That second half is
+what stops the list becoming a place to hide things — without it a clash that
+got fixed would stay listed forever and the record would stop being read.
 
 *Enforced by* `npm run test:contrast` and the palette comparison in `test:map`.
 
@@ -125,9 +140,15 @@ not require the host to define a design token, a utility class, or a global.
 
 The constants in this codebase are not preferences. The 12-day Argo window,
 the three-dry-neighbour coastal erosion, the per-depth isobath speckle filters,
-the 0.004° contour tolerance, the tier zoom thresholds — each has a number and
-a reason recorded beside it, usually because the obvious choice was tried and
-measured as wrong.
+the 0.004° contour tolerance, the tier zoom thresholds, the two particle drift
+rates 27× apart, the 16,000-particle ceiling — each has a number and a reason
+recorded beside it, usually because the obvious choice was tried and measured
+as wrong.
+
+Three of them were got wrong *this way*: by searching under a stricter rule
+than the gate actually applies, which does not produce a safer answer but no
+answer at all, with a confident wrong reason attached. If a search comes back
+empty, check what it was scoring against before concluding the space is.
 
 **Do not change one without re-measuring**, and when you do, update the
 reasoning rather than just the value. `check:docs` reads several of these
@@ -149,5 +170,6 @@ Before adding anything, ask:
     so every instance of the map gets it.
 6. Does it change a measured constant? Then re-measure and rewrite the reason.
 
-`npm run verify` is the gate — 923 checks across nine steps. CI runs exactly
-it, and the deploy will not run unless it passes.
+`npm run verify` is the gate — a build, a type-check, a docs check and six
+test suites, ~700 assertions. CI runs exactly it, and the deploy will not run
+unless it passes.
