@@ -112,9 +112,14 @@ const recordingContext = new Proxy(
           [penX, penY] = args;
         } else if (key === 'lineTo') {
           drawn.lineTo += 1;
-          // Generous: the zoom comparison below samples windows out of this,
-          // and a 500-entry cap made every window after the first empty.
-          if (drawn.segments.length < 400000) {
+          /* Generous: the zoom comparison below samples windows out of this,
+             and a 500-entry cap made every window after the first empty.
+             Raised again with the padded view box — the field simulates 2.56x
+             the area now, so 400k was reached inside the first few frames and
+             the distribution it reported was of those frames rather than of
+             the run. The p90 held, but the median rose to meet it, which is
+             what a truncated sample looks like. */
+          if (drawn.segments.length < 1000000) {
             drawn.segments.push(Math.hypot(args[0] - penX, args[1] - penY));
           }
         } else if (key === 'stroke') {
@@ -2388,6 +2393,24 @@ const checks = [
      silently once already. */
   ['the particle-life diagnostic still reads the layer',
     particleLives.length > 0 && particleLives.every((p) => p.seconds > 0 && p.drift > 0)],
+
+  /* The field is simulated past the visible edge, so a short drag reveals
+     water that has already been advecting rather than a blank strip that
+     fills in over the next second — and the border stops being a place where
+     particles retire and respawn. Measured across a 220 px pan: visible
+     coverage went 58.3% -> 4.5% before any of this, 65.9% -> 54.5% once the
+     field was carried across the pan, and 55.3% -> 60.7% with the margin. */
+  ['the particle field is simulated past the visible edge', (() => {
+    const src = fs.readFileSync('packages/ocean-map/velocity-layer.ts', 'utf8');
+    const m = /const VIEW_MARGIN = ([\d.]+)/.exec(src);
+    if (!m || Number(m[1]) <= 0) return false;
+    const canvas = host.querySelector('.leaflet-currents-pane canvas');
+    if (!canvas) return false;
+    const size = host._map.getSize();
+    // Bigger than the viewport by about the declared margin on each side.
+    const wanted = Math.round(size.x * (1 + 2 * Number(m[1])));
+    return Math.abs(canvas.width - wanted) <= 2;
+  })()],
 
   /* ---- resizing ---- */
   ['the map watches its own container, not just the window',

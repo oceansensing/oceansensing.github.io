@@ -571,7 +571,15 @@ export async function createOceanMap(
      instead. 16,000 is a little over what a 1800x1000 map draws at full
      density, so every ordinary window keeps exactly what it has today and
      only genuinely large screens give up density — which is the right way
-     round, since a bigger map has more particles on it at any density. */
+     round, since a bigger map has more particles on it at any density.
+
+     Measured against the **viewport**, deliberately, while the field is
+     simulated over a box 30% larger on every side (see VIEW_MARGIN). So this
+     ceiling counts what a reader can see: on screen it is still 16,000, and
+     the margin's particles are extra work rather than a thinning of the same
+     ones. Total is 2.56x this, and the advection measures 1.29 ms per step
+     at 16,000 — so even at the ceiling on a 4K screen it is a few percent of
+     an 18 fps frame. */
   const MAX_PARTICLES = 16000;
   const FULL_DENSITY = 1 / 112;
 

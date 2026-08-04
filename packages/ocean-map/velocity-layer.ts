@@ -20,6 +20,15 @@
 import { DomUtil, Layer, Util, type Point, type Map as LeafletMap } from 'leaflet';
 import { ParticleField, speedIndex, type ComponentGrid } from './particles';
 
+/** How far past the viewport the field is simulated, as a fraction of the
+    viewport, on each side. 0.3 means the canvas is 1.6x the viewport in each
+    dimension — 2.56x the area, and the same multiple of particles.
+
+    It buys two things at the edges: a short drag reveals water that has
+    already been advecting rather than unseeded blank, and the visible border
+    stops being a place where particles retire and respawn. */
+const VIEW_MARGIN = 0.3;
+
 export interface VelocityLayerOptions {
   /** The published `[u, v]` pair. */
   data: [ComponentGrid, ComponentGrid];
@@ -61,6 +70,8 @@ export class VelocityLayer extends Layer {
   /** Where the canvas currently sits, in layer points. Kept so a pan can be
       measured and the field carried across it rather than reseeded. */
   private corner: Point | null = null;
+  /** How far the canvas extends past the viewport, in pixels per side. */
+  private margin = { x: 0, y: 0 };
   /** True between movestart and moveend. The field freezes rather than
       clearing: the canvas translates with the pane during a drag, so the
       trails stay over the water they belong to and simply come along. */
@@ -142,17 +153,39 @@ export class VelocityLayer extends Layer {
     if (!map || !canvas) return;
     const size = map.getSize();
 
+    /* The canvas runs past the viewport by `VIEW_MARGIN` on every side, and
+       the field is simulated out there too.
+
+       Two things come from that, and both are about edges. A short drag no
+       longer exposes unseeded water — the particles the reader pans onto have
+       been advecting off-screen all along, with trails already behind them,
+       so the newly revealed strip looks like the rest of the map instead of
+       filling in over the next second. And the visible edge stops being a
+       boundary: particles no longer retire at it and respawn just inside it,
+       which is what made the border read as a seam where flow appeared from
+       nothing.
+
+       It costs area, and area is what the particle count scales with — see
+       the note on the ceiling in index.ts. The ceiling still counts what is
+       on screen, so the density a reader sees is unchanged and the extra work
+       is the off-screen margin only. */
+    const mx = Math.round(size.x * VIEW_MARGIN);
+    const my = Math.round(size.y * VIEW_MARGIN);
+    this.margin = { x: mx, y: my };
+    const width = size.x + mx * 2;
+    const height = size.y + my * 2;
+
     // Only when it actually changed: assigning width clears the canvas, and
     // doing that on every pan is exactly the flash this is here to avoid.
-    const resized = canvas.width !== size.x || canvas.height !== size.y;
+    const resized = canvas.width !== width || canvas.height !== height;
     if (resized) {
-      canvas.width = size.x;
-      canvas.height = size.y;
-      canvas.style.width = `${size.x}px`;
-      canvas.style.height = `${size.y}px`;
+      canvas.width = width;
+      canvas.height = height;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
     }
 
-    const corner = map.containerPointToLayerPoint([0, 0]);
+    const corner = map.containerPointToLayerPoint([-mx, -my]);
     const previous = this.corner;
     DomUtil.setPosition(canvas, corner);
     this.corner = corner;
@@ -242,9 +275,14 @@ export class VelocityLayer extends Layer {
     const [u, v] = this.options.data ?? [];
     if (!u || !v) return;
 
-    const size = map.getSize();
     if (!this.field) {
-      const count = Math.max(1, Math.round(size.x * size.y * this.options.particleMultiplier));
+      // Over the padded box, so density on screen is what the multiplier says
+      // and the margin is genuinely extra rather than a thinning of the same
+      // particles across more area.
+      const count = Math.max(
+        1,
+        Math.round(canvas.width * canvas.height * this.options.particleMultiplier)
+      );
       const maxAge = Math.max(1, Math.round(this.options.particleSeconds * this.options.frameRate));
       this.field = new ParticleField(count, maxAge, this.options.random);
     }
@@ -274,10 +312,15 @@ export class VelocityLayer extends Layer {
     ctx.globalCompositeOperation = 'source-over';
 
     const view = {
-      width: size.x,
-      height: size.y,
+      width: canvas.width,
+      height: canvas.height,
+      /* Canvas coordinates are offset from container coordinates by the
+         margin — the canvas's top-left sits at container (-mx, -my) — so this
+         has to subtract it. Forgetting that samples the flow one margin
+         north-west of where each particle is drawn: the field still animates,
+         still looks like a field, and is wrong everywhere by a fixed offset. */
       toLngLat: (x: number, y: number) => {
-        const ll = map.containerPointToLatLng([x, y]);
+        const ll = map.containerPointToLatLng([x - this.margin.x, y - this.margin.y]);
         return { lng: ll.lng, lat: ll.lat };
       },
     };

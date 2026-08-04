@@ -757,6 +757,22 @@ tested: planting one rule in `visualization.astro` fails it.
 `test:map` catches it too, by comparing what actually reaches the canvas
 against the palette file.
 
+**Particle ramps are held to every water tone; markers are held to 90% of it
+by area.** That difference was learned from a bug report. Coverage is
+prevalence-weighted so one uncommon tone cannot veto a colour that is clear
+over the rest of the ocean — but the tone that kept getting outvoted was not
+an oddity. It is GEBCO's pale mint **continental shelf**: 4.9% of ocean
+pixels, and the water this map is most used to look at, because that is where
+the gliders work. Weighting by pixel area makes the abyssal plain important
+and the shelf noise, which is exactly backwards here.
+
+The old amber current ramp sat ΔE **21.8** from that shelf and **18.7** from
+Esri's palest tone, passed the gate at 94.3% weighted coverage, and was
+reported as invisible on the shelf. The ramp is coral now — near the
+complement of that mint — and the shelf goes to **41.8**. Markers keep the
+weighted rule: a marker is a filled dot with a dark casing, and a particle is
+a thin line with neither.
+
 Where a colour genuinely cannot clear the bar, the pair is **named in the
 palette with its measured distance and its reasoning** (`concessions`) and
 reported by the gate on every run, rather than the threshold being lowered —
@@ -1013,6 +1029,20 @@ interpolated velocity field across the whole screen after every zoom, in
 slices, and `test:map` had to wait **3 seconds** before it could sample.
 There is no rebuild now — a particle is unprojected and sampled where it
 stands — and the same measurements are stable at **600 ms**.
+
+**The field is simulated past the visible edge**, by `VIEW_MARGIN` — 30% of
+the viewport on every side, so the canvas is 1.6× the viewport in each
+dimension. Two things come from that, both about edges: a short drag reveals
+water that has already been advecting, with trails behind it, rather than a
+blank strip that fills in over the next second; and the visible border stops
+being a place where particles retire and respawn, which is what made it read
+as a seam with flow appearing out of nothing.
+
+It costs 2.56× the area and so 2.56× the particles. The ceiling is measured
+against the **viewport**, deliberately, so what a reader sees is still capped
+at 16,000 and the margin is genuinely extra rather than the same particles
+thinned across more area. At 1.29 ms per step per 16,000, even the ceiling on
+a 4K screen is a few percent of an 18 fps frame.
 
 **A pan carries the field; it does not reseed it.** The first version blanked
 the canvas at `movestart` and dropped every particle at `moveend`, so the

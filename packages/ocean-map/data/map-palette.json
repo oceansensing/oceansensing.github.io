@@ -8,13 +8,13 @@
     "argoEdge": "#3d3000",
     "measure": "#1b2028"
   },
-  "_currents": "The current particle ramp, slow to fast. Warm pale amber rather than blue because the two bathymetries are opposite in tone (Esri Ocean light, GEBCO dark) and no blue clears both: any blue pale enough to show on GEBCO's navy lands inside Esri's ocean, and GEBCO's own water runs blue through cyan to the pale mint it paints shallow banks. Amber sits outside that whole range, so one ramp serves both maps and there is no basemap switching to get wrong. Kept pale rather than saturated so the particles are not mistaken for the orange USV markers.",
+  "_currents": "The current particle ramp — pale coral, slow to fast. It was warm amber for a long time and was changed because of where it failed: GEBCO paints shallow banks a pale mint, and the amber sat ΔE 21.8 from that tone — under the bar, and invisible on exactly the water this map is most used to look at. It passed the gate anyway, because coverage is weighted by prevalence and the shelf is only 4.9% of ocean pixels; the abyssal plain outvoted it. (It was under the bar on Esri's palest tone too, at 18.7, for the same reason.) Coral is close to the complement of that mint, which is why it wins: the shelf goes from 21.8 to 41.8. It clears every water tone of both basemaps outright rather than on average — worst 24.2 — every marker, every marker-safe colormap, and the wind's yellow by 40.4. Chosen by the search in scripts/lib/colour.mjs over hue, chroma and lightness: 447 ramps clear all of that, and this is the one with the most room at its worst point. It also retired two concessions this palette had been carrying: Argo's gold against the particles (17.8) and the wind ramp against them (17.9) are now 34.2 and 40.4.",
   "currents": [
-    "#ecd7ab",
-    "#f1dfbb",
-    "#f5e6ca",
-    "#f9edd9",
-    "#fcf2e3"
+    "#fea89b",
+    "#ffac9f",
+    "#ffb0a3",
+    "#ffb4a7",
+    "#ffb9ab"
   ],
   "_wind": "The wind particle ramp — lemon yellow, slow to fast. **Chosen against the measurement rather than by it**, and the concessions it makes are listed in `concessions` below rather than absorbed quietly. Yellow is the one region of this palette that is genuinely crowded: the Argo floats are gold, the saildrones orange, and the current particles pale amber, so a yellow has warm neighbours on three sides. Of every true yellow searched, this is the one whose worst clash is furthest from zero — it clears the storms by 66, the gliders by 77, the saildrones by 38.5 and the measuring line by 86, and concedes four pairs in the 17.9 to 19.6 band, which is the same order as the amber ramp's own long-standing concession to Argo at 17.8. A brighter, more saturated yellow was measured first and is far worse: ΔE 2.9 from the Argo gold, which is the same colour.",
   "wind": [
@@ -348,19 +348,9 @@
   "_concessions": "Every place a colour on this map knowingly sits under the ΔE 22 bar, with the measured distance and the reason. Recorded here rather than by lowering the threshold, which would quietly cover every future clash as well. scripts/test-contrast.mjs reports each on every run and checks the list **both ways**: a pair under the bar with no concession fails, and a concession for a pair that actually clears fails too. Without the second half the list rots — a clash that got fixed would still be listed, and the listing would stop meaning anything. Same bargain markerSafe strikes with the colormaps. What makes these tolerable is that a particle is a thin moving trail and the things it is close to are either filled dots with dark outlines or a whole-field raster: form and motion separate them where colour does not. That argument has limits, and the honest place to see them is this list getting longer.",
   "concessions": [
     {
-      "pair": "currents vs argo",
-      "deltaE": 17.8,
-      "why": "Argo's gold against the amber particles. No yellow clears them, and paling the amber far enough to make room drops its own water contrast to 79%. The dots carry a dark outline, which separates a discrete dot from a drifting trail whatever the fill does."
-    },
-    {
       "pair": "wind vs argo",
       "deltaE": 18.0,
       "why": "The same clash from the other side: a lemon wind particle against the same gold dot, at the same distance and mitigated the same way by the dots' outline."
-    },
-    {
-      "pair": "wind vs currents",
-      "deltaE": 17.9,
-      "why": "The expensive one, and the reason it is expensive is that these two are the one pair with no form to fall back on: both are thin drifting trails, and they can be on screen together. Yellow over pale amber is separable but not at a glance. The legend names both fields and the readout reports both, which is what carries the distinction when the colour does not."
     },
     {
       "pair": "wind vs thermal",
@@ -371,6 +361,16 @@
       "pair": "wind vs haline",
       "deltaE": 17.9,
       "why": "The pale end of the haline colormap, same case as thermal."
+    },
+    {
+      "pair": "wind vs #b0f0d0",
+      "deltaE": 20.8,
+      "why": "The lemon wind ramp against GEBCO's pale mint shelf — 4.9% of ocean pixels, and the water this map is most used to look at. The same clash the amber current ramp was changed to fix, inherited because the yellow was chosen while coverage was still weighted by area and the shelf was outvoted. Conceded rather than fixed because yellow was asked for deliberately and there is no yellow that clears a pale green; fixing it means moving the wind off yellow."
+    },
+    {
+      "pair": "wind vs #70d090",
+      "deltaE": 19.9,
+      "why": "The same, against GEBCO's other shallow-green tone (1.5%). One clash, two samples of it."
     }
   ]
 }

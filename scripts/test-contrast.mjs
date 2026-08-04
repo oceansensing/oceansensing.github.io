@@ -100,6 +100,21 @@ function against(colour, oceans) {
 const results = [];
 const notes = [];
 
+/* Every knowing concession, from the palette. A pair named here may sit
+   under the bar; every other pair may not. Checked both ways below — see
+   `_concessions`. */
+const concessions = new Map(
+  (palette.concessions ?? []).map((c) => [c.pair, { ...c, seen: null }])
+);
+
+/* Worst distance per pair, gathered rather than asserted, so a pair can be
+   judged against the concession list once all of its stops are in. */
+const pairs = new Map();
+const note_pair = (pair, d) => {
+  pairs.set(pair, Math.min(pairs.get(pair) ?? Infinity, d));
+};
+
+
 // Point and line features are drawn whichever basemap is showing, so they
 // have to survive all of them.
 for (const [name, colour] of Object.entries(palette.features)) {
@@ -121,12 +136,32 @@ for (const [name, colour] of Object.entries(palette.features)) {
    gate would have gone on saying `ok` about a colour it had never seen. */
 const PARTICLE_RAMPS = { currents: palette.currents, wind: palette.wind };
 
+/* **Every tone, not 90% of them by area.** Markers are judged on
+   prevalence-weighted coverage, because a marker is a filled dot with a dark
+   casing and one uncommon water tone should not veto a colour that is clear
+   over the rest of the ocean. A particle is a thin moving line with no
+   casing, and — the part that actually matters — the tone that gets outvoted
+   is *not* a random oddity. It is GEBCO's pale mint shelf, 4.9% of ocean
+   pixels and the water this map is most used to look at, since that is where
+   the gliders work. Weighting by pixel area makes the abyssal plain
+   important and the shelf noise, which is backwards for this map.
+
+   That is not hypothetical: the amber ramp this replaced sat ΔE 21.8 from
+   the shelf and 18.7 from Esri's palest tone, passed at 94.3% weighted
+   coverage, and was reported as invisible on the shelf. */
 for (const [field, ramp] of Object.entries(PARTICLE_RAMPS)) {
-  ramp.forEach((colour, i) => {
-    for (const [mapName, info] of Object.entries(basemaps)) {
-      results.push({ what: `${field}[${i}] (${colour})`, on: mapName, ...against(colour, info.ocean) });
+  for (const [mapName, info] of Object.entries(basemaps)) {
+    for (const { colour: water, share } of info.ocean) {
+      const d = Math.min(...ramp.map((c) => deltaE(hex(c), hex(water))));
+      note_pair(`${field} vs ${water}`, d);
+      results.push({
+        what: `${field} vs ${water}`,
+        on: `${mapName} (${(share * 100).toFixed(1)}% of it)`,
+        coverage: d >= MIN_DELTA_E || concessions.has(`${field} vs ${water}`) ? 1 : 0,
+        worst: d,
+      });
     }
-  });
+  }
 }
 
 /* An SST layer replaces the water under everything else, so every stop of
@@ -214,20 +249,6 @@ if (sstWater.length) {
 /* Particles must not read as assets. They are thin moving lines and the
    markers are filled dots, but keeping them apart in colour too means a
    glance is never ambiguous. */
-/* Every knowing concession, from the palette. A pair named here may sit
-   under the bar; every other pair may not. Checked both ways below — see
-   `_concessions`. */
-const concessions = new Map(
-  (palette.concessions ?? []).map((c) => [c.pair, { ...c, seen: null }])
-);
-
-/* Worst distance per pair, gathered rather than asserted, so a pair can be
-   judged against the concession list once all of its stops are in. */
-const pairs = new Map();
-const note_pair = (pair, d) => {
-  pairs.set(pair, Math.min(pairs.get(pair) ?? Infinity, d));
-};
-
 for (const [field, ramp] of Object.entries(PARTICLE_RAMPS)) {
   for (const colour of ramp) {
     for (const [name, feature] of Object.entries(palette.features)) {
