@@ -151,7 +151,10 @@ const gridBody = (f, header, data) => {
   if (bad >= 0) fail(f, `data[${bad}] is ${JSON.stringify(data[bad])} — expected a number or null`);
 };
 
-for (const name of ['sst-oisst', 'sst-navy', 'sss-navy']) {
+/* Named explicitly, so a product added to the pipeline and not to this
+   list is unchecked rather than merely unmentioned — the ice grids were,
+   and passed by omission. */
+for (const name of ['sst-oisst', 'sst-navy', 'sss-navy', 'sic-oisst', 'sic-navy']) {
   const g = read(`${name}.json`);
   if (!g) continue;
   checked++;
@@ -194,6 +197,39 @@ for (const name of ['currents', 'currents-60m', 'wind']) {
 }
 
 // ---- tile indices -----------------------------------------------------
+
+/* The ice edge. A FeatureCollection like the isobaths, but with a header,
+   because unlike the seafloor it has a date — an edge with no valid time is
+   a line nobody can tell from last winter's. Concentration is a fraction
+   everywhere else in this contract, so a threshold above 1 is the "percent"
+   confusion `icec` itself ships with, arriving by another route. */
+for (const name of ['sic-oisst-edge', 'sic-navy-edge']) {
+  const geo = read(`${name}.json`);
+  if (!geo) continue;
+  checked++;
+  const f = `${name}.json`;
+  if (geo.type !== 'FeatureCollection') fail(f, `type is ${geo.type}, expected FeatureCollection`);
+  const h = geo.header;
+  if (!h) fail(f, 'has no header, so nothing says when it is valid');
+  else {
+    if (typeof h.valid !== 'string' || !h.valid.endsWith('Z')) {
+      fail(f, `valid is ${JSON.stringify(h.valid)} — needs a trailing Z or it parses as local time`);
+    }
+    if (!(h.threshold > 0 && h.threshold <= 1)) {
+      fail(f, `threshold is ${h.threshold} — concentration is a fraction, so this must be 0..1`);
+    }
+    if (typeof h.source !== 'string' || !h.source) fail(f, 'has no source to credit');
+  }
+  if (!Array.isArray(geo.features)) fail(f, 'features is not an array');
+  else {
+    for (const [i, feature] of geo.features.slice(0, 200).entries()) {
+      const c = feature?.geometry?.coordinates;
+      if (!Array.isArray(c) || c.length < 2) { fail(f, `features[${i}] is not a line`); break; }
+      const bad = c.findIndex(([x, y]) => !isNum(x) || !isNum(y) || y < -90 || y > 90 || x < -180 || x > 180);
+      if (bad >= 0) { fail(f, `features[${i}].coordinates[${bad}] is off the globe`); break; }
+    }
+  }
+}
 
 for (const dir of fs.existsSync(MAP) ? fs.readdirSync(MAP).filter((d) => d.includes('tiles')) : []) {
   const idx = read(path.join(dir, 'index.json'));
@@ -263,7 +299,7 @@ if (bathy) {
    failure**, which is the case that matters — a run that wrote three frames
    of five leaves the map offering an hour it cannot draw, and that is
    invisible from anywhere else. */
-for (const name of ['currents', 'currents-60m', 'sst-navy', 'sss-navy']) {
+for (const name of ['currents', 'currents-60m', 'sst-navy', 'sss-navy', 'sic-navy']) {
   const root = read(`${name}.json`);
   if (!root) continue;
   const head = Array.isArray(root) ? root[0]?.header : root?.header;

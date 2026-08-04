@@ -1001,6 +1001,37 @@ def build_product(product: dict, tiles_only: bool) -> None:
             build_edge(product, name, at_lead, lead, step, lead_valid, lead_run)
 
 
+def fold_line(line: list) -> list:
+    """Fold a contour's longitudes into -180..180, splitting it where it
+    crosses the antimeridian.
+
+    **The grids are 0-360 and everything the map draws is -180..180.** The
+    contour inherits `lo1` from the grid it was cut from, so without this the
+    whole Arctic edge is written at longitudes up to 360 and Leaflet draws it
+    a world east of the ocean it belongs to — a layer that is switched on,
+    fetched, and nowhere to be seen. `test-schema` catches it now.
+
+    Folding alone is not enough: a line running through the antimeridian
+    jumps from 179.9 to -179.9 in one step, and drawn as a polyline that is a
+    stroke straight back across the map. So the line is cut there instead,
+    which is right rather than merely safe — the two halves are in different
+    copies of the world and a single path cannot be in both.
+    """
+    out, run = [], []
+    prev = None
+    for x, y in line:
+        fx = ((x + 180.0) % 360.0) - 180.0
+        if prev is not None and abs(fx - prev) > 180.0:
+            if len(run) > 1:
+                out.append(run)
+            run = []
+        run.append([round(fx, 4), round(y, 4)])
+        prev = fx
+    if len(run) > 1:
+        out.append(run)
+    return out
+
+
 def build_edge(product: dict, name: str, at_lead, lead: int,
                step: str, valid: str, run: str) -> None:
     """The ice edge, contoured from the region grids just published.
@@ -1058,7 +1089,7 @@ def build_edge(product: dict, name: str, at_lead, lead: int,
             # the note in contour.segments.
             absent=0.0,
         ):
-            paths.append([[round(x, 4), round(y, 4)] for x, y in line])
+            paths.extend(fold_line(line))
 
     out = {
         'type': 'FeatureCollection',
