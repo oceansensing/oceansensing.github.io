@@ -113,8 +113,11 @@ const byYear = [...new Set(panels.map((p) => p.year))]
 const collapsible = byYear.length > 1;
 ---
 
-<BaseLayout title={title} description={summary}>
-  <article class="container">
+<BaseLayout title={title} description={summary} wide={map === 'assets'}>
+  {/* Wide only when this observation actually carries the map — the same
+      template renders the photo-panel pages, which want the ordinary
+      prose measure. */}
+  <article class={`container${map === 'assets' ? ' wide' : ''}`}>
     <div class="topline">
       <p class="eyebrow">Significant observation</p>
       <UtcClock />

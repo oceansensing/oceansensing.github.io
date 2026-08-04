@@ -49,21 +49,26 @@
     --map-coast-halo: rgba(255, 255, 255, 0.6);
     --map-currents-blend: multiply;
 
-    height: clamp(24rem, 62vh, 40rem);
+    height: max(24rem, 62svh);
     border: 1px solid var(--border, #d6dbe0);
     border-radius: var(--radius, 4px);
     background: var(--bg-subtle, #f4f6f8);
     z-index: 0;
   }
 
-  /* A quarter taller on a desktop screen, where there is height to spare and
-     the extra goes into ocean rather than chrome. Every term scales, not just
-     the vh one, or the clamp would simply pin to the old maximum on a large
-     display. Phones keep the shorter map: the same increase there pushes the
-     legend and the storm line off the first screen. */
+  /* Taller on a desktop screen, where there is height to spare and the extra
+     goes into ocean rather than chrome. Phones keep the shorter map: the same
+     increase there pushes the legend and the storm line off the first screen.
+
+     **No upper bound.** It used to stop at 50rem, which meant that past a
+     1030px-tall window the map stopped growing and simply sat in more and
+     more empty page — the one element here that gets better with room,
+     capped. The floor stays, because a short window still needs enough map
+     to be worth drawing; `svh` rather than `vh` so a phone's collapsing
+     address bar does not resize it mid-scroll. */
   @media (min-width: 48rem) {
     .ocean-map {
-      height: clamp(30rem, 77.5vh, 50rem);
+      height: max(30rem, 77.5svh);
     }
   }
 

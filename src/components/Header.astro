@@ -4,10 +4,14 @@ import ThemeToggle from './ThemeToggle.astro';
 
 const { pathname } = Astro.url;
 const isActive = (href: string) => pathname.startsWith(href);
+
+// Wide on the map pages, so the chrome starts at the same left edge the
+// map and the page text do. See BaseLayout's `wide` prop.
+const { wide = false } = Astro.props;
 ---
 
 <header>
-  <div class="container inner">
+  <div class={`container inner${wide ? ' wide' : ''}`}>
     <a class="wordmark" href="/">
       {SITE.title}<span class="wordmark-sub">{SITE.fullName}</span>
     </a>

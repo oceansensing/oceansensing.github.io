@@ -136,7 +136,15 @@ const {
 <style>
   /* Placement only. Everything about how the map itself looks now lives in
      packages/ocean-map/ocean-map.css, which the module imports, so another
-     site gets the styling with the behaviour instead of copying it. */
+     site gets the styling with the behaviour instead of copying it.
+
+     The figure simply fills whatever it is given. Width is the host page's
+     to decide, and the two pages carrying this map say so by putting it in
+     a `.container.wide` — see global.css. An earlier pass had the figure
+     break out of a narrow container with a negative margin, which worked but
+     left the page's own text stranded in the middle of a wide screen while
+     the map ran past it on both sides. Widening the container instead moves
+     the text and the map to the same left edge, and needs no arithmetic. */
   .map-figure {
     margin: 0 0 var(--space-lg, 1.5rem);
   }

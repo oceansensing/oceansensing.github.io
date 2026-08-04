@@ -54,6 +54,23 @@ Object.defineProperty(globalThis, 'navigator', { value: window.navigator, config
 for (const k of ['HTMLElement', 'Element', 'Node', 'SVGElement', 'Event', 'MouseEvent', 'KeyboardEvent', 'DOMParser'])
   globalThis[k] = window[k];
 globalThis.getComputedStyle = window.getComputedStyle.bind(window);
+
+/* jsdom has no ResizeObserver, and the map uses one to refit when its
+   *container* changes size rather than only when the window does. A stub, so
+   the wiring is testable here: it records what was observed and hands back a
+   trigger, which is the only way to exercise this at all — a real browser
+   cannot be used either, because ResizeObserver callbacks are delivered
+   during rendering steps and a hidden tab runs none. Measured: in a hidden
+   pane even a fresh observer on document.body never fires. */
+const resizeObserved = [];
+class StubResizeObserver {
+  constructor(cb) { this.cb = cb; }
+  observe(el) { resizeObserved.push({ el, fire: (w, h) => this.cb([{ contentRect: { width: w, height: h } }]) }); }
+  disconnect() {}
+  unobserve() {}
+}
+globalThis.ResizeObserver = StubResizeObserver;
+window.ResizeObserver = StubResizeObserver;
 // Browser globals the bundle uses bare; in jsdom they hang off window only.
 globalThis.sessionStorage = window.sessionStorage;
 globalThis.localStorage = window.localStorage;
@@ -1746,6 +1763,35 @@ const windAttribution = host.querySelector('.leaflet-control-attribution')?.text
 windToggle?.querySelector('input')?.click();
 await new Promise((r) => setTimeout(r, 600));
 
+/* ---- resizing ---------------------------------------------------------
+
+   The map's height is a viewport unit but its width is whatever the host
+   lays out around it, so a container can change size with the window
+   perfectly still — a sidebar opening, a font loading, a breakpoint
+   switching. Leaflet's own trackResize listens on window.resize only, and
+   the failure is silent: it keeps drawing at the old size, so tiles stop
+   short of the container's edge.
+
+   Driven through the stub rather than by changing any CSS, because jsdom
+   does no layout — what is under test is that the observer is attached to
+   the right element and that firing it refits the map. */
+const resizeWatch = resizeObserved.find((o) => o.el === host);
+const sizeBeforeResize = host._map.getSize();
+let sizeAfterResize = null;
+if (resizeWatch) {
+  /* jsdom reports every element as 0x0, so Leaflet would refit to nothing
+     and the check could not tell a working observer from a broken one.
+     Pinning the container's reported box is what makes the assertion mean
+     "it re-measured", and it is the same trick the pane-size checks use. */
+  const box = { width: 900, height: 500, top: 0, left: 0, right: 900, bottom: 500, x: 0, y: 0 };
+  host.getBoundingClientRect = () => box;
+  Object.defineProperty(host, 'clientWidth', { value: 900, configurable: true });
+  Object.defineProperty(host, 'clientHeight', { value: 500, configurable: true });
+  resizeWatch.fire(900, 500);
+  await new Promise((r) => setTimeout(r, 200));
+  sizeAfterResize = host._map.getSize();
+}
+
 // Put the map back where the checks below expect it.
 host._map.setView([25, -75], 6, { animate: false });
 await new Promise((r) => setTimeout(r, 300));
@@ -2247,6 +2293,66 @@ const checks = [
     })()],
   /* With worldCopyJump off the centre can wander past ±180 after enough
      panning, and a stored view is read back much later. */
+  /* ---- page width ----
+     The map takes the whole viewport on the pages built around it, and the
+     text sits at its left edge rather than centred. That is one class, and
+     it has to be on the page *and* the chrome or the header is the only
+     thing left in the middle. Read from the built HTML, since this is
+     server-rendered and jsdom's copy of it is the harness's own markup. */
+  ['a page carrying the map goes wide, chrome included', (() => {
+    const page = (f) => {
+      const at = `dist/${f}/index.html`;
+      return fs.existsSync(at) ? fs.readFileSync(at, 'utf8') : null;
+    };
+    const wide = (html, sel) => {
+      if (!html) return null;
+      const m = html.match(new RegExp(`<${sel}[^>]*class="([^"]*container[^"]*)"`));
+      return m ? m[1].includes('wide') : false;
+    };
+    const viz = page('visualization');
+    return wide(viz, 'article') === true && /<header[^>]*>[\s\S]{0,400}?container inner wide/.test(viz ?? '');
+  })()],
+  /* And a page without one does not, which is the half that would rot: the
+     same template renders the photo-panel observations, and widening those
+     would stretch their prose across a 2000px screen. */
+  ['a page without the map stays at the prose measure', (() => {
+    const at = 'dist/observations/harmful-algal-blooms/index.html';
+    if (!fs.existsSync(at)) return true;   // that page may not be built here
+    const html = fs.readFileSync(at, 'utf8');
+    return !/class="[^"]*container[^"]*wide/.test(html);
+  })()],
+
+  /* ---- resizing ---- */
+  ['the map watches its own container, not just the window',
+    !!resizeWatch],
+  /* Leaflet keeps drawing at its old size otherwise, which shows up as tiles
+     stopping short of the container's edge and a particle canvas that no
+     longer matches the box around it. */
+  ['and refits when that container changes size',
+    !!sizeAfterResize && (sizeAfterResize.x !== sizeBeforeResize.x ||
+                          sizeAfterResize.y !== sizeBeforeResize.y)],
+  ['and refits to the size actually reported',
+    !!sizeAfterResize && sizeAfterResize.x === 900 && sizeAfterResize.y === 500],
+  /* The map's size is no longer capped, and the particle count is the map's
+     area times a constant — so removing the cap uncapped the work too. A 4K
+     window is 6.4x the area the old CSS maximum allowed, which would have
+     been ~52,000 particles at 18 fps. The density tapers above a ceiling
+     instead, so an ordinary window is untouched and only a very large one
+     trades density for frames. */
+  ['the particle count is bounded, so a huge window does not melt',
+    (() => {
+      const src = fs.readFileSync('packages/ocean-map/index.ts', 'utf8');
+      const cap = src.match(/const MAX_PARTICLES = (\d+)/);
+      const full = src.match(/const FULL_DENSITY = 1 \/ (\d+)/);
+      if (!cap || !full) return false;
+      const max = Number(cap[1]);
+      const density = 1 / Number(full[1]);
+      // A 4K-ish map must be held to the ceiling, and an ordinary one must
+      // not be — a cap that bites everywhere is just a lower density.
+      const at = (w, h) => Math.min(density, max / (w * h)) * w * h;
+      return Math.round(at(3800, 1550)) === max && Math.round(at(1280, 720)) < max;
+    })()],
+
   /* ---- the wind field ---- */
   ['a wind layer is offered, off by default',
     !!windToggle && windToggle.querySelector('input')?.checked === false],

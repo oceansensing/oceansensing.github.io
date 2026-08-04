@@ -659,6 +659,73 @@ black. The active basemap's tone is published as `data-basemap-tone` on the
 map container and **only light basemaps are dimmed**. Add a basemap and it
 counts as dark unless you list it in `LIGHT_BASEMAPS`.
 
+### How big the map is
+
+**It scales with the window in both axes, and neither is capped.** That took
+three changes, in three different places, and the split follows the same rule
+as everything else here: how the map *looks* is the package's, where it *sits*
+is the host's.
+
+- **Height** is in `ocean-map.css` — `max(30rem, 77.5svh)` on desktop,
+  `max(24rem, 62svh)` below 48rem. It used to be a `clamp()` topping out at
+  50rem, so past a roughly 1030px-tall window the map stopped growing and sat
+  in more and more empty page. The floor stays: a short window still needs
+  enough map to be worth drawing. `svh` rather than `vh` so a phone's
+  collapsing address bar does not resize the map mid-scroll.
+- **Width** is a page decision, and it is one class. `.container` is capped
+  at 72rem for prose — a sensible measure for a paragraph and an arbitrary one
+  for the one element on these pages that gets better with room. A page built
+  around the map adds `wide`, which drops that cap and re-applies it to every
+  child *except* the figure. So the map fills the viewport and the text keeps
+  its measure at the map's left edge.
+
+  **The chrome has to go with it.** `BaseLayout` takes a `wide` prop and hands
+  it to the header and footer, because with only the article widened the
+  header was the single thing left centred while everything else started hard
+  left. It is off by default, so every page without a map is untouched — and
+  that half matters: the same template renders the photo-panel observations,
+  which would otherwise stretch their prose across a 2000px screen. The
+  hurricane page opts in with `wide={map === 'assets'}`, so it follows the
+  map rather than the template.
+
+  An earlier pass had the figure break *out* of a narrow container with a
+  negative margin — `max(0px, (100vw - 100%) / 2 - gutter)`, collapsing to
+  exactly zero on a phone. It worked, and it was the wrong shape: it left the
+  page's own text stranded in the middle of a wide screen while the map ran
+  past it on both sides. Widening the container moves both to the same edge
+  and needs no arithmetic.
+- **Refitting** is in `index.ts`, and it is the part Leaflet does not do for
+  you. Its own `trackResize` listens on `window.resize`, which covers the
+  common case and misses every other one — the height is a viewport unit but
+  the width comes from whatever the host lays out, so a sidebar, a font
+  finishing loading or a breakpoint switching all resize the map with the
+  window perfectly still. The failure is silent and specific: Leaflet keeps
+  drawing at its old size, so tiles stop short of the container's edge. A
+  `ResizeObserver` on the container states the actual dependency, and it fires
+  once on observe, which harmlessly re-fits after first layout — the moment
+  the old code was most likely to have measured a container that had not
+  settled.
+
+**Removing the size cap uncapped the particle count too**, which is the part
+worth not repeating. leaflet-velocity draws `area × particleMultiplier`
+particles, so measured against the 1152×800 the old maximum allowed, a 1440p
+window is 3.5× the area and a 4K one **6.4×** — about 52,000 particles
+redrawn at 18 fps. The cap had been holding that down by accident. So the
+count is held flat above `MAX_PARTICLES = 16000` and the density tapers
+instead: a little over what an 1800×1000 map draws at full density, so every
+ordinary window keeps exactly what it has and only genuinely large screens
+trade density for frames — the right way round, since a bigger map has more
+particles on it at any density. Verified in a browser at 2400×1500: 24,443
+particles uncapped, held to 16,000.
+
+**None of this is testable in the browser pane**, and that is worth knowing
+before trying. ResizeObserver callbacks are delivered during rendering steps,
+and a hidden tab runs none — measured, in a hidden pane even a fresh observer
+on `document.body` never fires, and neither does `requestAnimationFrame`,
+which is what Leaflet's own resize handler runs inside. So the refit is
+tested in `test:map` against a stub observer, which is also the only way to
+assert *which element* is observed.
+
 ### One map, however many pages carry it
 
 **A change to how the map looks or behaves has to reach every instance of it,

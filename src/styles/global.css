@@ -105,6 +105,20 @@ kbd {
   padding-inline: var(--space-md);
 }
 
+/* Pages built around the live map. The map is the one element here that gets
+   better the more room it has, so the container gives it the whole viewport
+   — and everything else keeps its own measure and sits at the left edge,
+   where the map starts, rather than floating in the middle of a wide screen
+   while the map runs past it on both sides.
+   The figure is the exception because the figure is the point. */
+.container.wide {
+  max-width: none;
+}
+
+.container.wide > :not(.map-figure) {
+  max-width: var(--content-width);
+}
+
 /* long-form markdown content */
 .prose {
   max-width: var(--prose-width);

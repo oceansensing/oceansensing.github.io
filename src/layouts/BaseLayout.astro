@@ -8,9 +8,15 @@ interface Props {
   title?: string;
   description?: string;
   ogImage?: string;
+  /** Pages built around the live map. The map takes the whole viewport, and
+      the page's own text sits at its left edge rather than centred — so the
+      header and footer have to move with it, or they are the only things on
+      the page not on that edge. Off everywhere else, which is every page
+      without a map. */
+  wide?: boolean;
 }
 
-const { title, description = SITE.description, ogImage = '/og-default.png' } = Astro.props;
+const { title, description = SITE.description, ogImage = '/og-default.png', wide = false } = Astro.props;
 const pageTitle = title ? `${title} · ${SITE.title}` : `${SITE.title} — ${SITE.fullName}`;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 ---
@@ -63,10 +69,10 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
-    <Header />
+    <Header wide={wide} />
     <main id="main">
       <slot />
     </main>
-    <Footer />
+    <Footer wide={wide} />
   </body>
 </html>

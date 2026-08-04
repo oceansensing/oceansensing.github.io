@@ -236,6 +236,41 @@ export async function createOceanMap(
     return source + (at ? ` — ${at}` : '');
   };
 
+  /* Refit whenever the **container** changes size, not just the window.
+
+     Leaflet's own `trackResize` listens on `window.resize`, which covers the
+     common case and misses every other one: the map's height is a viewport
+     unit but its width comes from whatever the host lays out around it, so a
+     sidebar opening, a font finishing loading, or the page's own breakpoint
+     switching all resize the map without the window moving at all. The
+     symptom is silent and specific — Leaflet keeps drawing at its old size,
+     so tiles stop short of the container's edge and the particle canvas
+     keeps its old dimensions while the box around it has grown.
+
+     A ResizeObserver is the direct statement of the thing we actually care
+     about. It also fires once on observe, which harmlessly re-fits the map
+     after first layout — the moment the old code was most likely to have
+     measured a container that had not settled.
+
+     Guarded because jsdom has no ResizeObserver; the harness exercises the
+     invalidate path by calling it directly instead. */
+  if (typeof ResizeObserver === 'function') {
+    let last = { w: 0, h: 0 };
+    const refit = new ResizeObserver((entries) => {
+      const box = entries[0]?.contentRect;
+      if (!box) return;
+      // Whole pixels: a fractional change is sub-pixel layout noise, and
+      // invalidateSize fires a moveend that would restart the particle
+      // animation on every one of them.
+      const w = Math.round(box.width);
+      const h = Math.round(box.height);
+      if (w === last.w && h === last.h) return;
+      last = { w, h };
+      map.invalidateSize({ debounceMoveend: true });
+    });
+    refit.observe(host as HTMLElement);
+  }
+
   /* Leaflet keeps no route from the element back to the map, so hang it
      here: the headless harness in scripts/test-map.mjs reads it, and it
      makes the map pokeable from the console. Nothing on the page uses it. */
@@ -534,6 +569,28 @@ export async function createOceanMap(
      field rendered as nothing at all: the globe view had no currents on
      it. project() returns fractional pixel coordinates, which is the
      quantity the plugin actually distorts by. */
+  /* leaflet-velocity draws `area x particleMultiplier` particles, so with the
+     map's size no longer capped the particle count was no longer capped
+     either. Measured against the 1152x800 the old CSS maximum allowed: a
+     1440p window is 3.5x the area and a 4K one **6.4x**, which is ~52,000
+     particles redrawn at 18 fps. The cap had been holding that down by
+     accident, and removing it without this would have traded a small map for
+     a slow one.
+
+     So the count is held flat above a threshold and the density tapers
+     instead. 16,000 is a little over what a 1800x1000 map draws at full
+     density, so every ordinary window keeps exactly what it has today and
+     only genuinely large screens give up density — which is the right way
+     round, since a bigger map has more particles on it at any density. */
+  const MAX_PARTICLES = 16000;
+  const FULL_DENSITY = 1 / 112;
+
+  const densityForView = () => {
+    const size = map.getSize();
+    const area = Math.max(size.x * size.y, 1);
+    return Math.min(FULL_DENSITY, MAX_PARTICLES / area);
+  };
+
   const scaleForView = (drift: number = DRIFT.current) => {
     const rad = Math.PI / 180;
     const bounds = map.getBounds();
@@ -623,7 +680,7 @@ export async function createOceanMap(
            contributes, and more of them puts the density back without
            going back to long ropes. */
         particleAge: Math.round(PARTICLE_SECONDS * FRAME_RATE),
-        particleMultiplier: 1 / 112,
+        particleMultiplier: densityForView(),
         lineWidth: 2.2,
         frameRate: FRAME_RATE,
       });
@@ -785,6 +842,7 @@ export async function createOceanMap(
           layer.setOptions?.({
             data: url ? grids.get(url) : coarse,
             velocityScale: scaleForView(kind.drift),
+            particleMultiplier: densityForView(),
           });
           return;
         }
@@ -806,7 +864,13 @@ export async function createOceanMap(
            Same failure as the rounded-Jacobian bug this file already carries
            a note about, reached by a different route: there the measurement
            was wrong, here it was taken too early. */
-        layer.setOptions?.({ velocityScale: scaleForView(kind.drift) });
+        /* Density travels with the scale, on the same settled-view path: a
+           resize changes the area, and the area is what both of them are
+           measured from. */
+        layer.setOptions?.({
+          velocityScale: scaleForView(kind.drift),
+          particleMultiplier: densityForView(),
+        });
       };
 
       map.on('zoomend', () => applyView(true));
