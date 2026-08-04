@@ -2177,10 +2177,29 @@ the ice edge is contoured from exactly that 0-to-non-0 boundary, so
 discarding it upstream would cost the layer that needs it most. The scalar
 layer takes a floor below which it draws nothing.
 
-**No tile tier for either.** Tiles buy native resolution over the whole globe
-and ice occupies about a tenth of it, so ~150 of the 162 tiles would publish
-open water. The polar bands are regions already, at 0.16°, which is finer
-than a pack edge is meaningful at.
+**Use the resolution the product has.** The forecast was shipped at the
+0.16° region stride and it looked it — reported as blocky, and rightly. ESPC
+is **0.08° × 0.04°**, which at 80°N is 1.5 × 4.4 km: finer than any
+passive-microwave analysis and comparable to AMSR2. Serving it at 0.16°
+discarded 16 cells in every 1 and rendered a 1/12° model at a resolution
+indistinguishable from the 25 km analysis beside it — which is the *same*
+mistake the Navy SST entry already has a paragraph about, made again in the
+same file.
+
+**The argument against tiles counted files instead of bytes.** "About 150 of
+the 162 tiles would be open water" is true and beside the point: an all-zero
+tile compresses to nothing. Measured — 159 tiles, **37.6 MB raw and 0.2 MB
+gzipped**, a 200:1 ratio, median 252 KB raw against roughly 1.3 KB on the
+wire. The whole ice tile set costs less delivered than one regional grid. So
+the forecast has a tile tier like the Navy temperature, the region grids drop
+to being a fallback, and a reader at zoom ≥ 4 gets 0.08° everywhere.
+
+The analysis stays at 0.25° because that is its ceiling: it is what passive
+microwave resolves, and no stride recovers what the instrument did not
+measure. Higher-resolution analyses exist — NOAA PolarWatch serves AMSR2 at
+6.25 km and VIIRS finer still — but every one of them is on a **polar
+stereographic** grid, and every pipeline and grid reader here assumes regular
+lat/lon. That is a reprojection and a resampler, not a `PRODUCTS` entry.
 
 #### The ice edge
 
@@ -2237,19 +2256,37 @@ Three details in it are load-bearing:
   arithmetic, and at 1e-16 they sometimes differ; joining on exact equality
   left one line in several hundred pieces.
 
-**The tolerance is chosen to be free, not to fix the look — which is the
-opposite of the isobaths.** There the tolerance was binding and had to be
-tightened. Here the *grid* binds: the analysis is 0.25°, which is 22.8 px at
-zoom 7, and the contour's median segment is 14.7 px, already under a cell. So
-0.02° is set to strip collinear runs at a cost of 0.46 px of deviation —
-imperceptible — and it halves the file. No tolerance makes this line smoother,
-because nothing can draw a 0.25° product smoother than 0.25°.
+**The tolerance is chosen to be free, not to fix the look — the opposite of
+the isobaths.** There the tolerance bound and had to be tightened. Here the
+*grid* binds, so 0.02° is set to strip collinear runs at a cost of 0.46 px of
+deviation and half the file size. No tolerance makes this line smoother;
+only a finer grid does.
 
-It is cheap: 53 lines and 4,052 vertices for the analysis (74 KB raw), 436 and
-9,955 for the forecast (188 KB), against the isobaths' 2.95 MB gzipped. It is
-**fetched only when switched on**, through the same `whenChosen` latch the
-offline coastline uses, and drawn as one multi-line polyline — one DOM node,
-not 436.
+Which is what it got. **The edge is cut at `edgeStride`, from its own fetch,
+not from the published region file.** Reading the published one back was the
+first design and it tied the line to the *coarsest* tier: the regions are a
+fallback for the forecast now, at 0.16°, while what a reader sees is the
+0.08° tile set — so the edge was drawn four times coarser than the raster it
+bounds, and that is the blockiness that got reported. Contouring costs almost
+nothing in output, because a line's byte count is set by its own length and
+not by the grid it came from, so the fine grid is fetched, contoured and
+thrown away.
+
+Measured at zoom 7, the zoom the isobaths were judged at:
+
+| | lines | median segment | p90 | source cell |
+| --- | --- | --- | --- | --- |
+| analysis, 0.25° | 56 | 14.7 px | 33.9 | 22.8 px |
+| forecast, was 0.16° | 436 | 14.7 px | — | 14.6 px |
+| **forecast, now 0.08°** | **827** | **6.6 px** | **14.6** | **7.3 px** |
+
+6.6 px is the isobaths' own 6.9 px after *their* fix, and the segments still
+sit at cell scale, so the grid is still what binds — correctly.
+
+It stays cheap: 74 KB raw for the analysis, 324 KB for the forecast, against
+the isobaths' 2.95 MB gzipped. **Fetched only when switched on**, through the
+same `whenChosen` latch the offline coastline uses, and drawn as one
+multi-line polyline — one DOM node, not 827.
 
 #### The ice layers on the map
 

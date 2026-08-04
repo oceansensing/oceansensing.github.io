@@ -325,9 +325,12 @@ PRODUCTS = [
         'lon0': 0.125, 'dlon': 0.25, 'nlon': 1440,
         'regions': ['arctic', 'antarctic'],
         # Native in a region, as OISST is, so no tile tier could add
-        # anything — see the note on the temperature entry.
+        # anything — see the note on the temperature entry. 0.25 deg is the
+        # ceiling for this product: it is what passive microwave resolves,
+        # and the forecast beside it is the finer of the two by design.
         'strides': {'global': (4, 4), 'region': (1, 1)},
         'tiles': False,
+        'edgeStride': (1, 1),
     },
     {
         # The forecast, off ESPC's own ice aggregation — a different file
@@ -363,13 +366,25 @@ PRODUCTS = [
         'lat0': -80.0, 'dlat': 0.04, 'nlat': 4251,
         'lon0': 0.0, 'dlon': 0.08, 'nlon': 4500,
         'regions': ['arctic', 'antarctic'],
-        'strides': {'global': (12, 24), 'region': (2, 4)},
-        # **No tile tier, unlike the Navy temperature.** Tiles buy native
-        # resolution over the whole globe, and ice occupies about a tenth of
-        # it: 150 of the 162 tiles would be open water publishing nothing.
-        # The polar bands are regions already, at 0.16 degrees, which is
-        # finer than the edge of a pack is meaningful at.
-        'tiles': False,
+        # Region grids are the **fallback tier only**, exactly as the Navy
+        # temperature's are: the tiles win whenever the index loads. Left at
+        # 0.16 deg because that is all a fallback has to be.
+        'strides': {'global': (12, 24), 'region': (2, 4), 'tile': (1, 2)},
+        # **Tiles after all, and the first argument against them was wrong.**
+        # It counted files rather than resolution: "150 of 162 tiles would be
+        # open water" is true and beside the point, since an all-zero tile
+        # gzips to nothing. What it cost was the whole reason to prefer this
+        # product — ESPC is 0.08 x 0.04 deg, which at 80N is 1.5 x 4.4 km,
+        # finer than any passive-microwave analysis and comparable to AMSR2.
+        # Serving it at the 0.16 deg region stride threw away 16 cells in
+        # every 1, and rendered a 1/12 deg model at a resolution
+        # indistinguishable from the 25 km analysis beside it. The Navy
+        # temperature entry above has the same note about the same mistake.
+        'tiles': True,
+        # The edge is contoured at the tile lattice's own spacing rather
+        # than at the fallback region stride, so the line and the raster a
+        # reader actually sees are the same resolution.
+        'edgeStride': (1, 2),
     },
 ]
 
@@ -617,7 +632,7 @@ def slabs_for(product: dict, west: float, east: float, stride_lon: int,
 def build(product: dict, when: str, valid: str, out: pathlib.Path,
           south: float, north: float, west: float, east: float,
           stride: tuple[int, int], wrap: bool, extra: dict | None = None,
-          run: str = '') -> dict:
+          run: str = '', quiet: bool = False) -> dict:
     """Fetch one rectangle at one stride and write it as a scalar grid."""
     stride_lon, stride_lat = stride
     y0 = axis_index(south, product['lat0'], product['dlat'], product['nlat'])
@@ -654,8 +669,11 @@ def build(product: dict, when: str, valid: str, out: pathlib.Path,
     wet = sum(1 for v in payload['data'] if v is not None)
     spans = nx * dx
     extent = 'wraps' if spans >= 360 else f'{spans:.0f} deg of longitude'
-    print(f'  {out.name}: {nx}x{ny} at {dx:g}x{dy:g} deg, {extent}, '
-          f'{wet} wet points, {out.stat().st_size / 1024:.0f} KB')
+    # The edge's scratch grids are fetched, contoured and deleted; announcing
+    # them would put files in the log that no reader can ever ask for.
+    if not quiet:
+        print(f'  {out.name}: {nx}x{ny} at {dx:g}x{dy:g} deg, {extent}, '
+              f'{wet} wet points, {out.stat().st_size / 1024:.0f} KB')
     return header
 
 
@@ -980,34 +998,46 @@ def build_product(product: dict, tiles_only: bool) -> None:
                   run=lead_run, extra={'lead': lead})
 
         if product.get('edge'):
-            build_edge(product, name, at_lead, lead, lead_valid, lead_run)
+            build_edge(product, name, at_lead, lead, step, lead_valid, lead_run)
 
 
 def build_edge(product: dict, name: str, at_lead, lead: int,
-               valid: str, run: str) -> None:
+               step: str, valid: str, run: str) -> None:
     """The ice edge, contoured from the region grids just published.
 
-    **Read back off disk rather than recomputed from the fetch**, and that is
-    deliberate: it makes it impossible for the line and the field under it to
-    disagree. A separately-fetched edge would drift the first time a stride or
-    a valid time changed on one side only, and the symptom would be a contour
-    sitting a cell away from the colour it is supposed to bound — visible,
-    but easy to read as a rendering artefact rather than as two different
-    downloads.
+    **Cut from its own grid at `edgeStride`, not from the published region
+    file.** Reading the published one back was the first design and it tied
+    the line's resolution to the coarsest tier: the regions are a *fallback*
+    for this product now, at 0.16 degrees, while what a reader actually sees
+    is the 0.08-degree tile set. The edge was therefore drawn four times
+    coarser than the raster it bounds, which is the blockiness that got
+    reported.
 
-    The region grids and not the global one, because the global grid is
-    0.96 degrees and an edge drawn on it is a staircase. The regions are the
-    two polar bands, which is exactly where ice is — so the finest data and
-    the whole of the phenomenon happen to coincide here, which is not true
-    of any other field in this file.
+    Contouring costs almost nothing in output — a line's byte count is set by
+    its own length, not by the grid it came from — so the fine grid is
+    fetched, contoured and thrown away. Same step, same valid time and the
+    same threshold as the field, so the two still cannot disagree about
+    *where* the ice is; they only differ in how finely each is sampled, and
+    the edge is now the finer of the two.
+
+    The polar bands and not the globe, because ice is only there, which is
+    the one thing about this field that makes a native-resolution contour
+    affordable at all.
     """
     threshold = product['edge']
+    stride = product.get('edgeStride', product['strides']['region'])
     paths = []
     for region in regions_for(product):
-        path = MAP_DIR / (at_lead(name + '-' + region['name'], lead) + '.json')
-        if not path.exists():
-            continue
-        grid = json.loads(path.read_text())
+        scratch = MAP_DIR / f'.edge-{name}-{region["name"]}.tmp.json'
+        try:
+            build(product, step, valid, scratch,
+                  south=region['south'], north=region['north'],
+                  west=region.get('west', -180.0), east=region.get('east', 180.0),
+                  stride=stride, wrap=region['wrap'], run=run, quiet=True)
+            grid = json.loads(scratch.read_text())
+        finally:
+            scratch.unlink(missing_ok=True)
+
         head = grid['header']
         nx, ny = head['nx'], head['ny']
         flat = grid['data']
