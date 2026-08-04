@@ -5,8 +5,8 @@ import 'leaflet/dist/leaflet.css';
 import './ocean-map.css';
 /* The renderer-independent half. Nothing imported here touches Leaflet or the
    DOM, which is deliberate: these are the parts a native port keeps. */
-import { coordText, elapsed, hoursAhead, hourStamp, initialBearing, spanText, stamp }
-  from './geo';
+import { coordText, elapsed, hoursAhead, hourStamp, initialBearing, spanText, stamp,
+  wrapLongitude } from './geo';
 import { rampColour, rampStops } from './ramp';
 import { VelocityLayer } from './velocity-layer';
 import { pickRamp, admissible, clearance, NAMED_TINTS, type RampChoice } from './contrast';
@@ -2218,14 +2218,82 @@ export async function createOceanMap(
   if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) flow.addTo(map);
 
 
-  // Lat/lon grid, every 10°.
+  /* Lat/lon grid.
+
+     **Spacing follows the zoom.** A fixed 10° was unreadable at both ends:
+     eighteen meridians crowding the globe view, and at zoom 8 often not one
+     line on screen — a grid that is either noise or absent is not a grid.
+     The steps stop at 1° because that is where the map's own scale bar takes
+     over for finer distances.
+
+     The lines are **redrawn on zoom** rather than all drawn and filtered,
+     because a graticule at 1° spacing over the whole world is 540 polylines
+     and Leaflet keeps every one of them in the DOM. */
   const graticule = L.layerGroup();
-  for (let lon = -180; lon <= 180; lon += 10) {
-    L.polyline([[-85, lon], [85, lon]], { weight: 0.5, className: 'map-grid' }).addTo(graticule);
-  }
-  for (let lat = -80; lat <= 80; lat += 10) {
-    L.polyline([[lat, -180], [lat, 180]], { weight: 0.5, className: 'map-grid' }).addTo(graticule);
-  }
+  const GRID_STEPS: [number, number][] = [
+    [3, 30], [5, 10], [7, 5], [9, 2], [99, 1],
+  ];
+  const gridStep = () => GRID_STEPS.find(([upTo]) => map.getZoom() <= upTo)![1];
+
+  /* Short form, not the degrees-and-decimal-minutes the readout uses. A
+     graticule label is read at a glance and sits over the map, so "60°N"
+     beats "60° 00.00′ N"; the readout is where a position is read exactly. */
+  const gridLabel = (v: number, pos: string, neg: string, pad: number) => {
+    const w = wrapLongitude(v);
+    const d = Math.abs(pad === 3 ? w : v);
+    const hemi = (pad === 3 ? w : v) === 0 ? '' : (pad === 3 ? w : v) > 0 ? pos : neg;
+    return `${String(Math.round(d)).padStart(pad, '0')}°${hemi}`;
+  };
+
+  let gridDrawn = -1;
+  const drawGraticule = () => {
+    const step = gridStep();
+    const bounds = map.getBounds();
+    graticule.clearLayers();
+    gridDrawn = step;
+
+    const label = (at: L.LatLngExpression, text: string, side: string) =>
+      L.marker(at, {
+        interactive: false,
+        keyboard: false,
+        icon: L.divIcon({
+          className: `map-grid-label map-grid-label-${side}`,
+          html: `<span>${text}</span>`,
+          iconSize: [0, 0],
+        }),
+      }).addTo(graticule);
+
+    /* Labels ride the edge of the *view*, not the line's midpoint, so they
+       stay on screen while the reader pans — a label anchored to the
+       geometry is off the map the moment its line is only partly visible,
+       which for a graticule is nearly always. */
+    const west = bounds.getWest();
+    const south = bounds.getSouth();
+    const inset = (bounds.getEast() - west) * 0.012;
+    const insetY = (bounds.getNorth() - south) * 0.012;
+
+    const first = Math.ceil(west / step) * step;
+    for (let lon = first; lon <= bounds.getEast(); lon += step) {
+      L.polyline([[-85, lon], [85, lon]], { weight: 0.7, interactive: false,
+        className: 'map-grid' }).addTo(graticule);
+      label([south + insetY, lon], gridLabel(lon, 'E', 'W', 3), 'lon');
+    }
+    for (let lat = Math.ceil(Math.max(south, -85) / step) * step;
+         lat <= Math.min(bounds.getNorth(), 85); lat += step) {
+      L.polyline([[lat, -180], [lat, 180]], { weight: 0.7, interactive: false,
+        className: 'map-grid' }).addTo(graticule);
+      label([lat, west + inset], gridLabel(lat, 'N', 'S', 2), 'lat');
+    }
+  };
+
+  /* Redrawn on every settled view: the step may have changed, and the
+     labels are pinned to the viewport so they move with it regardless. */
+  map.on('moveend zoomend', () => {
+    if (map.hasLayer(graticule)) drawGraticule();
+  });
+  map.on('overlayadd', (e: L.LayersControlEvent) => {
+    if (e.layer === graticule) drawGraticule();
+  });
 
   /* Every link in a popup leaves the site, so each opens in its own tab:
      a reader following a float to Euro-Argo has usually not finished with

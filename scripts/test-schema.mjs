@@ -212,8 +212,8 @@ for (const name of ['currents', 'currents-60m', 'wind']) {
    not the Atlantic one, which legitimately stops at 55. */
 const POLAR_BOUND = 85.0;
 for (const name of [
-  'sst-oisst', 'sst-navy', 'sss-navy', 'sic-oisst', 'sic-navy',
-  'sic-oisst-arctic', 'sic-navy-arctic', 'sst-navy-arctic', 'sss-navy-arctic',
+  'sst-oisst', 'sst-navy', 'sss-navy', 'sic-oisst', 'sic-navy', 'sit-navy',
+  'sic-oisst-arctic', 'sic-navy-arctic', 'sit-navy-arctic', 'sst-navy-arctic', 'sss-navy-arctic',
   // The currents are a separate pipeline that had the identical defect, and
   // nothing was checking them either — measured at 84.16 and 84.92 against
   // wind's 90, which is the seam of particles running on above a field that
@@ -244,8 +244,8 @@ for (const name of [
    advertised box and the delivered extent are both published, so they can
    simply be compared. Half a cell of slack, because a grid samples on a
    lattice and its edge lands on the nearest node, not on the request. */
-for (const name of ['sst-oisst', 'sst-navy', 'sss-navy', 'sic-oisst', 'sic-navy',
-                    'currents', 'currents-60m']) {
+for (const name of ['sst-oisst', 'sst-navy', 'sss-navy', 'sic-oisst', 'sic-navy', 'sit-navy',
+                    'currents', 'currents-60m', 'sit-navy']) {
   const file = read(`${name}.json`);
   const g = Array.isArray(file) ? file[0] : file;
   for (const d of g?.header?.details ?? []) {
@@ -283,39 +283,6 @@ for (const name of ['sst-oisst', 'sst-navy', 'sss-navy', 'sic-oisst', 'sic-navy'
         fail(leaf, `covers ${west}..${east}°E but ${name}.json advertises ` +
           `${turn(d.west)}..${turn(d.east)}°E in the same convention`);
       }
-    }
-  }
-}
-
-/* The ice edge. A FeatureCollection like the isobaths, but with a header,
-   because unlike the seafloor it has a date — an edge with no valid time is
-   a line nobody can tell from last winter's. Concentration is a fraction
-   everywhere else in this contract, so a threshold above 1 is the "percent"
-   confusion `icec` itself ships with, arriving by another route. */
-for (const name of ['sic-oisst-edge', 'sic-navy-edge']) {
-  const geo = read(`${name}.json`);
-  if (!geo) continue;
-  checked++;
-  const f = `${name}.json`;
-  if (geo.type !== 'FeatureCollection') fail(f, `type is ${geo.type}, expected FeatureCollection`);
-  const h = geo.header;
-  if (!h) fail(f, 'has no header, so nothing says when it is valid');
-  else {
-    if (typeof h.valid !== 'string' || !h.valid.endsWith('Z')) {
-      fail(f, `valid is ${JSON.stringify(h.valid)} — needs a trailing Z or it parses as local time`);
-    }
-    if (!(h.threshold > 0 && h.threshold <= 1)) {
-      fail(f, `threshold is ${h.threshold} — concentration is a fraction, so this must be 0..1`);
-    }
-    if (typeof h.source !== 'string' || !h.source) fail(f, 'has no source to credit');
-  }
-  if (!Array.isArray(geo.features)) fail(f, 'features is not an array');
-  else {
-    for (const [i, feature] of geo.features.slice(0, 200).entries()) {
-      const c = feature?.geometry?.coordinates;
-      if (!Array.isArray(c) || c.length < 2) { fail(f, `features[${i}] is not a line`); break; }
-      const bad = c.findIndex(([x, y]) => !isNum(x) || !isNum(y) || y < -90 || y > 90 || x < -180 || x > 180);
-      if (bad >= 0) { fail(f, `features[${i}].coordinates[${bad}] is off the globe`); break; }
     }
   }
 }

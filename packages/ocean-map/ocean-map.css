@@ -36,6 +36,8 @@
     --map-border: #4a525c;
     --map-border-state: #6b7480;
     --map-grid: #7f8c9b;
+    --map-grid-label: #46525f;
+    --map-grid-label-halo: rgba(255, 255, 255, 0.95);
     --map-casing: #0d1218;
     --map-casing-opacity: 0.4;
     --map-asset-edge: #10161d;
@@ -82,6 +84,10 @@
       --map-border: #97a3b2;
       --map-border-state: #7d8896;
       --map-grid: #6d7a88;
+    --map-grid-label: #d7e0ea;
+    --map-grid-label-halo: rgba(6, 12, 20, 0.95);
+      --map-grid-label: #d7e0ea;
+      --map-grid-label-halo: rgba(6, 12, 20, 0.95);
       --map-casing: #05080c;
       --map-casing-opacity: 0.55;
       --map-asset-edge: #05080c;
@@ -134,6 +140,11 @@
      it win, so this rule must stay below them. */
   :root .ocean-map[data-basemap-tone='dark'] {
     --map-bathy-halo: rgba(232, 238, 245, 0.5);
+
+    /* A dark label on dark water is the same mistake the shoreline made:
+       what a label is seen against is the basemap, not the page. */
+    --map-grid-label: #e6edf5;
+    --map-grid-label-halo: rgba(4, 9, 16, 0.95);
 
     /* The shoreline needs the same treatment for the same reason, and went
        out without it. Its tint was keyed to the theme while the thing it has
@@ -192,6 +203,13 @@
 
   .ocean-map .map-grid {
     stroke: var(--map-grid);
+    /* The halo does the work. A grey hairline over GEBCO's navy measured a
+       contrast of about 1.2 — present in the DOM and not on screen, which is
+       how it was reported. Same treatment as the isobaths, and per line
+       rather than on the pane because the graticule shares the overlay pane
+       with the tracks and a filter there would fringe those too. */
+    paint-order: stroke;
+    stroke-opacity: 0.9;
     stroke-opacity: 0.35;
     fill: none;
   }
@@ -786,4 +804,40 @@
 
 .om-kmz-folder {
   color: var(--text-muted, #5b6672);
+}
+
+/* ---- graticule labels ------------------------------------------------
+
+   Pinned to the edge of the view rather than to the geometry, so they stay
+   on screen while the reader pans — see the note in the module. The marker
+   itself is a zero-size anchor and the span is what is seen, which is what
+   lets the label be offset from the line without moving the anchor.
+
+   Not gated as a feature colour: it is chrome over the map, legible by its
+   own casing rather than by hue, and it is drawn wherever the reader has
+   panned to — so "every background" is its background, and no colour clears
+   that bar. The text-shadow is the casing. */
+.ocean-map .map-grid-label {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.6875rem;
+  line-height: 1;
+  color: var(--map-grid-label, #46525f);
+  text-shadow:
+    0 0 2px var(--map-grid-label-halo, rgba(255, 255, 255, 0.95)),
+    0 0 4px var(--map-grid-label-halo, rgba(255, 255, 255, 0.95));
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.ocean-map .map-grid-label > span {
+  position: absolute;
+}
+
+/* Clear of the line itself, and clear of the map edge. */
+.ocean-map .map-grid-label-lat > span {
+  transform: translate(0, -140%);
+}
+
+.ocean-map .map-grid-label-lon > span {
+  transform: translate(-50%, -40%);
 }

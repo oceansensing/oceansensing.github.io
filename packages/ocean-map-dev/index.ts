@@ -5,8 +5,8 @@ import 'leaflet/dist/leaflet.css';
 import './ocean-map.css';
 /* The renderer-independent half. Nothing imported here touches Leaflet or the
    DOM, which is deliberate: these are the parts a native port keeps. */
-import { coordText, elapsed, hoursAhead, hourStamp, initialBearing, spanText, stamp }
-  from './geo';
+import { coordText, elapsed, hoursAhead, hourStamp, initialBearing, spanText, stamp,
+  wrapLongitude } from './geo';
 import { rampColour, rampStops } from './ramp';
 import { VelocityLayer } from './velocity-layer';
 import { pickRamp, admissible, clearance, NAMED_TINTS, type RampChoice } from './contrast';
@@ -17,7 +17,6 @@ import { matrix3d, type Pixel } from './warp';
 import { listOverlays, removeOverlay, saveOverlay } from './store';
 import type {
   IsobathFile,
-  IceEdgeFile,
   RegionLink,
   ScalarGrid,
   TileIndexFile,
@@ -377,15 +376,6 @@ export async function createOceanMap(
      because the particles are the thing in motion and a static line grid
      over them reads as interference. Its own pane so one opacity applies
      to every contour at once, and so the reader can set it. */
-  /* The ice edge sits above every scalar raster and below the flow, so it
-     reads over a temperature field — which is the pair it exists for — and
-     never over the particles, which would put a static line through moving
-     water. Its own pane rather than `bathy`'s, so the isobath opacity
-     slider does not drag it along, exactly as the shoreline needed. */
-  const icePane = map.createPane('ice-edge');
-  icePane.style.zIndex = '247';
-  icePane.style.pointerEvents = 'none';
-
   const bathyPane = map.createPane('bathy');
   bathyPane.style.zIndex = '245';
   bathyPane.style.pointerEvents = 'none';
@@ -476,6 +466,7 @@ export async function createOceanMap(
   const sssNavy = L.layerGroup();
   const iceOisst = L.layerGroup();
   const iceNavy = L.layerGroup();
+  const iceThickness = L.layerGroup();
   const ssts: { group: L.LayerGroup; layer: ScalarLayer }[] = [];
   /* Both animated fields, so the point readout can sample whichever one
      the reader has on rather than a fixed depth. */
@@ -1142,6 +1133,16 @@ export async function createOceanMap(
       key: 'sic', unit: '%', step: 0.05, label: 'Ice concentration',
       autoClamp: [0.15, 1], drawAbove: 0.15, percent: true,
     },
+    /* Thickness in metres. Unlike concentration this is *not* pinned to a
+       fixed scale: 0-15 m spans ridged multi-year ice that almost no view
+       contains, so a fixed bar would leave a typical Arctic summer view in
+       the bottom fifth of the ramp. It bounds the automatic range instead,
+       the way salinity does. The floor is 0.1 m — thinner than that is
+       nominal ice the concentration field already shows better. */
+    sit: {
+      key: 'sit', unit: 'm', step: 0.25, label: 'Ice thickness',
+      autoClamp: [0, 8], drawAbove: 0.1,
+    },
   };
 
   /* What the reader has chosen, per field rather than per layer: the two
@@ -1159,6 +1160,7 @@ export async function createOceanMap(
        on the first repaint rather than falling back to a default. Adding
        `sic` without this is exactly what happened. */
     sic: { map: palette.defaultColormap?.sic ?? 'cmo.ice', range: null },
+    sit: { map: palette.defaultColormap?.sit ?? 'cmo.ice', range: null },
   };
   /* What a scalar layer needs to know about the quantity it is painting.
      `FIELDS` below is the whole set; a new scalar is an entry there and one in
@@ -1637,6 +1639,7 @@ export async function createOceanMap(
   buildField(`${DATA}sss-navy.json`, sssNavy, FIELDS.sss);
   buildField(`${DATA}sic-oisst.json`, iceOisst, FIELDS.sic);
   buildField(`${DATA}sic-navy.json`, iceNavy, FIELDS.sic);
+  buildField(`${DATA}sit-navy.json`, iceThickness, FIELDS.sit);
 
   /* The legend key is built from the same palette the renderer reads, so
      the two cannot drift, and it stays hidden until a temperature layer is
@@ -2235,56 +2238,6 @@ export async function createOceanMap(
      already trusted here for the EEZ lines but renders bright green with
      about half the detail. This one comes out neutral grey, so CSS can
      tint it the way it tints the EEZ tiles. */
-  /* ---- the sea ice edge ----------------------------------------------
-
-     The 15% concentration contour, cut in the pipeline from the very grids
-     the concentration layer draws — see `build_edge`. 15% is what every ice
-     service reports extent at, so the line means the same thing here as on
-     an NSIDC chart.
-
-     **A line rather than a filled field, and that is why it is worth
-     having.** A filled ice raster shares the scalar pane, so it has to be
-     exclusive with SST — and ice edge over SST is exactly the pair a reader
-     wants. A line composes over anything.
-
-     Its colour is in CSS, not the palette, for the same reason the isobaths'
-     is: it is linework, its legibility comes from a casing rather than from
-     hue, and holding it to the particle gate's bar would fail — no light
-     line clears every colour scale, and against a grey one nothing can.
-
-     The **analysis** is the one drawn: an edge is a statement about where
-     the ice *is*, and for that an observation beats a forecast. The
-     forecast's own edge is published beside it and is one constant away. */
-  const iceEdge = L.layerGroup();
-
-  const drawIceEdge = (geo: IceEdgeFile) => {
-    const lines: [number, number][][] = [];
-    for (const feature of geo?.features ?? []) {
-      const coords = feature?.geometry?.coordinates;
-      if (!Array.isArray(coords) || coords.length < 2) continue;
-      lines.push(coords.map(([x, y]: number[]) => [y!, x!] as [number, number]));
-    }
-    if (!lines.length) return;
-    /* One multi-line polyline, not one layer per contour — the same
-       decision the isobaths made and for the same reason: 436 separate
-       paths would be 436 DOM nodes, and Leaflet draws a multi-line as one
-       element with many subpaths. No colour here; CSS owns the stroke. */
-    L.polyline(lines, {
-      pane: 'ice-edge',
-      interactive: false,
-      weight: 1.4,
-      className: 'map-ice-edge',
-    }).addTo(iceEdge);
-    const head = geo.header;
-    if (head) {
-      iceEdge.options.attribution = credit(
-        head.source, head.modelRun, head.valid?.slice(0, 10), head.valid
-      );
-      map.attributionControl.addAttribution(iceEdge.options.attribution);
-    }
-    rehomeBathy();
-  };
-
   const shoreline = L.tileLayer.wms('https://ows.emodnet-bathymetry.eu/wms?', {
     layers: 'coastlines',
     format: 'image/png',
@@ -2345,14 +2298,82 @@ export async function createOceanMap(
   if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) flow.addTo(map);
 
 
-  // Lat/lon grid, every 10°.
+  /* Lat/lon grid.
+
+     **Spacing follows the zoom.** A fixed 10° was unreadable at both ends:
+     eighteen meridians crowding the globe view, and at zoom 8 often not one
+     line on screen — a grid that is either noise or absent is not a grid.
+     The steps stop at 1° because that is where the map's own scale bar takes
+     over for finer distances.
+
+     The lines are **redrawn on zoom** rather than all drawn and filtered,
+     because a graticule at 1° spacing over the whole world is 540 polylines
+     and Leaflet keeps every one of them in the DOM. */
   const graticule = L.layerGroup();
-  for (let lon = -180; lon <= 180; lon += 10) {
-    L.polyline([[-85, lon], [85, lon]], { weight: 0.5, className: 'map-grid' }).addTo(graticule);
-  }
-  for (let lat = -80; lat <= 80; lat += 10) {
-    L.polyline([[lat, -180], [lat, 180]], { weight: 0.5, className: 'map-grid' }).addTo(graticule);
-  }
+  const GRID_STEPS: [number, number][] = [
+    [3, 30], [5, 10], [7, 5], [9, 2], [99, 1],
+  ];
+  const gridStep = () => GRID_STEPS.find(([upTo]) => map.getZoom() <= upTo)![1];
+
+  /* Short form, not the degrees-and-decimal-minutes the readout uses. A
+     graticule label is read at a glance and sits over the map, so "60°N"
+     beats "60° 00.00′ N"; the readout is where a position is read exactly. */
+  const gridLabel = (v: number, pos: string, neg: string, pad: number) => {
+    const w = wrapLongitude(v);
+    const d = Math.abs(pad === 3 ? w : v);
+    const hemi = (pad === 3 ? w : v) === 0 ? '' : (pad === 3 ? w : v) > 0 ? pos : neg;
+    return `${String(Math.round(d)).padStart(pad, '0')}°${hemi}`;
+  };
+
+  let gridDrawn = -1;
+  const drawGraticule = () => {
+    const step = gridStep();
+    const bounds = map.getBounds();
+    graticule.clearLayers();
+    gridDrawn = step;
+
+    const label = (at: L.LatLngExpression, text: string, side: string) =>
+      L.marker(at, {
+        interactive: false,
+        keyboard: false,
+        icon: L.divIcon({
+          className: `map-grid-label map-grid-label-${side}`,
+          html: `<span>${text}</span>`,
+          iconSize: [0, 0],
+        }),
+      }).addTo(graticule);
+
+    /* Labels ride the edge of the *view*, not the line's midpoint, so they
+       stay on screen while the reader pans — a label anchored to the
+       geometry is off the map the moment its line is only partly visible,
+       which for a graticule is nearly always. */
+    const west = bounds.getWest();
+    const south = bounds.getSouth();
+    const inset = (bounds.getEast() - west) * 0.012;
+    const insetY = (bounds.getNorth() - south) * 0.012;
+
+    const first = Math.ceil(west / step) * step;
+    for (let lon = first; lon <= bounds.getEast(); lon += step) {
+      L.polyline([[-85, lon], [85, lon]], { weight: 0.7, interactive: false,
+        className: 'map-grid' }).addTo(graticule);
+      label([south + insetY, lon], gridLabel(lon, 'E', 'W', 3), 'lon');
+    }
+    for (let lat = Math.ceil(Math.max(south, -85) / step) * step;
+         lat <= Math.min(bounds.getNorth(), 85); lat += step) {
+      L.polyline([[lat, -180], [lat, 180]], { weight: 0.7, interactive: false,
+        className: 'map-grid' }).addTo(graticule);
+      label([lat, west + inset], gridLabel(lat, 'N', 'S', 2), 'lat');
+    }
+  };
+
+  /* Redrawn on every settled view: the step may have changed, and the
+     labels are pinned to the viewport so they move with it regardless. */
+  map.on('moveend zoomend', () => {
+    if (map.hasLayer(graticule)) drawGraticule();
+  });
+  map.on('overlayadd', (e: L.LayersControlEvent) => {
+    if (e.layer === graticule) drawGraticule();
+  });
 
   /* Every link in a popup leaves the site, so each opens in its own tab:
      a reader following a float to Euro-Argo has usually not finished with
@@ -2649,7 +2670,11 @@ export async function createOceanMap(
        SSS rather than being spelled out. */
     'SIC (OISST)': iceOisst,
     'SIC (ESPC)': iceNavy,
-    'Ice edge': iceEdge,
+    /* Thickness, and it replaced the ice edge. The edge drew the boundary of
+       a field already on screen; this is a quantity the concentration does
+       not carry — 90% cover of 0.3 m new ice and 90% of 2 m multi-year ice
+       are the same picture and very different ocean. */
+    'SIT (ESPC)': iceThickness,
     ...(MERCATOR_RASTER ? { 'Current speed (Mercator)': currents } : {}),
     'Hurricanes': storms,
     'NOAA USVs': usvs,
@@ -2975,7 +3000,7 @@ export async function createOceanMap(
        name two fields while showing one. The ice *edge* is deliberately not
        here — it is a line in its own pane, and edge-over-SST is the pair
        worth reading. */
-    [sstOisst, sstNavy, sssNavy, iceOisst, iceNavy],
+    [sstOisst, sstNavy, sssNavy, iceOisst, iceNavy, iceThickness],
   ];
 
   /* A scalar field going on or off swaps the background wholesale — from the
@@ -3553,20 +3578,6 @@ export async function createOceanMap(
     map.on('baselayerchange', chosen);
     map.on('overlayadd', chosen);
   };
-
-  /* Not fetched until the layer is switched on — 74 KB nobody has asked to
-     see is 74 KB too many, and the same latch the offline coastline uses. */
-  whenChosen(iceEdge, () => {
-    fetch(`${DATA}sic-oisst-edge.json`)
-      .then((r) => r.json())
-      .then(drawIceEdge)
-      .catch(() => {
-        /* An absent edge is a missing layer, not a broken map. It is
-           published by the same run as the concentration field, so the
-           usual cause is that run having failed — which the field's own
-           attribution already reports. */
-      });
-  });
 
   whenChosen(coastline, () => {
     fetch(`${DATA}coastline.json`)

@@ -1660,6 +1660,41 @@ would bury the field underneath it. Transparency is not a concern —
 measured, the tiles are RGBA and **97.7% fully transparent** across the Gulf,
 100% where no boundary falls.
 
+### The lat/lon grid
+
+Reported as hard to see and unlabelled, and both were true.
+
+**The line.** A grey hairline at `weight: 0.5` over GEBCO's navy measures a
+contrast of about 1.2 — present in the DOM and not on screen. It is 0.7 now
+with a halo, the same treatment the isobaths and the shoreline needed, and
+for the same reason: a thin reference line's legibility comes from its casing
+rather than its hue. The casing is per line rather than a filter on the pane,
+because the graticule shares the overlay pane with the tracks and a filter
+there would fringe those too.
+
+**The spacing follows the zoom**, which it did not before. A fixed 10° is
+unreadable at both ends — eighteen meridians crowding the globe view, and at
+zoom 8 often not one line on screen. A grid that is either noise or absent is
+not a grid. The steps run 30/10/5/2/1° and stop there, because below a degree
+the scale bar is the better instrument. Lines are **redrawn** on zoom rather
+than all drawn and filtered: a 1° graticule over the whole world is 540
+polylines and Leaflet keeps every one in the DOM.
+
+**Labels ride the edge of the view, not the geometry.** A label anchored to
+its line's midpoint is off screen the moment the line is only partly visible,
+which for a graticule is nearly always. They are `divIcon` markers placed
+against the viewport's west and south edges and rebuilt on every settled
+view.
+
+They are in the short form — `060°W`, `40°N` — not the degrees-and-decimal-
+minutes the readout uses. A graticule label is read at a glance and sits over
+the map; the readout is where a position is read exactly.
+
+Their colour is **keyed to the basemap, not the theme**, which is the third
+time that lesson has been paid for here after the shoreline and the isobath
+halo: what a label is seen against is the water under it, not the page around
+it.
+
 ### Naming a layer
 
 The switcher's strings are identities: presets name them, `check:docs` fails
@@ -2201,99 +2236,43 @@ measure. Higher-resolution analyses exist — NOAA PolarWatch serves AMSR2 at
 stereographic** grid, and every pipeline and grid reader here assumes regular
 lat/lon. That is a reprojection and a resampler, not a `PRODUCTS` entry.
 
-#### The ice edge
+#### Ice thickness, and why the edge went
 
-The 15% concentration contour, cut in `fetch-ocean-fields.py` from the very
-region grids the concentration layer draws — **read back off disk rather than
-recomputed from the fetch**, so the line and the field under it cannot
-disagree. 15% is what every ice service reports extent at, so it means the
-same thing here as on an NSIDC chart.
+The edge was the 15% concentration contour, drawn as linework. **It was
+removed, and the reason is worth keeping**: it earned its place only while
+the concentration raster was coarse. Once that reached native 0.08°, the
+edge was drawing the boundary of a field already on screen — and a contour
+can never be finer than the grid it is cut from, so it stayed visibly
+polygonal beside the raster it bounded. It offered nothing the concentration
+did not already say, more coarsely.
 
-**A line, not a filled field, and that is the whole reason it is worth
-having.** A filled ice raster shares the scalar pane, so it has to be
-exclusive with SST — and ice edge over SST is exactly the pair a reader
-wants. A line composes over anything. It sits in its own pane at z-index 247:
-above every scalar raster so it reads over a temperature field, below the
-flow so a static line never crosses moving water, and separate from `bathy`
-so the isobath opacity slider does not drag it along — the same thing the
-shoreline needed.
+`sih` from the same ESPC ice aggregation replaced it, and does carry
+something new: **90% cover of 0.3 m new ice and 90% of 2 m multi-year ice
+are the same picture and very different ocean.** Same grid, same run, same
+step as the concentration, so it is one ice field seen two ways rather than
+a second source to reconcile.
 
-Its colour is in CSS, not the palette, for the same reason the isobaths' is:
-it is linework whose legibility comes from a casing. Gating it would fail
-anyway — it is drawn over the colour scales, so "every colormap" is its
-background, and against a grey one no light line clears the bar. It gets its
-own variable rather than sharing the isobaths', because the two are on screen
-together over the same water and one colour would make the 20 m contour and
-the pack edge the same line. **Its halo does not flip on a dark basemap**,
-unlike the isobaths': a grey contour on dark water needs a light casing to be
-seen, and a near-white ice line already clears dark water — giving it a light
-halo would smear it into a glow.
+The marching-squares module under `scripts/lib/` went with it — standard
+library, correct and tested, and used by nothing once the edge was gone.
+Deleted rather than kept: it is in git history, and a single-threshold
+contour is a hundred lines to write again if a use ever appears. (`check:docs`
+would fail this paragraph for naming a file that no longer exists, which is
+why it does not.)
 
-**Marching squares in the standard library** (`scripts/lib/contour.py`).
-`fetch-bathymetry.py` contours with matplotlib and can, because the seafloor
-is computed once by hand on a workstation. The ice edge moves daily and runs
-in the hourly build, where `eccodes` is the only dependency anyone has been
-willing to add and it is paid for by a format nobody can decode in forty
-lines. Seventeen levels with per-depth speckle filtering would have earned
-matplotlib; one threshold is about a hundred lines.
-
-Three details in it are load-bearing:
-
-- **`None` counts as no ice, not as no data.** The analysis masks open water
-  as missing and the forecast writes a real 0, and reading None as 0
-  collapses that difference exactly where it does not matter. The
-  consequence, stated rather than discovered: it also puts an edge where ice
-  meets *land*, which is true — that is where the pack is landfast — but it
-  means the line runs along the coast in places the shoreline layer already
-  draws.
-- **`la1` is the north edge and the rows run southward**, so the contour
-  takes a *negative* latitude step. Passing `+dy` contours the grid mirrored
-  about its own middle latitude: the same shape, in the wrong hemisphere,
-  which over a polar band looks entirely plausible until you notice it is
-  upside down.
-- **Endpoints are joined at rounded precision.** Two cells sharing an edge
-  compute the same crossing from the same corners but reach it by different
-  arithmetic, and at 1e-16 they sometimes differ; joining on exact equality
-  left one line in several hundred pieces.
-
-**The tolerance is chosen to be free, not to fix the look — the opposite of
-the isobaths.** There the tolerance bound and had to be tightened. Here the
-*grid* binds, so 0.02° is set to strip collinear runs at a cost of 0.46 px of
-deviation and half the file size. No tolerance makes this line smoother;
-only a finer grid does.
-
-Which is what it got. **The edge is cut at `edgeStride`, from its own fetch,
-not from the published region file.** Reading the published one back was the
-first design and it tied the line to the *coarsest* tier: the regions are a
-fallback for the forecast now, at 0.16°, while what a reader sees is the
-0.08° tile set — so the edge was drawn four times coarser than the raster it
-bounds, and that is the blockiness that got reported. Contouring costs almost
-nothing in output, because a line's byte count is set by its own length and
-not by the grid it came from, so the fine grid is fetched, contoured and
-thrown away.
-
-Measured at zoom 7, the zoom the isobaths were judged at:
-
-| | lines | median segment | p90 | source cell |
-| --- | --- | --- | --- | --- |
-| analysis, 0.25° | 56 | 14.7 px | 33.9 | 22.8 px |
-| forecast, was 0.16° | 436 | 14.7 px | — | 14.6 px |
-| **forecast, now 0.08°** | **827** | **6.6 px** | **14.6** | **7.3 px** |
-
-6.6 px is the isobaths' own 6.9 px after *their* fix, and the segments still
-sit at cell scale, so the grid is still what binds — correctly.
-
-It stays cheap: 74 KB raw for the analysis, 324 KB for the forecast, against
-the isobaths' 2.95 MB gzipped. **Fetched only when switched on**, through the
-same `whenChosen` latch the offline coastline uses, and drawn as one
-multi-line polyline — one DOM node, not 827.
+**Thickness is not pinned to a fixed scale, where concentration is.** 0–15 m
+spans ridged multi-year ice almost no view contains, so a fixed bar would
+leave a typical Arctic summer view in the bottom fifth of the ramp. It
+bounds the automatic range instead — `autoClamp: [0, 8]` — the way salinity
+does. Concentration is the opposite case: 15–100% *is* the scale, and
+rescaling per view would make one colour mean a different concentration in
+every view.
 
 #### The ice layers on the map
 
-Three entries in the switcher: `SIC (OISST)`, `SIC (ESPC)` and `Ice edge`.
-The two concentration layers join the scalar exclusivity group, because they
-share the `sst` pane and the upper would simply hide the lower; the edge
-deliberately does not.
+Three entries in the switcher: `SIC (OISST)`, `SIC (ESPC)` and `SIT (ESPC)`.
+All three join the scalar exclusivity group: they share the `sst` pane, so the
+upper would simply hide the lower and the map would name two fields while
+showing one.
 
 **`drawAbove` is new and is what makes the two products draw the same
 thing.** A scalar field with a floor below which nothing is painted has no

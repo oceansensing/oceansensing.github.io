@@ -262,35 +262,3 @@ export interface IsobathFile {
   features: IsobathFeature[];
 }
 
-/** The sea ice edge: one LineString per run of the concentration contour,
-    `c` being the fraction it was cut at (0.15, the extent convention every
-    ice service reports).
-
-    Shaped like the isobaths deliberately — it is the same kind of thing, a
-    threshold through a scalar field — so the map draws it down the same path
-    and a native port reuses the same reader.
-
-    It carries a header where the isobaths do not, because unlike the
-    seafloor it has a date: an edge with no valid time is a line a reader
-    cannot tell from last winter's. */
-export interface IceEdgeFile {
-  type: 'FeatureCollection';
-  header: {
-    product: string;
-    source: string;
-    /** ISO 8601 with a trailing Z, like every other timestamp here. */
-    valid: string;
-    /** The concentration the line was cut at, as a fraction. */
-    threshold: number;
-    lead: number;
-    /** Absent on an analysis, which has no run — its own date is the
-        answer. Present on a forecast, and the only thing that distinguishes
-        a current field from a stale one. */
-    modelRun?: string;
-  };
-  features: {
-    type: 'Feature';
-    properties: { c: number };
-    geometry: { type: 'LineString'; coordinates: LonLat[] };
-  }[];
-}
