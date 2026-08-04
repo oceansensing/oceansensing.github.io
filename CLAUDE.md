@@ -793,8 +793,11 @@ and the shelf noise, which is exactly backwards here.
 
 The old amber current ramp sat ΔE **21.8** from that shelf and **18.7** from
 Esri's palest tone, passed the gate at 94.3% weighted coverage, and was
-reported as invisible on the shelf. The ramp is coral now — near the
-complement of that mint — and the shelf goes to **41.8**. Markers keep the
+reported as invisible on the shelf. The ramp is a vivid coral now — near the
+complement of that mint — and the shelf goes to **41.8**. It has since been
+saturated further, toward red: that costs marker separation and buys
+background separation, which is the right way round for a velocity field, and
+the worst water tone went 24.2 to 30.1 while the storm red went 24.0 to 20.9. Markers keep the
 weighted rule: a marker is a filled dot with a dark casing, and a particle is
 a thin line with neither.
 
