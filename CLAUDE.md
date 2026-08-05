@@ -2826,6 +2826,15 @@ carrying an empty list**. That is an answer, not a failure. Reporting it as
 an error would be wrong over most of the ocean these platforms work in, so
 404 is handled separately from the catch.
 
+**The depth row is labelled by its answer, not by assumption.** The `<dt>`
+said "Seafloor" always, written before the asynchronous lookup returns — so a
+point in the Alaskan interior read "Seafloor 947 m above sea level", which is
+a contradiction in terms. Below sea level is a seafloor and above it is
+ground; the map is global and the readout answers wherever it is asked, so
+land is an ordinary case rather than an edge one. "Seafloor" is still what
+shows while the request is in flight, because most of what a reader clicks is
+ocean, and it is rewritten to "Elevation" with the value.
+
 **Right-click, or long-press on touch**, reports position, seafloor depth and
 the current **at the depth of whichever animated field is on** — the readout
 names it, because calling 60 m water "surface current" would be wrong with

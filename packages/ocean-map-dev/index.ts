@@ -3746,7 +3746,12 @@ export async function createOceanMap(
     const fields = scalarsAt(ll);
     return (
       `<dl class="ocean">` +
-      `<dt>Seafloor</dt><dd data-depth>fetching…</dd>` +
+      /* The label is provisional. Most of what a reader clicks is ocean, so
+         "Seafloor" is the right thing to show while the lookup is in
+         flight — but the DEM answers for land too, and a point in the
+         Alaskan interior came back "Seafloor 947 m above sea level", which
+         is a contradiction in terms. It is rewritten with the value. */
+      `<dt data-depth-label>Seafloor</dt><dd data-depth>fetching…</dd>` +
       /* Only when the EEZ layer is on, for the same reason the temperature
          row waits for a temperature layer: a reader who has not asked about
          maritime boundaries is not asking about them here either, and the
@@ -3782,6 +3787,7 @@ export async function createOceanMap(
      failed lookup never delays the rest of the popup. */
   const fillDepth = (popup: L.Popup, ll: L.LatLng) => {
     const cell = () => popup.getElement()?.querySelector('[data-depth]');
+    const label = () => popup.getElement()?.querySelector('[data-depth-label]');
     const lon = ((((ll.lng + 180) % 360) + 360) % 360) - 180;
     const query =
       'https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_global_mosaic/ImageServer/identify' +
@@ -3798,10 +3804,16 @@ export async function createOceanMap(
           at.textContent = 'no data';
           return;
         }
-        at.textContent =
-          value < 0
-            ? `${Math.round(-value).toLocaleString()} m deep`
-            : `${Math.round(value).toLocaleString()} m above sea level`;
+        /* Below sea level is a seafloor; above it is ground, and calling
+           that a seafloor is wrong rather than merely odd. The map is
+           global and the readout answers wherever it is asked, so land is
+           an ordinary case, not an edge one. */
+        const sea = value < 0;
+        at.textContent = sea
+          ? `${Math.round(-value).toLocaleString()} m deep`
+          : `${Math.round(value).toLocaleString()} m above sea level`;
+        const name = label();
+        if (name) name.textContent = sea ? 'Seafloor' : 'Elevation';
       })
       .catch(() => {
         const at = cell();
