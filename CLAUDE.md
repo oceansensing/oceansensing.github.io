@@ -552,10 +552,16 @@ uncompressed published tree was roughly **500 MB**, about half the cap. The
 estimate is the committed half plus the grids plus the tile sets at their
 documented raw sizes; nobody has summed the deployed tree exactly.
 
-**The currents' second frame spends about 184 MB of that**, taking the tree
-to roughly **684 MB** — see "Which hour is published" below for why it is
-worth it. What is left is the headroom, and it is now about a third of the
-cap rather than half.
+**The currents' second frame spends about 184 MB of that**, and the tree is
+now **678 MB** — measured on the deploy rather than estimated, `du -sh` on
+the assembled artifact, against a prediction of 684. See "Which hour is
+published" below for why it is worth it. What is left is the headroom, and
+it is about a third of the cap rather than half.
+
+The two current frames account for **367 MB** of it across both depths
+(92.0, 92.0, 91.3 and 91.4 MB), and the four field tile sets for 138 MB —
+the ice thickness set being the cheap one at 14.5 MB over 65 tiles, most of
+the ocean having none.
 
 **What holds the rest down is one frame per field.** The 904 MB was five
 forecast hours with a tile set each, across every product. The fields stay

@@ -161,6 +161,13 @@ of six.
   nor the scalar layer restated it, so this was never right — it was just
   never visible with one frame.
 
+### What it actually cost
+
+Measured on the first deploy, not estimated: the assembled tree is **678 MB**
+against a prediction of 684. The two current frames are 367 MB of that across
+both depths, the four field tile sets 138 MB. Both tile caches missed and
+rebuilt, as intended by the new keys, and both saved.
+
 ### What holds it
 
 - `check:docs` — both pipelines' `REFRESH_HOURS` and window widths must
