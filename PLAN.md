@@ -222,64 +222,83 @@ Points to settle when it is built:
 - The same index carries `2d`, `msl`, `skt`, `tcc`, `tp` and `sithick` if
   any of those are ever wanted. Adding one is the same one-entry change.
 
-### 2. ECCOFS, and the fact that it is observations
+### 2. ECCOFS, from NOAA's open-data bucket
 
 New data repository, as asked: **`oceansensing/eccofs-data-repo`**, on the
 model of `ocean-data-repo` — pipelines stay in this repo, that one checks
 this one out and runs them, `schema.ts` stays the contract, and its own
 Pages site gets its own gigabyte.
 
-**But the source is not what the request assumed, and that has to be
-settled before anything is built.** The ask was "the same fields ESPC shows,
-minus the ice". Probed 2026-08-05:
+**Source: `s3://noaa-nos-eccofs-pds`** (us-east-1, public, no credentials),
+via NOAA NODD. The East Coast Community Ocean Forecast System — Rutgers,
+UC Santa Cruz, Fathom Science and NOS, ROMS 4D-Var, **3 km horizontal and
+50 vertical levels**, a new 5-day forecast each day off an analysis
+assimilating three days of observations. Grand Banks to the Orinoco.
 
-- `ECCOFS_INSITU_OBS` is **tabledap, not griddap** — CORA in-situ near
-  real-time observations in the ECCOFS domain, published by Rutgers. Long
-  format: `time, latitude, longitude, depth, value, type, provenance`.
-- `type` carries **6 and 7 only** — the ROMS observation codes for
-  temperature and salinity. There is no velocity in it, so "currents at 0 m
-  and 60 m" has no counterpart here.
-- It is **live**: latest time 2026-08-05, and timestamps are binned to the
-  day. **533,024 rows over three days**, ~178,000 a day, of which about
-  17,000 a day are shallower than 5 m.
-- Domain -100..-38 E, -3..53 N — the US East Coast, the Gulf, the Caribbean
-  and the tropical west Atlantic.
-- The Rutgers ERDDAP has **six griddap datasets in total and none of them is
-  ECCOFS**. The gridded model output is on their THREDDS at
-  `roms/eccofs/3km_fwd_Run02/avg` — one 3 km run covering **2024-08-26 to
-  2024-09-01**, carrying an explicit notice that it is preliminary and not
-  for scientific analysis. It is a demo week from over a year ago, not a
-  live product.
+**It carries exactly the ESPC set minus the ice**: `temp`, `salt`, `u`, `v`,
+`ubar`, `vbar`, `zeta`. So the request is answerable as asked — but the cost
+is not in the fetching, it is in the grid.
 
-So there is no live gridded ECCOFS to mirror the ESPC rasters with. What
-there *is* is better in one specific way: it is the only **observational**
-temperature and salinity on the map besides the platforms themselves — the
-points the model is fitted to, in the lab's own region.
+Probed 2026-08-05. Everything below is measured, not assumed.
 
-**Which makes it a point layer, not a raster**, and that changes the
-engineering:
+**What makes this the largest data task yet.** The output is on the model's
+own **curvilinear, terrain-following, staggered** grid, and every reader in
+this repo assumes a regular lat/lon lattice. Three transformations stand
+between the bucket and anything the map can draw, and each has a silent
+failure mode:
 
-- Argo is the precedent, and the scale is different: 4,000 dots against
-  ~17,000 surface observations a day. Canvas renderer, certainly; and a
-  thinning rule needs measuring rather than guessing — by cell, by
-  provenance, or a nearest-neighbour decimation on a lattice.
-- **Colour is the interesting part.** Draw the obs on the *same ramp and
-  the same range* as the ESPC field beneath them and a reader can see the
-  model and the observations disagree — which is the whole reason to want
-  this layer. That is a real feature and it is not free: the ramps are
-  currently chosen so markers clear them by ΔE 22, and here the marker is
-  deliberately the same colour as the field.
-- `provenance` (801-825) decodes through the `ECCOFS_PROVENANCE` tabledap,
-  which is what would let the popup say *which* programme an observation
-  came from.
-- Depth is a real axis here — 0.5 m to 6,000 m — so this layer wants a
-  depth band the way the currents want a level, not a surface-only
-  simplification, once it works at all.
+1. **Regrid curvilinear to regular lat/lon.** `lat_rho`/`lon_rho` are 2-D
+   arrays of **1443 x 1667** — 2.4 million points a level. There is no axis
+   to index; a nearest-neighbour or bilinear resample onto our lattice has
+   to be built.
+2. **Interpolate s-levels to fixed depths.** "60 m" is not a level here.
+   Getting it needs `h`, `zeta`, `Cs_r`, `hc`, `theta_s`, `theta_b` and the
+   `Vtransform`/`Vstretching` cases — all present in the file, all easy to
+   apply to the wrong one of the two transforms and get a plausible answer.
+3. **Rotate the velocities.** `u` is on 1443x1666 and `v` on 1442x1667 — an
+   Arakawa-C stagger — so both must be averaged to rho points and then
+   rotated by `angle` to get true east/north. **Get this wrong and the
+   currents look entirely plausible and flow the wrong way**, which is the
+   failure class the "four ways particle rendering went wrong" section is a
+   catalogue of. Measure it against a known feature — the Gulf Stream is
+   right there — rather than eyeballing the field.
 
-**Decide before building:** whether this is (a) the in-situ observation
-layer described above, (b) blocked until a live gridded ECCOFS is found —
-Rutgers may serve one elsewhere, and asking them is cheaper than searching —
-or (c) both, with the obs first.
+**And it needs dependencies, which is the part to decide first.** The files
+are **NetCDF-4/HDF5** (magic `\x89HDF`), `avg` at **7.6 GB** each and eight
+a day, `qck` at 1.6-12 GB. **There is no OPeNDAP anywhere**: the Rutgers
+THREDDS carries only a 2024 demo week, and `eccofs.fathomscience.com` has no
+THREDDS path. So there is no server-side subsetting and no possibility of
+downloading whole files in CI — the only way in is HTTP range reads into
+chunked, probably compressed HDF5, which in pure standard library is writing
+a small kerchunk against a format we do not control, where a mis-decode
+looks like plausible ocean.
+
+That is the same argument that bought `eccodes` for the wind, and it should
+be settled the same way: **this pipeline takes `h5py` and `numpy`** (and
+whatever the resampler needs), and it lives in `eccofs-data-repo` so the
+blast radius is one repository. `h5py` reads S3 directly through its `ros3`
+driver. Every other pipeline stays standard-library only.
+
+**One thing to re-check before committing to it:** the newest data on the
+bucket was **2026-08-01, uploaded 2026-08-05** — about four days behind the
+clock. If that is the archive lagging rather than the model, it is fine; if
+it is the model, this layer is a four-day-old analysis and should be
+labelled as one. The attribution machinery already says how far from now a
+field is valid, so it will show either way — but it changes what the layer
+is *for*.
+
+**What it buys** is worth the work: 3 km over the lab's own waters against
+ESPC's 1/12°, roughly 27 times the resolution by area, with data
+assimilation behind it.
+
+**Optional companion, and much cheaper.** `ECCOFS_INSITU_OBS` on the Rutgers
+ERDDAP is the observation set this model assimilates — tabledap, long
+format, `type` 6 and 7 being the ROMS codes for temperature and salinity,
+~178,000 obs a day of which ~17,000 are shallower than 5 m, live to
+yesterday. Drawn as points on the same ramp and range as the field beneath
+them, a reader could see model and observations disagree. It needs no new
+dependency and shares the repository. Argo is the precedent for the
+renderer; the thinning rule needs measuring rather than guessing.
 
 ## Open items
 
