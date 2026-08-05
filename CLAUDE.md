@@ -892,6 +892,25 @@ touched the next field's name. Fixed widths are right here — they are what
 stops one control moving when another's label grows — but they have to be
 wide enough for the longest string plus its own padding.
 
+**Chrome describing a layer is hidden while that layer is off**, and that
+now covers the legend keys, both particle controls, and every fact in the
+status line. A count of something the reader cannot see is worse than no
+count: "63 assets reporting" beside a map with no platforms on it reads as
+the map having lost them, not as the layer being off. `assets` survives
+while *either* gliders or saildrones are on, since the number is their sum;
+`updated` has no layer at all — it is about the fetch — so it always shows.
+
+**`test:map` now holds the three CSS faults jsdom cannot render its way to**,
+all of which shipped in one session and none of which any check caught. They
+are decided over the *built stylesheet*, which is the same tactic the
+basemap-cascade check already uses, because jsdom does no layout and does not
+cascade like a browser: no caption rule is scoped under `.ocean-map`, `hidden`
+outranks our own `display` rules, and chrome buttons reset the UA appearance.
+Mutation-tested — and mutation-testing them surfaced a trap of its own, since
+`builtCss` concatenates *every* stylesheet in `dist`, so a fault planted in
+`packages/ocean-map` alone is masked by the sandbox's copy still being
+correct. Both packages have to be mutated together.
+
 **Never inline a colour in `AssetMap.astro`.** They live in
 `packages/ocean-map/data/map-palette.json`, which the component imports and
 `npm run test:contrast` checks — a hardcoded colour is invisible to the gate.

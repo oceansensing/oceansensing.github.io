@@ -1692,6 +1692,81 @@ const rulesSetting = (property) =>
     .map(([, selector, body], order) => ({ selector: selector.trim(), body, order }))
     .filter((rule) => new RegExp(`(^|;)\\s*${property}\\s*:`).test(rule.body));
 
+/* ---- the three CSS faults jsdom cannot see -----------------------------
+
+   All three shipped this session, none was caught by a check, and all three
+   are decidable from the built stylesheet — which is what makes them worth
+   gating here rather than shrugging at jsdom. It does no layout and does not
+   cascade the way a browser does, so `getComputedStyle` proves nothing; the
+   built CSS is the artefact to reason over, exactly as the basemap-cascade
+   check below already does.
+
+   Every element the module shows or hides by setting `.hidden`. Chrome that
+   is not in this list is not checked, so a new control has to be added here
+   — which is the point: it went wrong for controls that were new. */
+const HIDEABLE = [
+  '.om-tints', '.om-particle-colours', '.om-particle-speed',
+  '.om-field-controls', '.om-field-controls-row', '.om-key',
+  '[data-layer-key]', '[data-sst-key]', '[data-flow-key]',
+];
+
+/* Chrome that lives in the figure's *caption*, which is the canvas's sibling
+   — so `.ocean-map …` cannot reach it. */
+const CAPTION_CHROME = [
+  'om-credit', 'om-tints', 'om-tint', 'om-tint-name', 'om-particle-speed',
+  'om-speed-readout', 'om-speed-name', 'om-field-controls-row',
+  'om-field-name', 'om-key-scalar',
+];
+
+/* 1. No caption rule is scoped under `.ocean-map`. That class is on the
+      canvas container, so such a rule matches nothing — and the symptom is
+      chrome that merely looks unstyled, which is how a whole set of them
+      stayed dead through several rounds of checking by eye. */
+const strandedCaptionRules = CAPTION_CHROME.filter((cls) =>
+  new RegExp(`\\.ocean-map[^{,]*\\.${cls}\\b`).test(builtCss)
+);
+
+/* 2. `hidden` beats our own `display`. The UA rule is `[hidden]{display:none}`
+      at one-selector specificity and so is `.om-tints{display:inline-flex}`,
+      so author order wins and the element stays on screen. For anything the
+      module hides, a `[hidden]` rule must exist and outrank every rule that
+      gives it a `display`. */
+const displayRules = rulesSetting('display');
+const unhideable = HIDEABLE.filter((sel) => {
+  const base = sel.replace(/^\./, '');
+  const setsDisplay = displayRules.filter(
+    (r) => new RegExp(`${sel.startsWith('.') ? '\\.' : ''}${base.replace(/[[\]]/g, '\\$&')}(?![\\w-])`).test(r.selector) &&
+      !/\[hidden\]/.test(r.selector) && !/none/.test(r.body.match(/display\s*:\s*([^;]+)/)?.[1] ?? '')
+  );
+  if (!setsDisplay.length) return false;          // nothing to defeat
+  const guards = displayRules.filter(
+    (r) => r.selector.includes(sel) && /\[hidden\]/.test(r.selector) &&
+      /display\s*:\s*none/.test(r.body)
+  );
+  if (!guards.length) return true;
+  const strongest = (rules) => rules.reduce((best, r) =>
+    specificity(r.selector) > specificity(best.selector) ||
+    (specificity(r.selector) === specificity(best.selector) && r.order > best.order) ? r : best);
+  const guard = strongest(guards);
+  const shower = strongest(setsDisplay);
+  return !(specificity(guard.selector) > specificity(shower.selector) ||
+    (specificity(guard.selector) === specificity(shower.selector) && guard.order > shower.order));
+});
+
+/* 3. Any button in the chrome needs `appearance: none`. iOS Safari applies
+      its own button styling, which overrides `background` and
+      `border-radius` both — the particle swatches came out grey squares on a
+      phone while being right on a desktop. It cannot be reproduced in the
+      harness or in a desktop browser, so a static check is the only place it
+      can be held at all. */
+const swatchRule = /\.om-tint\{([^}]*)\}/.exec(builtCss.replace(/\s+/g, ''))?.[1] ?? '';
+/* Either form counts. The source carries both, and the minifier drops the
+   `-webkit-` one because it is redundant for the configured targets —
+   Safari has supported the unprefixed property since 15.4. Requiring the
+   prefix here would gate the build tool's output rather than the
+   behaviour, and would fail the day it changed its mind. */
+const swatchResetsAppearance = /(^|;)(-webkit-)?appearance:none/.test(swatchRule);
+
 const basemapBeatsTheme = (property) => {
   const rules = rulesSetting(property);
   if (rules.length < 2) return false;
@@ -2212,6 +2287,13 @@ const checks = [
     paneSvgUnclamped],
   ['the isobath halo follows the basemap even in dark mode',
     basemapBeatsTheme('--map-bathy-halo')],
+  /* ---- CSS faults the harness cannot render its way to ---------------- */
+  ['no caption rule is scoped under .ocean-map, which cannot reach it',
+    strandedCaptionRules.length === 0],
+  ['`hidden` outranks our own display rules, so hiding actually hides',
+    unhideable.length === 0],
+  ['chrome buttons reset the UA appearance, or iOS restyles them',
+    swatchResetsAppearance],
   ['and so does the shoreline tint',
     basemapBeatsTheme('--map-coast')],
   ['no page styles the map, so every instance of it looks the same',

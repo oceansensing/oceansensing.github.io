@@ -4158,12 +4158,49 @@ export async function createOceanMap(
      line is assembled from whichever parts have landed rather than
      written once by whoever finishes last. */
   const statusParts: Record<string, string> = {};
+
+  /* **Each fact is shown only while a layer it describes is on**, the same
+     rule the legend keys and the particle controls follow. A count of
+     something the reader cannot see is worse than no count: "63 assets
+     reporting" beside a map with no platforms on it reads as the map having
+     lost them.
+
+     `assets` covers gliders *and* saildrones, so it survives while either is
+     on — the number is their sum and dropping it when only one is off would
+     understate what is drawn. `updated` has no layer: it is about the fetch
+     rather than about anything on the map, so it always shows. */
+  const STATUS_LAYERS: Record<string, string[]> = {
+    storms: ['Hurricanes'],
+    assets: ['Ocean gliders', 'NOAA USVs'],
+    argo: ['Argo floats'],
+  };
+
   const showStatus = () => {
     if (!status) return;
     const order = ['storms', 'assets', 'argo', 'updated'];
-    const line = order.map((k) => statusParts[k]).filter(Boolean).join(' · ');
-    if (line) status.textContent = line;
+    const line = order
+      .filter((k) => {
+        const names = STATUS_LAYERS[k];
+        if (!names) return true;                  // `updated` — not about a layer
+        /* A layer the host's preset never registered cannot be switched on,
+           so its fact stays hidden rather than showing permanently. */
+        return names.some((name) => overlays[name] && map.hasLayer(overlays[name]!));
+      })
+      .map((k) => statusParts[k])
+      .filter(Boolean)
+      .join(' · ');
+    /* Assigned even when empty, unlike before: the parts are filled in
+       asynchronously and the old guard existed to avoid blanking the line
+       before the data landed. It now also has to be able to *clear* the
+       line when every layer behind it goes off, so the guard moved to the
+       thing it was actually protecting — whether anything has arrived. */
+    if (line || Object.keys(statusParts).length) status.textContent = line;
   };
+
+  /* Redrawn when a layer is toggled, not only when data arrives — the counts
+     were written once and never revisited, which is exactly why they went on
+     naming platforms that had been switched off. */
+  map.on('overlayadd overlayremove', showStatus);
 
   const rad = Math.PI / 180;
 
