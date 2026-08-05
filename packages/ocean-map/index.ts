@@ -283,6 +283,19 @@ export async function createOceanMap(
        `zoomDelta` keeps the +/- buttons stepping by a whole level. */
     zoomSnap: 0,
     zoomDelta: 1,
+    /* **Continuous zoom needs its own sensitivity.** With `zoomSnap: 1`
+       Leaflet's wheel handler rounds a gesture *up* to a whole level, so any
+       tick moved a full zoom however small it was. Declaring the zoom
+       fractional removes that ceiling and leaves the raw amount, which
+       measured **0.197 levels for a 100 px tick** — about a fifth of what
+       the same gesture used to do, and reported as zooming too slowly.
+
+       `wheelPxPerZoomLevel` is how many scroll pixels make one level, so
+       lowering it is the direct knob. 20 rather than the default 60 puts a
+       100 px tick back near two thirds of a level: responsive enough to
+       cross a few levels in one gesture, while keeping the smoothness that
+       is the whole point of not snapping. */
+    wheelPxPerZoomLevel: 20,
     attributionControl: true,
   });
 

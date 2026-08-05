@@ -410,6 +410,20 @@ after, on a 1758 px container at minZoom 2.78: **100% tile coverage** on
 arrival, at the minimum, and after a zoom round trip, with 40 tiles where
 the broken configuration left 12.
 
+**Continuous zoom then needed its own sensitivity, and that is a second
+consequence of the same option.** `zoomSnap: 1` had Leaflet round a wheel
+gesture *up* to a whole level, so any tick moved a full zoom however small
+it was. Removing the snap leaves the raw amount: measured, a 100 px tick
+gave **0.197 levels**, about a fifth of what the same gesture used to do,
+and it was reported as zooming too slowly.
+
+`wheelPxPerZoomLevel` is how many scroll pixels make a level, so it is the
+direct knob — 20 rather than the default 60. Measured after: a 100 px tick
+gives **0.57 levels**, a 53 px tick 0.31, a small 20 px nudge 0.119, zoom
+out is symmetric at −0.57, and the +/− buttons still step exactly 1 because
+`zoomDelta` is untouched. Responsive enough to cross a few levels in a
+gesture while keeping the smoothness that not snapping is for.
+
 Nothing in `verify` caught it: jsdom loads no tile images, so the harness
 cannot see which part of a container a basemap covers. It was found by
 looking at the map.
