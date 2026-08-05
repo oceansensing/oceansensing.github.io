@@ -70,9 +70,41 @@ website, `PORTING-IOS.md` for the iOS app, and `BOUNDARIES.md` for anyone
 adding to it — those separations are what keep the other two possible, and
 they are easy to breach by accident.
 
-`npm run verify` stands at 923 checks across nine steps: build, type-check,
-docs, the renderer-independent units, the published data contract, colour
-contrast, the rendered map, two maps on a page, and the clock.
+`npm run verify` stands at **844 printed `ok` lines** across nine steps:
+build, type-check, docs, the renderer-independent units, the published data
+contract, colour contrast, the rendered map, two maps on a page, and the
+clock. Counted as `npm run verify | grep -c '^ok'`, which is the only figure
+here anyone can reproduce — note one of those lines covers all 33 published
+files at once, so it undercounts what the contract step actually checks.
+
+By step: units 145, schema 1 (33 files), contrast 445, map 233, multimap 11,
+clock 8, docs 1.
+
+### Splitting `index.ts`
+
+It reached 4,542 lines in one closure. The problem is **ordering, not
+size**: three bugs in a single session were use-before-declaration inside
+it, and `astro check` cannot see any of them because each sat in a callback
+that could not run until later. A module boundary turns that into a
+signature.
+
+Done, one at a time with `verify` and a browser check between each:
+
+- `graticule.ts` — the lat/lon grid. Captured nothing but the map.
+- `measure.ts` — distance and bearing. Had been declared *700 lines below*
+  one of its callers.
+- `scalar-layer.ts` — the field raster, `FIELDS` and `FieldDescriptor`.
+
+That is ~500 lines out, leaving ~4,030.
+
+The rule that has held: **behaviour moves, the reader's state stays.**
+`choices` and `particleTint` are per map; a module-level copy would put two
+maps on a page back to sharing one, which is the singleton bug this package
+already paid to remove.
+
+Still to lift, roughly in order of independence: the isobath tiers, the KMZ
+drawing side (`kmz.ts` and `warp.ts` already hold the parsing), the point
+readout, and the chrome/controls block.
 
 ## Open items
 
