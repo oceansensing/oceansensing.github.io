@@ -9,6 +9,17 @@
    says which layers it opens with and where it looks, and the map does the
    rest. Reset returns to that preset rather than to the map's own defaults. */
 import { MAP_DATA } from '../config';
+/* The face for the viewer's name over the map — see `--om-brand-font` in the
+   package's stylesheet, which names it with a working fallback rather than
+   requiring it.
+
+   Imported here rather than in `global.css` so only the pages carrying a map
+   pay for it. 12 KB, and Fontsource sets `font-display: swap`, so it loads
+   asynchronously and cannot delay a paint — which matters on this page more
+   than most, since its first paint was 1.7 s until recently. Not subsetted
+   to the mark's twelve glyphs: that would save 9 KB and cost a generated
+   binary in the repo that can silently drift from the string. */
+import '@fontsource/chakra-petch/700.css';
 
 interface Props {
   /** Overlay names to switch on, as the layer switcher shows them. */

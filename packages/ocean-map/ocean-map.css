@@ -1089,9 +1089,17 @@
      rest of the chrome falls back to, worked differently. A downloaded
      display face would be a render-blocking request on a page whose first
      paint we just spent real effort on. */
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.62rem;
-  font-weight: 600;
+  /* Chakra Petch — angular, clipped corners, telemetry rather than costume
+     sci-fi, which matters when the thing under it is a Navy forecast and a
+     real glider fleet.
+
+     Named here with a working fallback rather than required: a host that
+     does not load the face gets the monospace stack and a mark that still
+     reads, and one that wants its own sets `--om-brand-font`. The package
+     never depends on a font it cannot see. */
+  font-family: var(--om-brand-font, 'Chakra Petch', ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.68rem;
+  font-weight: 700;
   /* Real small caps where the face has them, synthesised where it does not:
      the text is set in uppercase, so this only affects faces that offer a
      true small-cap set. */
