@@ -18,7 +18,7 @@ The hurricane page carries a live map: NHC forecast tracks and cones with
 10-day observed storm history, NOAA saildrones, ~50 gliders from four national
 data centres (US, UK, Canada, Sweden), ~4,000 Argo floats, animated global
 currents at the surface and 60 m that sharpen to 1/12° as you zoom in,
-ECMWF 10 m wind, sea-surface temperature from both an observed analysis
+ECMWF 10 m wind and 2 m air temperature, sea-surface temperature from both an observed analysis
 (OISST) and the Navy forecast, Navy sea-surface salinity, isobaths from 20 m
 to 10,000 m with an opacity the reader sets, a detailed coastline, and EEZ
 boundaries. The map fills the window in both axes and the page's text aligns
@@ -186,41 +186,11 @@ day, and the fields are dragged to the same cadence by the shared anchor.
 `REFRESH_HOURS` is the lever, and it cannot go above six without aliasing
 the tide.
 
-## Queued: two new data layers
+## Queued: ECCOFS
 
-Both are specified, neither is started. They are independent — take them in
-either order, but **task 1 first and then stop**, because task 2 is large
-enough to want a fresh context.
-
-### 1. 2 m air temperature, from ECMWF
-
-**The cheapest layer this map will ever gain.** `fetch-wind.py` already
-fetches a byte range out of ECMWF's open IFS forecast, reading the `.index`
-sidecar to find the messages it wants. `2t` is in that same index, on the
-same step, at `levtype=sfc` — measured on the 2026-08-05 12z run's +12h
-step, **657,778 bytes**, alongside the `10u` and `10v` the pipeline already
-takes. So this is one more entry in the params list and one more grid
-written; there is no new source, no new dependency and no new failure mode.
-
-It is a **scalar**, so it joins `FIELDS` and the scalar layer rather than
-the particle layer — closer to how SST was added than to how the wind was.
-Points to settle when it is built:
-
-- **It is not masked to the ocean**, for the same reason the wind is not: an
-  air temperature over land is a fact, and the interesting cases — a cold
-  outbreak coming off the continent, a storm's warm sector — are exactly
-  where the coast is. That makes it the *second* layer on the map that
-  paints over land, and the first scalar one, so check what it does to the
-  basemap-tone reasoning and to `drawAbove`.
-- **Its ramp has to clear the gate**, and it is the hardest case yet: air
-  temperature spans a far wider range than SST, so a ramp travelling the
-  same perceptual distance has more room to collide with the markers. Run
-  the search in `scripts/lib/colour.mjs` rather than picking one.
-- **It is a nowcast**, like the wind and unlike the ESPC fields — IFS runs
-  four times a day and lands within hours, so `pick_step` already does the
-  right thing and there is no anchor to share.
-- The same index carries `2d`, `msl`, `skt`, `tcc`, `tp` and `sithick` if
-  any of those are ever wanted. Adding one is the same one-entry change.
+ECMWF 2 m air temperature landed on 2026-08-05 and has been removed from
+here. What is left is specified and not started, and it is large enough to
+want a fresh context of its own.
 
 ### 2. ECCOFS, from NOAA's open-data bucket
 

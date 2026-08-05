@@ -75,6 +75,26 @@ COMPONENTS = [
     {'param': '10v', 'category': 2, 'number': 3},
 ]
 
+# 2 m air temperature, published as a **scalar** grid rather than as part of
+# the vector pair above.
+#
+# **It is in the same index, on the same step, from the same run**, so it
+# costs one more range read and nothing else — no new source, no new
+# dependency, no new failure mode. Measured on the 2026-08-05 12z run's +12h
+# step: 657,778 bytes, `levtype=sfc`, right beside the 10u and 10v this
+# pipeline already takes.
+#
+# It comes off the wire in **kelvin** and is published in degrees Celsius,
+# which is what every other temperature here speaks. Believing the units
+# attribute is how the ice concentration got drawn in the bottom hundredth
+# of its ramp; converting is one line and the check that catches getting it
+# wrong is a plausible-range test rather than a units string.
+#
+# The same index also carries `2d`, `msl`, `skt`, `tcc`, `tp` and `sithick`.
+# Each would be one more entry here.
+AIR = {'param': '2t', 'name': 'air', 'units': 'degC',
+       'offset': -273.15, 'plausible': (-90.0, 60.0)}
+
 # Native resolution, from the grid itself rather than assumed — `read_grid`
 # checks these against what the message says and raises on a mismatch, since
 # a silently changed grid would publish plausible wind in the wrong places.
@@ -188,10 +208,14 @@ def pick_step() -> tuple[datetime, int, datetime]:
     raise RuntimeError('no ECMWF run has published a usable step')
 
 
-def read_component(run: datetime, step: int, comp: dict):
-    """One wind component as a (ny, nx) array of floats, north row first.
+def read_message(run: datetime, step: int, param: str):
+    """One GRIB message as a (ny, nx) array of floats, north row first.
 
-    The index is read per component rather than once, because it is 30 KB and
+    By parameter name rather than by a component dict, because the 2 m
+    temperature comes out of the same file the same way and only the vector
+    pair has category and number to carry.
+
+    The index is read per message rather than once, because it is 30 KB and
     reading it twice is cheaper than threading a parsed copy through — and it
     keeps this function answerable on its own.
     """
@@ -200,19 +224,19 @@ def read_component(run: datetime, step: int, comp: dict):
 
     body = get(step_url(run, step, 'index'), timeout=60).decode()
     rows = [json.loads(line) for line in body.splitlines() if line.strip()]
-    hit = next((r for r in rows if r.get('param') == comp['param']), None)
+    hit = next((r for r in rows if r.get('param') == param), None)
     if hit is None:
-        raise RuntimeError(f'{comp["param"]} is not in the index')
+        raise RuntimeError(f'{param} is not in the index')
 
     raw = get(step_url(run, step, 'grib2'), rng=(int(hit['_offset']), int(hit['_length'])))
     if raw[:4] != b'GRIB':
-        raise RuntimeError(f'{comp["param"]}: range did not start at a GRIB message')
+        raise RuntimeError(f'{param}: range did not start at a GRIB message')
 
     handle = ec.codes_new_from_message(raw)
     try:
         name = ec.codes_get(handle, 'shortName')
-        if name != comp['param']:
-            raise RuntimeError(f'asked for {comp["param"]}, got {name}')
+        if name != param:
+            raise RuntimeError(f'asked for {param}, got {name}')
         nx = ec.codes_get(handle, 'Ni')
         ny = ec.codes_get(handle, 'Nj')
         d = ec.codes_get(handle, 'iDirectionIncrementInDegrees')
@@ -308,10 +332,59 @@ def write(values, path: pathlib.Path, run: datetime, valid: datetime,
           f", {path.stat().st_size / 1024:.0f} KB")
 
 
-def region_links() -> list[dict]:
+def write_scalar(values, path: pathlib.Path, run: datetime, valid: datetime,
+                 step: int, stride: int, south: float, north: float,
+                 west: float, east: float, wrap: bool,
+                 extra: dict | None = None) -> None:
+    """One scalar grid, in the shape `fetch-ocean-fields.py` publishes.
+
+    A single object rather than the vector pair's two, because that is what
+    `ScalarGrid` in schema.ts declares and what the scalar layer reads.
+
+    **Not masked to the ocean, deliberately** — the same call the wind
+    makes. An air temperature over land is a fact, and the cases worth
+    looking at are exactly the ones that straddle a coast: a cold outbreak
+    coming off the continent, a storm's warm sector. So this paints the
+    whole globe, and the shoreline and isobaths draw over it from panes
+    above.
+    """
+    grid, lo1, la1, dx, dy, nx, ny = subsample(
+        values, stride, south, north, west, east, wrap)
+    lo, hi = AIR['plausible']
+    finite = [float(v) for v in grid.reshape(-1)]
+    worst = min(finite), max(finite)
+    if worst[0] < lo or worst[1] > hi:
+        # A units mistake is the failure this catches, and it is silent
+        # otherwise: kelvin published as Celsius is a field 273 degrees out
+        # that still draws, just entirely in one end of the ramp.
+        raise RuntimeError(f'{path.name}: values span {worst[0]:.1f} to '
+                           f'{worst[1]:.1f} {AIR["units"]}, outside {lo}..{hi}')
+    header = {
+        'nx': nx, 'ny': ny,
+        'lo1': round(lo1, 4), 'la1': round(la1, 4),
+        'dx': round(dx, 4), 'dy': round(dy, 4),
+        'refTime': valid.strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'modelRun': run.strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'source': 'ECMWF IFS',
+        'units': AIR['units'],
+        'height': 2,
+        'lead': step,
+        **(extra or {}),
+    }
+    # One decimal, as the ocean fields use: 0.1 degC is finer than a step of
+    # any ramp on the map and half the bytes of two.
+    body = {'header': header, 'data': [round(v, 1) for v in finite]}
+    path.write_text(json.dumps(body, separators=(',', ':')))
+    print(f"  {path.name}: {nx}x{ny} at {round(dx, 4)} deg"
+          f"{', wraps' if wrap else f', {round(east - west)} deg of longitude'}"
+          f", {worst[0]:.0f} to {worst[1]:.0f} {AIR['units']}"
+          f", {path.stat().st_size / 1024:.0f} KB")
+
+
+def region_links(stem: str = 'wind') -> list[dict]:
     return [
         {
-            'url': f'/map/wind-{r["name"]}.json',
+            'url': f'/map/{stem}-{r["name"]}.json',
             'label': r['label'],
             'west': r.get('west', -180.0), 'east': r.get('east', 180.0),
             'south': r['south'], 'north': r['north'],
@@ -327,11 +400,11 @@ def main() -> int:
         run, step, valid = pick_step()
         age = (datetime.now(timezone.utc) - run).total_seconds() / 3600
         ahead = (valid - datetime.now(timezone.utc)).total_seconds() / 3600
-        print(f'ECMWF IFS 10 m wind — valid {valid:%Y-%m-%dT%H:%M:%SZ} '
-              f'({ahead:+.0f} h), from the {run:%Y-%m-%dT%H:%M:%SZ} run '
-              f'({age:.0f} h old), step +{step}h')
+        print(f'ECMWF IFS 10 m wind and 2 m air temperature — valid '
+              f'{valid:%Y-%m-%dT%H:%M:%SZ} ({ahead:+.0f} h), from the '
+              f'{run:%Y-%m-%dT%H:%M:%SZ} run ({age:.0f} h old), step +{step}h')
 
-        fields = [read_component(run, step, c) for c in COMPONENTS]
+        fields = [read_message(run, step, c['param']) for c in COMPONENTS]
 
         MAP_DIR.mkdir(parents=True, exist_ok=True)
         write(fields, MAP_DIR / GLOBAL_NAME, run, valid, step,
@@ -341,6 +414,19 @@ def main() -> int:
             write(fields, MAP_DIR / f'wind-{r["name"]}.json', run, valid, step,
                   1, r['south'], r['north'],
                   r.get('west', -180.0), r.get('east', 180.0), r['wrap'])
+
+        # The same run, the same step, the same tiers. Fetched after the
+        # wind rather than beside it so that a 2t outage costs only itself —
+        # the wind is the older layer and the one a reader is more likely to
+        # be looking at.
+        air = read_message(run, step, AIR['param']) + AIR['offset']
+        write_scalar(air, MAP_DIR / f'{AIR["name"]}.json', run, valid, step,
+                     GLOBAL_STRIDE, -90.0, 90.0, -180.0, 180.0, True,
+                     extra={'details': region_links(AIR['name'])})
+        for r in REGIONS:
+            write_scalar(air, MAP_DIR / f'{AIR["name"]}-{r["name"]}.json',
+                         run, valid, step, 1, r['south'], r['north'],
+                         r.get('west', -180.0), r.get('east', 180.0), r['wrap'])
     except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:
         print(f'! wind unavailable: {exc}', file=sys.stderr)
         existing = MAP_DIR / GLOBAL_NAME

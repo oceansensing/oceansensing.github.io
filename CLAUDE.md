@@ -2187,7 +2187,7 @@ and so does the hurricane page's preset — a preset naming a layer that no
 longer exists silently switches nothing on, which is why `check:docs` reads
 the names out of `overlays` and fails on a mismatch.
 
-### Wind, and the one Python dependency
+### Wind and air temperature, and the one Python dependency
 
 `scripts/fetch-wind.py`, `npm run data:wind`, from **ECMWF's open IFS
 forecast** at 0.25°. It is the only atmospheric field on the map and the only
@@ -2224,6 +2224,45 @@ What still separates them is the refresh: this one is rebuilt hourly and
 publishes a single step, because IFS lands promptly and there is nothing to
 gain from bracketing. The ESPC currents publish a pair, because their steps
 are 3-hourly and carry a tide.
+
+**2 m air temperature rides the same fetch**, and it is the cheapest layer
+this map has gained. `2t` is in the index the pipeline already reads, on the
+same step of the same run — measured on the 2026-08-05 12z +12h step,
+**657,778 bytes**, right beside the `10u` and `10v`. So it costs one more
+range read: no new source, no new dependency, no new failure mode, and one
+credit line for both because they share a source, a run and a valid time.
+
+Three things about it are worth keeping:
+
+- **It comes off the wire in kelvin** and is published in °C. Believing a
+  units attribute is how the ice concentration got drawn in the bottom
+  hundredth of its ramp; the conversion is one line, and what catches
+  getting it wrong is a **plausible-range check on the values**, not a
+  string. Measured on the published grids: -66 to 43 °C globally, 4 to 39
+  over the Atlantic region.
+- **It is the first scalar on the map that is not the ocean**, so it paints
+  over land and hides the basemap entirely while it is on. That is the
+  same call the wind makes and for the same reason — an air temperature
+  over land is a fact, and the cases worth looking at straddle a coast. The
+  shoreline and the isobaths sit in panes above it, which is what keeps the
+  picture readable, and the point readout already labels its depth row
+  "Elevation" rather than "Seafloor" over land.
+- **It is exclusive with the ocean scalars, not with the ice.** It is a
+  full-coverage raster in the `sst` pane, so SST underneath it would simply
+  be hidden. Ice earns its own pane only because it paints nothing below a
+  floor.
+
+It opens on `thermal`, which is **marker-safe** — so unlike SST, SSS and
+ice it needs no entry in `defaultExempt` and the gate has nothing to report
+about it. That was free rather than forced: `thermal` is the scale the
+colour search built for a temperature field, and it separates this from
+SST's `jet` so the bar says which is showing. It reads unlike a
+conventional temperature scale because it is required to stay out of the
+warm half of the wheel — the same constraint the SST ramp has a paragraph
+about, since orange USVs and red storms live there.
+
+The same index also carries `2d`, `msl`, `skt`, `tcc`, `tp` and `sithick`.
+Each is one more entry in this file.
 
 **The grid starts at 180°E**, where every other grid here starts at 0. It is
 rolled on the way out rather than passed through with its own `lo1`: one

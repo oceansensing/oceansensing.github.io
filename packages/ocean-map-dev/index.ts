@@ -676,6 +676,11 @@ export async function createOceanMap(
   const iceOisst = L.layerGroup();
   const iceNavy = L.layerGroup();
   const iceThickness = L.layerGroup();
+  /* Air temperature is a scalar like the rest, so it goes through the same
+     layer and the same catalogue. It is not exclusive with the *ice*, which
+     draws in its own pane over a floor, but it is exclusive with every
+     ocean scalar: they share the `sst` pane and cover the same pixels. */
+  const airTemp = L.layerGroup();
   const ssts: { group: L.LayerGroup; layer: ScalarLayer }[] = [];
   /* Both animated fields, so the point readout can sample whichever one
      the reader has on rather than a fixed depth. */
@@ -1446,6 +1451,13 @@ export async function createOceanMap(
        `sic` without this is exactly what happened. */
     sic: { map: palette.defaultColormap?.sic ?? 'cmo.ice', range: null },
     sit: { map: palette.defaultColormap?.sit ?? 'cmo.ice', range: null },
+    /* Air temperature opens on `thermal`, which is **marker-safe** — so
+       unlike the three above it needs no entry in `defaultExempt` and the
+       gate has nothing to report about it. That was a free choice rather
+       than a constraint: `thermal` is also the scale a temperature field
+       is conventionally read with, and it separates this from SST's `jet`
+       so a glance at the bar says which is showing. */
+    air: { map: palette.defaultColormap?.air ?? 'thermal', range: null },
   };
 
   const choiceFor = (field?: FieldDescriptor) => choices[field?.key ?? 'sst']!;
@@ -1651,6 +1663,7 @@ export async function createOceanMap(
   buildField(`${DATA}sic-oisst.json`, iceOisst, FIELDS.sic);
   buildField(`${DATA}sic-navy.json`, iceNavy, FIELDS.sic);
   buildField(`${DATA}sit-navy.json`, iceThickness, FIELDS.sit);
+  buildField(`${DATA}air.json`, airTemp, FIELDS.air);
 
   /* The legend key is built from the same palette the renderer reads, so
      the two cannot drift, and it stays hidden until a temperature layer is
@@ -2891,6 +2904,11 @@ export async function createOceanMap(
        not carry — 90% cover of 0.3 m new ice and 90% of 2 m multi-year ice
        are the same picture and very different ocean. */
     'SIT (ESPC)': iceThickness,
+    /* Named like the wind rather than like the ocean scalars: a height
+       above ground, spelled out, with the product in parentheses. `SST`
+       and `SSS` are acronyms an oceanographer reaches for and there is no
+       equivalent for this. */
+    'Air temp at 2m (ECMWF)': airTemp,
     ...(MERCATOR_RASTER ? { 'Current speed (Mercator)': currents } : {}),
     'Hurricanes': storms,
     'NOAA USVs': usvs,
@@ -3263,7 +3281,12 @@ export async function createOceanMap(
        name two fields while showing one. The ice *edge* is deliberately not
        here — it is a line in its own pane, and edge-over-SST is the pair
        worth reading. */
-    [sstOisst, sstNavy, sssNavy],
+    /* Air temperature joins them rather than getting a pane of its own.
+       It is not the ocean, but it is a full-coverage raster in the same
+       pane, so SST underneath it would simply be hidden. Ice is the layer
+       that earns its own pane, and only because it paints nothing below a
+       floor. */
+    [sstOisst, sstNavy, sssNavy, airTemp],
     /* Ice is exclusive with *itself* and nothing else. Concentration and
        thickness share the ice pane and are two readings of the same floe, so
        one would hide the other and the legend would name both; either can be

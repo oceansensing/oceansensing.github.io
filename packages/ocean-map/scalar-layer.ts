@@ -128,6 +128,22 @@ export const FIELDS: Record<string, FieldDescriptor> = {
     key: 'sit', unit: 'm', step: 0.25, label: 'Ice thickness',
     autoClamp: [0, 8], drawAbove: 0.1, pane: 'ice',
   },
+  /* 2 m air temperature, and it is the first scalar here that is **not the
+     ocean**. Two things follow from that.
+
+     It is not masked to land, deliberately — the same call the wind makes,
+     and for the same reason: an air temperature over land is a fact, and
+     the cases worth looking at straddle a coast. So this one paints the
+     whole globe rather than the water, and the basemap is entirely hidden
+     while it is on. The shoreline and the isobaths sit in panes above it,
+     which is what keeps the picture readable.
+
+     And its range is genuinely wider than any ocean field: measured on the
+     published grid, -66 to 43 °C globally against roughly 30 degrees of
+     sea-surface temperature. A whole-degree step is right for both, but
+     the automatic range is left unclamped — every value in it is real air,
+     unlike salinity's estuaries. */
+  air: { key: 'air', unit: '°C', step: 1, label: 'Air temp at 2 m' },
 };
 
 /* What the reader has chosen for a field, read fresh on every paint.

@@ -154,7 +154,7 @@ const gridBody = (f, header, data) => {
 /* Named explicitly, so a product added to the pipeline and not to this
    list is unchecked rather than merely unmentioned — the ice grids were,
    and passed by omission. */
-for (const name of ['sst-oisst', 'sst-navy', 'sss-navy', 'sic-oisst', 'sic-navy']) {
+for (const name of ['sst-oisst', 'sst-navy', 'sss-navy', 'sic-oisst', 'sic-navy', 'air']) {
   const g = read(`${name}.json`);
   if (!g) continue;
   checked++;
@@ -219,6 +219,9 @@ for (const name of [
   // wind's 90, which is the seam of particles running on above a field that
   // had ended.
   'currents', 'currents-arctic', 'currents-60m', 'currents-arctic-60m', 'wind',
+  // Air temperature rides the wind pipeline's tiers, so it inherits the
+  // same obligation to reach the pole that the wind grid already carries.
+  'air', 'air-arctic',
 ]) {
   const file = read(`${name}.json`);
   // A velocity grid is a two-element array, u then v; both carry the header.
@@ -245,7 +248,7 @@ for (const name of [
    simply be compared. Half a cell of slack, because a grid samples on a
    lattice and its edge lands on the nearest node, not on the request. */
 for (const name of ['sst-oisst', 'sst-navy', 'sss-navy', 'sic-oisst', 'sic-navy', 'sit-navy',
-                    'currents', 'currents-60m', 'sit-navy']) {
+                    'currents', 'currents-60m', 'sit-navy', 'air']) {
   const file = read(`${name}.json`);
   const g = Array.isArray(file) ? file[0] : file;
   for (const d of g?.header?.details ?? []) {
