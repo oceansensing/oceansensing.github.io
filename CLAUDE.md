@@ -2879,6 +2879,32 @@ fields". Neither change makes a stale map fail the build, deliberately: an
 outage should degrade to stale rather than block a deploy. What changed is
 that the log says so.
 
+#### ESPC carries tides, and that constrains everything below
+
+**Measured, because the metadata never says so.** Sampled at 48.6°S 63.8°W
+on the Patagonian shelf across 17 consecutive steps of one run: the eastward
+component reverses sign **8 times in 48 hours**, against the 7.7 a semidiurnal
+M2 tide (12.42 h) would give. Both components oscillate with a phase offset —
+a rotary tidal ellipse — and speeds run 0.33 to 1.22 m/s about a mean of
+0.78. Nothing in the `.das` mentions tide, tidal or TPXO; the data is where
+this is visible.
+
+Three consequences, and they are the reason the sections below are written
+as they are:
+
+- **The steps are 3-hourly** (65 of them, T+0 to T+192), and that is the
+  floor for any refresh cadence. Sampling a 12.42 h oscillation every 6 h is
+  2.07 samples per cycle — barely above Nyquist, and in practice consecutive
+  updates land half a tidal cycle apart, so the shelves would visibly reverse
+  on most refreshes with nothing on screen to say why. 3-hourly gives 4.1.
+- **A snapshot is a tidal phase**, not a mean. Whatever step is published,
+  the shelf currents on it are at some point in the cycle. That is honest —
+  it is what the model says — but it means two builds a few hours apart can
+  legitimately disagree about which way the water is going.
+- **Aliasing is a worse failure than lag.** Lag is visible: the attribution
+  prints the valid time and the offset from now. A current pointing the wrong
+  way is not. Where the two trade off, prefer the stale field.
+
 #### The forecast hour, and what a lead is counted from
 
 Each ESPC run carries eight days and the map shows one hour of it.
@@ -2888,6 +2914,14 @@ run** — the forecasting convention, not hours from the reader's clock.
 nothing else has to change: the map builds its control from whatever the
 data advertises, and with one frame it advertises nothing and no control
 appears.
+
+**The fixed lead has since drifted badly, and the ingest delay is why.**
+Measured 2026-08-05 19Z: the newest run was **55 hours old**, not the 24-33
+this file documents. So T+36 from it was valid 08-05 00Z — **19 hours behind
+now** — while the *same run* carried a step valid 08-05 18Z, one hour behind.
+The run holds 65 steps out to T+192, so a step near the present is essentially
+always available; the fixed lead simply is not pointing at it. Selecting by
+nearest valid time instead is specified in `PLAN.md`.
 
 **Anchoring to the run rather than the clock is the whole point of the
 number, and it was measured before it was chosen.** ESPC runs daily at 12Z
@@ -2961,6 +2995,15 @@ which is the reason the default is one frame.
 Verified end to end on the live site rather than argued: reading the same
 point (Newfoundland shelf, the largest 48-hour change in the grid) through
 the map's own readout gave **12.5 °C at one hour and 8.1 °C at another**.
+
+**Publishing more frames costs HYCOM reads in proportion, and batching does
+not change that.** Each frame is a full tile sweep — 159 tiles x 2 components
+x 2 depths is about **636 reads**. So the load is set by *frames published per
+day*, not by how often the job runs: two frames every six hours and one frame
+every three are both eight frame-sweeps a day and about 5,100 reads. Batching
+moves when the reads happen, halves the CI runs, and makes the burst twice as
+large; it buys nothing from the server. The only lever on load is publishing
+fewer frames, which against a tidal field means aliasing.
 
 **With several frames, the one shown by default is the one nearest the
 reader's clock**, not the lowest lead. Those are the same thing on a healthy

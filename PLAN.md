@@ -70,15 +70,15 @@ website, `PORTING-IOS.md` for the iOS app, and `BOUNDARIES.md` for anyone
 adding to it — those separations are what keep the other two possible, and
 they are easy to breach by accident.
 
-`npm run verify` stands at **844 printed `ok` lines** across nine steps:
+`npm run verify` stands at **864 printed `ok` lines** across nine steps:
 build, type-check, docs, the renderer-independent units, the published data
 contract, colour contrast, the rendered map, two maps on a page, and the
 clock. Counted as `npm run verify | grep -c '^ok'`, which is the only figure
 here anyone can reproduce — note one of those lines covers all 33 published
 files at once, so it undercounts what the contract step actually checks.
 
-By step: units 145, schema 1 (33 files), contrast 445, map 233, multimap 11,
-clock 8, docs 1.
+Re-count with that command rather than trusting this number; it has gone
+stale twice.
 
 ### Splitting `index.ts`
 
@@ -105,6 +105,96 @@ already paid to remove.
 Still to lift, roughly in order of independence: the isobath tiers, the KMZ
 drawing side (`kmz.ts` and `warp.ts` already hold the parsing), the point
 readout, and the chrome/controls block.
+
+## Spec: publish the two ESPC steps nearest now, six-hourly
+
+Written to be picked up cold. Every number here was measured on
+2026-08-05 against live HYCOM; nothing needs re-deriving.
+
+### Why
+
+`LEADS = [36]` is a fixed offset from the model run, and the run lands late
+and by a varying amount. Measured at 19Z: the newest run was **55 h old**
+(the docs say 24-33), so T+36 was valid 08-05 00Z — **19 h behind now** —
+while the *same run* held a step valid 08-05 18Z, one hour behind. It carries
+65 steps out to T+192, so a near-present step is essentially always there.
+The lead is just not pointing at it.
+
+### The constraint that shapes it: ESPC carries tides
+
+Sampled at 48.6°S 63.8°W across 17 consecutive steps: the eastward component
+reverses sign **8 times in 48 h** against M2's 7.7 (period 12.42 h), speeds
+0.33-1.22 m/s about a mean of 0.78, both components on a rotary ellipse. The
+metadata never mentions tides. See the section in `CLAUDE.md`.
+
+So the refresh cadence cannot be slower than the model's own 3-hourly steps
+without aliasing: 6-hourly sampling is 2.07 points per tidal cycle, and
+consecutive updates would land half a cycle apart, reversing the shelves
+with nothing on screen to explain it.
+
+### The shape chosen
+
+**Two frames per run, six-hourly.** The pair covers the 3-hourly grid, so a
+reader is always within ~1.5 h of the best step, while the job runs four
+times a day instead of eight.
+
+This does **not** reduce HYCOM load and must not be described as if it does:
+each frame is ~636 reads, so eight frame-sweeps a day is ~5,100 reads either
+way. What it buys is half the CI runs, and — the real argument — it restores
+the forecast-hour control over a field that now demonstrably has tidal
+structure, so a reader can step the phase rather than getting one arbitrary
+sample of it.
+
+**Fields stay at one frame.** SST, salinity and ice have no tidal signal and
+a measured 48-hour median change of 0.1 °C; a second frame there costs about
+86 MB to show nobody anything.
+
+### Storage
+
+| | |
+| --- | --- |
+| currents now, 1 frame x 2 depths | 184 MB |
+| **2 frames x 2 depths** | **368 MB** |
+| published tree | ~500 MB -> **~684 MB** of the 1 GB cap |
+
+It fits, but this is spending the headroom that `LEADS = [36]` was holding.
+Go in knowing that, and do not add frames to the fields on top of it.
+
+### What to change
+
+1. **`scripts/fetch-currents.py` — selection.** `pick_leads` currently takes
+   a lead and finds the step exactly that far past its own run. Add selection
+   by **nearest valid time within the newest run that carries one**, returning
+   the two steps bracketing now (nearest, and the next one forward). Keep
+   `usable_step`'s probe and its walk to older runs unchanged — it is what
+   makes a flaky HYCOM degrade legibly.
+
+2. **The tile cache key must carry the step.** Today it is the model run, so
+   an hourly build restores from cache and never re-pulls. Once the chosen
+   step moves with the clock, a run-only key serves the previous step's tiles
+   under the new header — a wrong field that says nothing, which is this
+   project's oldest failure shape. `--run` should print run *and* steps.
+
+3. **`.github/workflows/deploy.yml`** — currents on `0 */6 * * *`; the rest
+   stays hourly. The site still rebuilds hourly for the storm line.
+
+4. **`packages/ocean-map`** — nothing, if the pipeline publishes the pair as
+   `forecast` frames in the existing shape. The map already builds its control
+   from what the data advertises and opens on the frame nearest the reader's
+   clock. Confirm rather than assume: `test:map` covers both.
+
+### How to verify
+
+- `npm run verify` — 864 checks at the time of writing.
+- `test:schema` against the freshly built `public/map`, which is where a
+  malformed `forecast` block shows up.
+- Live: the map's attribution should read within about 1.5 h of now, against
+  the 19 h it drifted to. That line is the whole point and is visible on the
+  page.
+- One case worth a deliberate test: a build whose two steps come from
+  *different* runs must not happen — both frames must share a run, or the
+  reader can step from one model state into another and see a discontinuity
+  that is not the ocean.
 
 ## Open items
 
