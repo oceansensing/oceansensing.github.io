@@ -1029,3 +1029,28 @@
   cursor: default;
   opacity: 0.4;
 }
+
+/* ---- `hidden` has to beat our own `display` ---------------------------
+
+   **A class that sets `display` defeats the `hidden` attribute.** The UA
+   rule is `[hidden] { display: none }` at one-selector specificity, and so
+   is `.om-tints { display: inline-flex }` — equal specificity, so author
+   order wins and the element stays visible. Everything the module hides by
+   setting `.hidden` therefore needs this, and the bug is invisible until
+   the display rule actually matches: these controls hid correctly while
+   their stylesheet was dead, and stopped the moment it was fixed.
+
+   Attribute-plus-class, so it outranks the display rules without `!important`
+   and without caring what order they sit in. */
+.om-tints[hidden],
+.om-particle-speed label[hidden],
+.om-particle-colours[hidden],
+.om-particle-speed[hidden],
+.om-field-controls[hidden],
+.om-field-controls-row[hidden],
+.om-key[hidden],
+[data-layer-key][hidden],
+[data-sst-key][hidden],
+[data-flow-key][hidden] {
+  display: none;
+}

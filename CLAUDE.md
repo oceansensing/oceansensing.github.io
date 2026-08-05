@@ -866,6 +866,19 @@ set of them stayed dead through several rounds of "verified in the browser".
 `.om-legend` and `.om-key-flow` have always been bare; the `om-` prefix is the
 namespace on its own.
 
+**A class that sets `display` defeats the `hidden` attribute**, and this is
+the trap that caught the controls twice in one change. The UA rule is
+`[hidden] { display: none }` at one-selector specificity, and so is
+`.om-tints { display: inline-flex }` — equal, so author order wins and the
+element stays on screen. Everything the module hides by setting `.hidden`
+needs an explicit `…[hidden] { display: none }`.
+
+What makes it nasty is the interaction with the bug above: these controls hid
+*correctly* while their stylesheet was dead, and stopped the moment the
+selectors were fixed. Fixing one bug switched on another that had been
+masked by it, so the browser check that passed before the CSS fix proved
+nothing about after it.
+
 **`appearance: none` on any button in that chrome.** iOS Safari applies its
 own button styling — a grey rounded-rect with a system background — which
 overrides `background` and `border-radius` both. The particle swatches came
