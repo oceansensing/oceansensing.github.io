@@ -26,6 +26,7 @@ import {
   hourStamp,
   hoursAhead,
   initialBearing,
+  minZoomForWidth,
   spanText,
   stamp,
   wrapLongitude,
@@ -115,6 +116,36 @@ check('nor the antimeridian', gridLabel(180, 'E', 'W', 3), '180°');
    a graticule at 540°E is drawing the same line as one at 180°E. */
 check('a meridian panned past the seam folds back', gridLabel(540, 'E', 'W', 3), '180°');
 check('and one panned the other way', gridLabel(-190, 'E', 'W', 3), '170°E');
+
+// ---- one world, however wide the window ----------------------------------
+
+/* Markers live in exactly one copy of the world, so a view wider than 360
+   degrees has ocean in it no platform can ever occupy. Measured on an
+   1858 px container at zoom 2: 1.81 copies, a 653 degree view, and the
+   fleet spanning 360 of it — about 45% of the width permanently bare, which
+   is how it was reported. The invariant is that one world always covers the
+   viewport. */
+const covers = (w) => w / (256 * 2 ** minZoomForWidth(w, 2));
+for (const w of [320, 375, 768, 1024, 1280, 1440, 1858, 2560, 3840]) {
+  check(`a ${w}px map never shows more than one world`, covers(w) <= 1.0001, true);
+}
+
+/* The floor wins while the world already covers the viewport, so a phone is
+   untouched — this was a wide-window bug and must not cost narrow screens
+   their zoom-out. */
+check('a phone keeps the map minimum', minZoomForWidth(375, 2), 2);
+check('and so does the width where one world exactly fits', minZoomForWidth(1024, 2), 2);
+
+/* Fractional, deliberately. Rounding up to a whole level would jump a
+   1025 px map to zoom 3, showing half the world — losing the global view to
+   fix an edge artefact. */
+check('past that it rises fractionally, not by a whole level',
+  minZoomForWidth(1858, 2).toFixed(2), '2.86');
+check('so a hair over one world does not jump a level',
+  minZoomForWidth(1025, 2) < 2.01, true);
+
+// A container that has not been laid out yet must not produce -Infinity.
+check('an unmeasured container falls back to the floor', minZoomForWidth(0, 2), 2);
 
 // ---- distance and bearing -------------------------------------------------
 

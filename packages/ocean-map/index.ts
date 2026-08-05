@@ -5,8 +5,8 @@ import 'leaflet/dist/leaflet.css';
 import './ocean-map.css';
 /* The renderer-independent half. Nothing imported here touches Leaflet or the
    DOM, which is deliberate: these are the parts a native port keeps. */
-import { coordText, elapsed, hoursAhead, hourStamp, initialBearing, spanText,
-  stamp } from './geo';
+import { coordText, elapsed, hoursAhead, hourStamp, initialBearing,
+  minZoomForWidth, spanText, stamp } from './geo';
 import { rampStops } from './ramp';
 import { createGraticule } from './graticule';
 import { createMeasureTool } from './measure';
@@ -232,6 +232,32 @@ export async function createOceanMap(
     return claimedBoxes;
   };
 
+  /* **The world is never allowed to be narrower than the viewport.**
+
+     Vector markers live in exactly one copy of the world — that is what
+     `rehome` below is for, and it rests on an assumption this map used to
+     satisfy by accident: that no zoom on offer shows a view wider than one
+     copy. Uncapping the map's width broke it. Measured on an 1858 px
+     container at zoom 2, where the world is 1024 px: **1.81 copies on
+     screen, a 653° view, and 4,017 floats spanning 360° of it** — so about
+     45% of the width was ocean that could never hold a platform, however
+     many were reporting. Reported from a wide window, and visible as a
+     fleet that stops dead at both edges.
+
+     The fix is a **fractional** minimum zoom: exactly the zoom at which one
+     world fills the container. Rounding up to a whole level was the first
+     idea and is worse — between 1025 and 2047 px it would jump to a zoom
+     showing half the world, so the reader loses the global view to fix an
+     edge artefact. Leaflet snaps a requested zoom before clamping it to
+     `minZoom`, so a fractional floor survives the +/- buttons and the
+     wheel without `zoomSnap` having to change.
+
+     Duplicating the markers into the neighbouring copies is the other way,
+     and it is the one this package already rejected: 4,000 floats become
+     8,000 or 12,000 layers, and the whole point of `rehome` was not paying
+     that. */
+  const FLOOR_ZOOM = 2;
+
   const map = L.map(host, {
     /* worldCopyJump is deliberately off. It existed to drag the *view*
        back to the copy of the world the markers live in — but it does that
@@ -246,7 +272,7 @@ export async function createOceanMap(
        here minds — positions are folded before they are shown, and the
        saved view wraps on the way out. */
     worldCopyJump: false,
-    minZoom: 2,
+    minZoom: FLOOR_ZOOM,
     attributionControl: true,
   });
 
@@ -278,6 +304,12 @@ export async function createOceanMap(
   })();
   if (openingView) map.setView(openingView.centre, openingView.zoom);
   else map.fitBounds(BASIN);
+
+  const holdOneWorld = () => {
+    const wanted = minZoomForWidth(map.getSize().x, FLOOR_ZOOM);
+    if (Math.abs(wanted - map.getMinZoom()) > 0.01) map.setMinZoom(wanted);
+  };
+  holdOneWorld();
 
   map.attributionControl.setPrefix('');
 
@@ -404,6 +436,8 @@ export async function createOceanMap(
       if (w === last.w && h === last.h) return;
       last = { w, h };
       map.invalidateSize({ debounceMoveend: true });
+      // The container's width decides how far out the map may zoom.
+      holdOneWorld();
     });
     refit.observe(host as HTMLElement);
   }

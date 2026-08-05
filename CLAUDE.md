@@ -384,8 +384,39 @@ over 200 px across the same drag.
 
 `rehome()` moves each point layer to the copy nearest the centre — one
 marker each rather than three copies of every marker, which at four thousand
-floats is 4,000 layers against 12,000, and no zoom this map offers shows a
-view wider than one copy.
+floats is 4,000 layers against 12,000.
+
+**That rests on one copy of the world always covering the viewport, and for
+a while it silently stopped being true.** It had been true by accident,
+because the map's width was capped; uncapping it (see "How big the map is")
+let a wide window outrun the world at the minimum zoom. Measured on an
+1858 px container at zoom 2, where the world is 1024 px across: **1.81
+copies on screen, a 653° view, and 4,017 floats spanning 360° of it** — so
+about 45% of the width was ocean no platform could ever occupy. Reported
+from a wide window as a fleet that stops dead at both edges.
+
+**The minimum zoom is now the zoom at which one world fills the container**,
+not the constant 2 it used to be — `minZoomForWidth` in `geo.ts`, applied at
+startup and on every resize by the same ResizeObserver that refits the map.
+
+It is **fractional**, and that is the part worth keeping. Rounding up to a
+whole level was the first idea and is worse: between 1025 and 2047 px it
+jumps to a zoom showing half the world, so the reader loses the global view
+to fix an edge artefact. Leaflet snaps a requested zoom *before* clamping it
+to `minZoom`, so a fractional floor survives the +/− buttons and the wheel
+with no change to `zoomSnap`. Measured after: 1858 px gives minZoom 2.86,
+the world exactly 1858 px wide, **1.000 copies**, a view spanning exactly
+−180 to 180, and floats reaching both edges with no empty tenth of the
+width.
+
+Narrow screens are untouched — at 1024 px and below one world already covers
+the viewport at zoom 2, so the floor wins and a phone keeps its zoom-out.
+
+Duplicating markers into the neighbouring copies is the other fix and is the
+one this package already rejected, for the reason in the paragraph above.
+`test:units` holds the invariant across nine widths, mutation-tested against
+both the shipped bug (a constant floor, which fails six of them) and the
+whole-level rounding (which fails the two that say it must be fractional).
 
 It moves **only markers that need to come into view**: anything already on
 screen is left alone, and so is anything off screen in both copies. Wrapping

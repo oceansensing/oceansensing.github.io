@@ -144,3 +144,26 @@ export function gridLabel(v: number, pos: string, neg: string, pad: number): str
   const hemi = d === 0 || d === 180 ? '' : at > 0 ? pos : neg;
   return `${String(Math.round(d)).padStart(pad, '0')}°${hemi}`;
 }
+
+/** The lowest zoom at which one world still fills a viewport this wide.
+
+    Vector markers live in exactly one copy of the world, so a view wider
+    than 360° has ocean in it that no platform can ever occupy. Measured on
+    an 1858 px container at zoom 2, where the world is 1024 px across: 1.81
+    copies on screen, a 653° view, and the fleet spanning 360° of it — about
+    45% of the width permanently bare.
+
+    **Fractional on purpose.** Rounding up to a whole zoom level was the
+    first idea and is worse: between 1025 and 2047 px it jumps to a level
+    showing half the world, so the reader loses the global view to fix an
+    edge artefact. Leaflet snaps a requested zoom before clamping it to
+    `minZoom`, so a fractional floor survives the +/- buttons and the wheel.
+
+    `floor` is the map's own minimum, which wins on narrow screens: at
+    1024 px and below one world already covers the viewport at zoom 2, so
+    there is nothing to raise. 256 is Leaflet's tile size — the world is
+    256 × 2^zoom pixels across. */
+export function minZoomForWidth(widthPx: number, floor: number): number {
+  if (!(widthPx > 0)) return floor;
+  return Math.max(floor, Math.log2(widthPx / 256));
+}
