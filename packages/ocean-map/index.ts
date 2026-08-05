@@ -440,6 +440,31 @@ export async function createOceanMap(
     return source + (at ? ` — ${at}` : '');
   };
 
+  /* Restate a layer's credit after its data has been replaced.
+   *
+   * **Assigning `options.attribution` does nothing on its own.** Leaflet
+   * reads it once, when the layer is added, and the control keeps its own
+   * counted set of strings from then on — so a layer that steps to another
+   * forecast hour goes on advertising the hour it was built with. That was
+   * invisible while one frame was published and is wrong *on arrival* now
+   * that two are: the map opens on whichever is nearest the reader, which
+   * is usually not the one whose file it loaded first. Drawing 21Z under a
+   * label reading 18Z is this project's oldest failure shape, and the valid
+   * time is the single thing making the pair honest.
+   *
+   * Both halves are needed: the option, so a later add re-reads the right
+   * string, and the control, so the line changes now. The control counts
+   * duplicates, which is what lets two depths contribute one credit — so
+   * this removes exactly one and adds exactly one. */
+  const recredit = (layer: L.Layer, next: string) => {
+    const prev = layer.options.attribution;
+    if (prev === next) return;
+    layer.options.attribution = next;
+    if (!map.hasLayer(layer)) return;
+    if (prev) map.attributionControl.removeAttribution(prev);
+    map.attributionControl.addAttribution(next);
+  };
+
   /* Refit whenever the **container** changes size, not just the window.
 
      Leaflet's own `trackResize` listens on `window.resize`, which covers the
@@ -1060,7 +1085,27 @@ export async function createOceanMap(
       );
       const grids = new Map<string, unknown>();
       let fetching: string | null = null;
-      let showing: string | null = null;
+      /* What tier is drawn, or NOTHING.
+       *
+       * **`null` is a legitimate value here** — it is the globe tier, the
+       * one every reader arrives on — so a nullable `showing` cannot
+       * express "nothing is drawn, redraw whatever the tier turns out to
+       * be". Stepping to another forecast hour set it to `null` to force a
+       * redraw and got the opposite: at the globe tier the wanted url is
+       * `null` too, the equality guard in `applyView` saw no change, and
+       * `setOptions` was never called. The layer went on drawing the hour
+       * it was built with while its credit and the forecast control both
+       * said otherwise — measured in a browser, the flow at 48.6S 63.8W
+       * read 0.14 m/s toward 231°T on *both* frames, where the published
+       * grids differ in 93% of their wet cells and reverse at that point.
+       *
+       * Invisible until a second frame existed, and invisible even then to
+       * anything watching the particles: a tidal reversal looks like
+       * plausible water whichever way it goes. The point readout is what
+       * makes it visible, which is why the check for it reads a number
+       * rather than watching the canvas. */
+      const NOTHING = ' nothing drawn';
+      let showing: string | null = NOTHING;
 
       /* Finest tier: the whole ocean at 1/12 degree, cut into 20 degree
          tiles. Only ever one tile at a time — a tile is used when it
@@ -1236,8 +1281,11 @@ export async function createOceanMap(
             details = [...(next?.[0]?.header?.details ?? [])].sort((a, b) => a.deg - b.deg);
             tiles = null;
             grids.clear();
-            showing = null;
+            showing = NOTHING;
             fetching = null;
+            // The hour on the credit is the hour being drawn. See `recredit`.
+            recredit(flowReady, credit(kind.source, next?.[0]?.header?.modelRun,
+                                       undefined, next?.[0]?.header?.refTime));
             const index = next?.[0]?.header?.tileIndex;
             if (!index) {
               applyView(false);
@@ -1570,6 +1618,13 @@ export async function createOceanMap(
               showing = null;
               fetching = null;
               layer.setGrid(next);
+              // The hour on the credit is the hour being drawn. See `recredit`.
+              recredit(layer, credit(
+                next.header?.source ?? 'unknown source',
+                next.header?.modelRun,
+                next.header?.refTime?.slice(0, 10),
+                next.header?.refTime
+              ));
               const index = next.header?.tileIndex;
               if (!index) {
                 applyView();

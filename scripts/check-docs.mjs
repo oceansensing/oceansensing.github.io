@@ -161,13 +161,28 @@ const claims = [
     from: /const MAX_PARTICLES = (\d+)/,
     doc: (v) => new RegExp(`${Number(v).toLocaleString('en-US')}[- ]particle ceiling|MAX_PARTICLES = ${v}|above \\*{0,2}\`?MAX_PARTICLES = ${v}\`?`),
   },
-  /* The forecast lead, which is the difference between a map showing the
-     present and one showing tomorrow. It is quoted as T+36 throughout. */
+  /* How often the published step is allowed to move. It replaced the fixed
+     T+36 lead, and it is the number the whole tide argument turns on: below
+     the model's 3-hourly steps it cannot go without aliasing, and above it
+     the reader drifts further from now. */
   {
-    what: 'forecast lead',
+    what: 'field refresh window',
     file: 'scripts/fetch-currents.py',
-    from: /^LEADS = \[(\d+)\]/m,
-    doc: (v) => new RegExp(`T\\+${v}\\b`),
+    from: /^REFRESH_HOURS = (\d+)/m,
+    /* The *boundary*, not any phrase with the number and "hour" in it. A
+       looser form passed against the prose's own "3-hourly" description of
+       the model's steps, which is a different quantity that happens to
+       share a word. */
+    doc: (v) => new RegExp(`\\b${['zero', 'one', 'two', 'three', 'four', 'five', 'six'][+v] ?? v}[- ]hour boundary\\b`),
+  },
+  /* How many frames the currents publish. Two is what puts the
+     forecast-hour control back on the map, and what the storage table
+     below is arithmetic on. */
+  {
+    what: 'published current frames',
+    file: 'scripts/fetch-currents.py',
+    from: /^FRAMES = (\d+)/m,
+    doc: (v) => new RegExp(`\\b${['zero', 'one', 'two', 'three'][+v] ?? v} frames per (run|window)`),
   },
   /* How far past the viewport the field is simulated. It costs the square of
      itself in particles, so a doc quoting the wrong margin is understating
@@ -458,7 +473,53 @@ if (overlayBlock) {
   }
 }
 
-/* 5. The README promises CI gates the deploy on `npm run verify`. Keep that
+/* 5. The two ESPC pipelines must snap to the same refresh window.
+ *
+ *    They select their step independently — same rule, two copies, because
+ *    each is a standalone standard-library script — and the currents and the
+ *    Navy fields come off one model. A different window in each means one
+ *    hour of temperature under another hour of current, and the map crediting
+ *    ESPC twice for a single product.
+ *
+ *    `test-schema.mjs` catches this in the published data, which is stronger
+ *    but only fires after a fetch. This fires in `verify`, before anything
+ *    has been asked of HYCOM. */
+{
+  const windows = ['scripts/fetch-currents.py', 'scripts/fetch-ocean-fields.py']
+    .map((f) => [f, fs.readFileSync(f, 'utf8').match(/^REFRESH_HOURS = (\d+)/m)?.[1]]);
+  for (const [f, v] of windows) {
+    if (!v) problems.push(`${f}: cannot read REFRESH_HOURS`);
+  }
+  if (windows.every(([, v]) => v) && windows[0][1] !== windows[1][1]) {
+    problems.push(
+      `${windows[0][0]} snaps to ${windows[0][1]} h but ${windows[1][0]} snaps to ` +
+      `${windows[1][1]} h — one model, two anchors, so the currents and the ` +
+      'fields would publish different hours'
+    );
+  }
+
+  /* And the fields resolve the currents' whole window in order to publish
+     its last step, so their idea of how wide it is has to match too. A
+     narrower one lands the field on an hour the currents never publish,
+     which is a credit line nothing on the map can be stepped into agreement
+     with. */
+  const span = [
+    ['scripts/fetch-currents.py', /^FRAMES = (\d+)/m],
+    ['scripts/fetch-ocean-fields.py', /^WINDOW = (\d+)/m],
+  ].map(([f, re]) => [f, fs.readFileSync(f, 'utf8').match(re)?.[1]]);
+  for (const [f, v] of span) {
+    if (!v) problems.push(`${f}: cannot read the published window width`);
+  }
+  if (span.every(([, v]) => v) && span[0][1] !== span[1][1]) {
+    problems.push(
+      `${span[0][0]} publishes ${span[0][1]} frames per window but ` +
+      `${span[1][0]} resolves a window of ${span[1][1]} — the field would ` +
+      'land on an hour the currents never publish'
+    );
+  }
+}
+
+/* 6. The README promises CI gates the deploy on `npm run verify`. Keep that
       promise honest: if the gate is removed, the claim is a lie. */
 const workflow = fs.readFileSync(WORKFLOW, 'utf8');
 if (!workflow.includes('npm run verify')) {

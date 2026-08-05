@@ -548,18 +548,23 @@ has its own gigabyte and its own bandwidth allowance.
 **Where that stands now** (measured 2026-08-04, six tiled products including
 the two ice sets): the Pages deploy artifact is **57 MB compressed**, the
 committed static half is **134 MB** — 118 of it `bathy-tiles` — and the
-uncompressed published tree is roughly **500 MB**, about half the cap. The
+uncompressed published tree was roughly **500 MB**, about half the cap. The
 estimate is the committed half plus the grids plus the tile sets at their
 documented raw sizes; nobody has summed the deployed tree exactly.
 
-**What holds that down is `LEADS = [36]`.** The 904 MB was five forecast
-frames with a tile set each. At one frame the sets do not multiply, so the
-ice layers cost almost nothing: all four field tile sets together cache to
-**6 MB compressed**, because most of the ocean is a field of zeros and ice
-tiles compress about 200:1. Turning the extra leads back on is the change
-that moves this from half-full to over the cap — and there are six tiled
-products now rather than four, so it is a steeper multiplier than when that
-decision was last weighed.
+**The currents' second frame spends about 184 MB of that**, taking the tree
+to roughly **684 MB** — see "Which hour is published" below for why it is
+worth it. What is left is the headroom, and it is now about a third of the
+cap rather than half.
+
+**What holds the rest down is one frame per field.** The 904 MB was five
+forecast hours with a tile set each, across every product. The fields stay
+at one, so their sets do not multiply and the ice layers cost almost
+nothing: all four field tile sets together cache to **6 MB compressed**,
+because most of the ocean is a field of zeros and ice tiles compress about
+200:1. Adding frames to the *fields* is the change that takes this over the
+cap — six tiled products now rather than four, so it is a steeper
+multiplier than when that decision was last weighed.
 
 The split is not clean down the middle, and the seam is worth knowing:
 
@@ -2158,15 +2163,22 @@ GRIB2 next to a `.index` sidecar giving `_offset` and `_length` per message.
 Reading the sidecar and asking for just `10u` and `10v` takes this from
 300 MB to about **1.5 MB**.
 
-**It is a nowcast, where the ESPC fields are T+36 — and the difference is the
-model's, not a preference.** IFS runs four times a day and lands within
-hours, so its own early steps really are about the present; ESPC runs once
-and lands 24–33 hours later, which is why its lead is counted from its run.
+**It is a nowcast, and it always was — the ESPC pipelines have since come
+round to the same idea.** IFS runs four times a day and lands within hours,
+so its own early steps really are about the present; ESPC runs once and
+lands a day and a half or more later, which is why its step used to be
+counted from its run. That drifted (see "Which hour is published"), and
+both pipelines now select by valid time the way this one always has.
 Measured on 2026-08-03 23:10Z, the 18z run had not published and the 12z run
 was 11 hours old, so the step nearest now was its +12h, valid 00Z — an hour
 ahead. `pick_step()` walks runs freshest-first and takes each one's own
 nearest step, so a run still publishing degrades to a three-hour-older
 complete field rather than to a 404.
+
+What still separates them is the refresh: this one is rebuilt hourly and
+publishes a single step, because IFS lands promptly and there is nothing to
+gain from bracketing. The ESPC currents publish a pair, because their steps
+are 3-hourly and carry a tide.
 
 **The grid starts at 180°E**, where every other grid here starts at 0. It is
 rolled on the way out rather than passed through with its own `lo1`: one
@@ -2905,56 +2917,91 @@ as they are:
   prints the valid time and the offset from now. A current pointing the wrong
   way is not. Where the two trade off, prefer the stale field.
 
-#### The forecast hour, and what a lead is counted from
+#### Which hour is published, and how often it moves
 
-Each ESPC run carries eight days and the map shows one hour of it.
-**`LEADS = [36]` in each pipeline, and the number is T+36 from the model
-run** — the forecasting convention, not hours from the reader's clock.
-`--leads=0,36` or `--leads=0,12,24,36,48` brings the other frames back and
-nothing else has to change: the map builds its control from whatever the
-data advertises, and with one frame it advertises nothing and no control
-appears.
+Each ESPC run carries eight days and the map shows one hour of it. **The
+step is chosen by valid time, not by a fixed lead**: both pipelines snap
+the clock back to a six-hour boundary and take the step nearest that
+anchor. The currents take two consecutive steps from there; the fields take
+one.
 
-**The fixed lead has since drifted badly, and the ingest delay is why.**
-Measured 2026-08-05 19Z: the newest run was **55 hours old**, not the 24-33
-this file documents. So T+36 from it was valid 08-05 00Z — **19 hours behind
-now** — while the *same run* carried a step valid 08-05 18Z, one hour behind.
-The run holds 65 steps out to T+192, so a step near the present is essentially
-always available; the fixed lead simply is not pointing at it. Selecting by
-nearest valid time instead is specified in `PLAN.md`.
+**A fixed lead was the first answer and the ingest delay killed it.** A
+lead is anchored to the model run, so where it lands relative to the reader
+is the run's lateness and nothing else. That was fine while the documented
+24–33 hours held — it is exactly what put T+36 a few hours ahead of now —
+and it broke as soon as the delay grew. Measured 2026-08-05 19Z: the newest
+run was **55 hours old**, so T+36 was valid 08-05 00Z, **19 hours behind
+the reader**, while that same run carried a step valid 08-05 18Z. Measured
+again two hours later at 57 hours old, the nearest-now selection picked
+T+54 and T+57 — valid 18Z and 21Z, the second of them the reader's own
+hour. A run holds 65 steps out to T+192, so a step near the present is
+essentially always there; the lead was simply not pointing at it.
 
-**Anchoring to the run rather than the clock is the whole point of the
-number, and it was measured before it was chosen.** ESPC runs daily at 12Z
-and the aggregation ingests it 24–33 hours later, so its *own* T+0 is a
-field for yesterday lunchtime. Measured on 2026-08-03 21:09Z:
+So the lead is an **output** now, not an input. That has one consequence
+worth knowing before touching any of this: **the filenames move.** A
+non-base frame is named for its lead, so the second frame was published as
+`-f57h` on 2026-08-05 and takes a different suffix as soon as a newer run
+lands; its tile directory moves with it. Nothing downstream minds, because
+every URL the map follows is advertised in the data — but it is why the
+tile cache key has to name the steps and not just the run, and why the
+workflow's cache paths are globs.
 
-| | valid | from run | = |
-| --- | --- | --- | --- |
-| clock-anchored lead 0 | 2026-08-03 21Z | 08-02 12Z | T+33 |
-| clock-anchored lead 36 | 2026-08-05 09Z | **08-01 12Z** | T+93 |
-| **run-anchored T+36** | 2026-08-04 00Z | **08-02 12Z** | T+36 |
+**`REFRESH_HOURS = 6` is what stops the answer moving every three hours.**
+The model's steps are 3-hourly, so an unsnapped question changes eight
+times a day and each change rebuilds a tile set. Snapping makes the answer
+stable within the window, so five hourly builds in six restore their tiles
+from cache. It cannot go the other way: a refresh *slower* than the
+model's own steps aliases the tide — see the section above — so six hours
+is the ceiling, not a preference.
 
-Two things in that table. The newest run was only ingested out to its own
-T+36, so **a longer clock-anchored lead reached into an older run** — asking
-for more time ahead stepped backwards in run freshness, which is the
-opposite of useful. And the lateness that makes T+0 stale is exactly what
-brings T+36 to about now: three hours ahead on that day, off the freshest
-run there is.
+The currents publish **two frames per window**, which is what covers the
+3-hourly grid at that cadence. The pair is the step at the anchor and the
+next one forward, so the reader is a mean 1.1 hours from the nearer of them
+and at worst 3 — against the 19 the fixed lead had drifted to. Three frames
+would bracket the window properly, worst case 1.5 hours, and cost a third
+tile set: 552 MB of currents against 368, taking the published tree to
+about 868 MB of the 1 GB cap. Too close to spend on halving an error the
+valid time already states on screen.
 
-The consequence to hold on to: **the valid time now moves with the ingest
-delay rather than with the clock.** If a run ever lands promptly, this same
-T+36 sits a day and a half out instead of a few hours. That is the
-convention behaving as asked — and it is why nothing on screen is labelled
-with a lead.
+Anchor *floored*, never rounded, so the published pair is never entirely
+ahead of the reader. It is the same call the tide note makes — prefer the
+stale field to the aliased one — and the map then opens on whichever of the
+two is nearest the reader's own clock.
+
+**The run is chosen first and the steps come out of it.** Picking each step
+independently by valid time could straddle two runs, since the same hour
+exists in every run that reaches it, and a reader stepping between those
+two frames would cross from one model state into another and see a
+discontinuity that is not the ocean. A run that cannot serve its step is
+walked past — and note what that degrades now: the *valid time* is
+unchanged, because the 3-hourly grid is absolute and an older run carries
+the same hours, so only the run stamp moves. The fixed-lead selection
+degraded the other way, a whole day of valid time per run.
+
+**The two pipelines must snap identically, and that is checked twice.**
+They select independently — same rule, two copies, because each is a
+standalone standard-library script — and the currents and the Navy fields
+come off one model. A different anchor in each puts one hour of temperature
+under another hour of current and makes the map credit ESPC twice for a
+single product. `check:docs` compares the two `REFRESH_HOURS` before
+anything is asked of HYCOM; `test:schema` compares the published headers,
+which is the stronger check because it catches the selections diverging
+rather than the constants.
+
+**`--leads=0,12,24,36,48` is still there** and is the only way back to the
+run-anchored behaviour. Kept rather than deleted: a deployment with more
+room than a 1 GB Pages site may well want the whole eight days, and the
+difference between the two selections is one function.
 
 **The base lead takes the bare filenames**, `currents.json` and the rest —
 not lead 0, which was hardcoded and would have published nothing at the name
-every existing reader asks for the moment the nowcast went away. It is
-`min(leads_wanted())`, so it is still 0 whenever 0 is among the leads. An
-analysis is exempt and keeps its bare name unconditionally: OISST has no run
-to count leads from, and reading the base from `LEADS` would have suffixed
-it `-f0h` the moment the forecast leads moved, leaving the map asking for a
-file nothing writes.
+every existing reader asks for the moment the nowcast went away. It is the
+lowest lead of the frames *actually resolved*, which is what selecting by
+valid time forced: read from the constant instead, the pipeline would
+suffix every file with its lead and publish nothing at `currents.json`,
+the one name every existing reader asks for. An analysis is
+exempt and keeps its bare name unconditionally: OISST has no run to count
+leads from.
 
 **The map has to say the field is ahead of the reader**, and with one frame
 there is no lead control to say it. The attribution carries the valid time
@@ -2965,13 +3012,15 @@ wrong and says nothing. `hoursAhead()` and `hourStamp()` live in `geo.ts`
 with the rest of the renderer-independent formatting, and `test:map` fails
 if the valid time leaves that line.
 
-The frames were built, measured, and then dropped on the numbers. Over 48
-hours the median Navy SST change is **0.1 °C on a ramp spanning 20** and the
-median salinity change is **0.00 psu**, so at the tier a reader sees, most of
-the ocean did not move. Serving them at full resolution to fix that doubled
-the tile sets and took the published data to ~700 MB — a great deal of
-storage for a difference mostly below one step of an 8-bit channel. The room
-goes to products that will show a reader something new.
+**The frames came back for the currents and stayed away from the fields**,
+and the split is the measurement rather than a compromise. Over 48 hours
+the median Navy SST change is **0.1 °C on a ramp spanning 20** and the
+median salinity change is **0.00 psu**, so at the tier a reader sees, most
+of the ocean did not move; a second field frame costs about 86 MB of tiles
+to show nobody anything. A velocity field is the opposite case — it carries
+a semidiurnal tide, so one sample of it is one arbitrary phase, and the
+second frame is the difference between depicting the flow and depicting a
+moment of it.
 
 **It started as five coarse frames and the measurement killed them.** With
 tiles at lead 0 only, the forecast hours came from the 0.96°/0.24° grids —
@@ -2984,13 +3033,13 @@ shelves — are exactly the fine structure the coarse grid smooths away. Four
 extra hours at a resolution that hides the change is a worse deal than one
 hour at the resolution that shows it.
 
-The machinery for that is intact: every lead builds its own tile set in its
-own directory (`tiles-f24h/`, `tiles-sst-navy-f24h/`), each frame's header
-points at its own index, and `test-schema` checks that a frame's `tileIndex`
-carries its own lead rather than reaching into the present. Turning the
-frames back on is one constant. What it costs is a second tile set per
-product — 92 MB per depth for currents, ~43 MB each for the Navy fields —
-which is the reason the default is one frame.
+The machinery is the same one the currents' pair uses now: every lead
+builds its own tile set in a directory suffixed with that lead, each
+frame's header points at its own index, and
+`test-schema` checks that a frame's `tileIndex` carries its own lead rather
+than reaching into the present. Adding a field frame is one constant, and
+what it costs is a second tile set per product — ~43 MB each for the Navy
+fields — which is the reason the default is one.
 
 Verified end to end on the live site rather than argued: reading the same
 point (Newfoundland shelf, the largest 48-hour change in the grid) through
@@ -3005,16 +3054,79 @@ moves when the reads happen, halves the CI runs, and makes the burst twice as
 large; it buys nothing from the server. The only lever on load is publishing
 fewer frames, which against a tidal field means aliasing.
 
-**With several frames, the one shown by default is the one nearest the
-reader's clock**, not the lowest lead. Those are the same thing on a healthy
-day and part on exactly the bad one this was asked for: when a run lands 40
-hours late, its T+0 is a field for 40 hours ago while its T+48 is valid
-about now. Picking by absolute valid time means a late run degrades into a
-forecast that is still about the present rather than into a
-confidently-labelled past. With `LEADS = [36]` there is one frame and
-nothing to pick, but the run-anchored lead is doing the same job in the
-pipeline: it is what makes a late run land near the present instead of
-behind it.
+**And that is the bill the current pair actually presents.** Before, one
+frame per run meant one tile sweep a day for the currents and one for the
+fields: about 1,270 reads. Now the currents rebuild two frames four times a
+day (~5,100) and the fields rebuild one four times a day rather than once
+(~2,500), so the hourly build asks HYCOM for roughly **7,600 reads a day
+against 1,270**. The fields are dragged along not by their own cadence but
+by the shared anchor — their step has to move with the currents' or the two
+publish different hours — and their tiles have to move with their step.
+It is well inside what this project has run at before (five frames was
+higher still), and it is the number to look at first if HYCOM ever starts
+refusing.
+
+**The frame shown by default is the one nearest the reader's clock**, not
+the lowest lead. Those are the same thing on a healthy day and part on
+exactly the bad one this was asked for: when a run lands 40 hours late, its
+T+0 is a field for 40 hours ago while its T+48 is valid about now. Picking
+by absolute valid time means a late run degrades into a forecast that is
+still about the present rather than into a confidently-labelled past.
+
+The map and the pipeline now make the same choice for the same reason,
+which is how it should have been from the start: the pipeline picks the
+step nearest a six-hour anchor, and the map picks whichever of the two it
+published is nearest the reader.
+
+**Only the currents step.** The fields publish one frame, so they advertise
+no `forecast` list and register no swap — a reader stepping the hour moves
+the flow and leaves the temperature where it is. That is deliberate and it
+is what the measured 0.1 °C per 48 hours buys: at three hours the field has
+not moved enough to draw.
+
+**Which hour that one frame is, though, is decided by the map's default.**
+The fields publish the **last** step of the window rather than the first,
+and the reason is the credit line. A credit names a source, a run and an
+hour and deliberately *not* a quantity — that is what lets six ESPC layers
+contribute one line — so two ESPC lines differing only in the hour cannot be
+told apart on screen. The map opens each layer on whichever frame is nearest
+the reader, which across a six-hour window is the currents' later frame for
+four and a half of those hours. A field pinned to the anchor would therefore
+disagree with the current beside it *most* of the time. Pinning it to the
+last step inverts that, and costs nothing: it also puts the field at worst
+three hours from the reader instead of six.
+
+They still separate when the reader steps the currents back deliberately,
+and then two lines with two hours on them is the right answer — it is
+exactly what those stamps are for.
+
+**The window is stated in hours, not in steps, and that is a bug this
+already shipped.** "The next two consecutive steps" assumes every ESPC
+aggregation is spaced alike, and they are not: `uv3z` and `ts3z` carry
+3-hourly steps while **the ice aggregation carries hourly ones**, off the
+same run. Counting steps put the ice at the anchor plus one hour while
+everything else was at plus three — an hour no other layer could be stepped
+to, so the map carried an ESPC credit nothing could be brought into
+agreement with. `test:schema` caught it on the first build after the check
+existed, which is the whole argument for that check: the invariant is not
+"every ESPC file agrees" but "every ESPC hour is one the currents publish".
+
+**A layer that steps has to restate its credit, and it did not.** Assigning
+`options.attribution` does nothing on its own: Leaflet reads it once, when
+the layer is added, and the attribution control keeps its own counted set of
+strings from then on. So a layer stepping to another forecast hour went on
+advertising the hour it was *built* with. That was invisible while one frame
+was published and became wrong **on arrival** with two, since the map opens
+on whichever is nearest the reader and that is usually not the file it
+loaded first — measured in a browser, the map drew 21Z and the credit said
+18Z. `recredit()` sets the option *and* swaps the control's entry, and both
+halves are needed: the option so a later re-add reads the right string, the
+control so the line changes now. It removes exactly one and adds exactly
+one, which is what preserves the counting that lets two depths contribute a
+single credit.
+
+Neither the flow layer nor the scalar layer did this, so it was not a
+regression in one of them — it is a thing the frames feature never had.
 
 **The buttons are labelled by valid time in UTC, not by lead.** A lead is
 measured from the *model run*, and that run can be a day and a half old, so

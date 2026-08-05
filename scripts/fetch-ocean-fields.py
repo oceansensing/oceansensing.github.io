@@ -727,7 +727,7 @@ def tile_dir_name(product: dict, lead: int = 0) -> str:
     the bare filename — see `at_lead`.
     """
     stem = f"tiles-{product['prefix']}-{product['key']}"
-    return f'{stem}-f{lead}h' if lead != min(leads_wanted()) else stem
+    return f'{stem}-f{lead}h' if lead != base_lead(product) else stem
 
 
 def build_tile(product: dict, when: str, valid: str, run: str,
@@ -874,60 +874,60 @@ def usable_step(product: dict) -> tuple[str, str, str]:
     raise RuntimeError(f'no usable time step in {len(candidates)} candidates')
 
 
-# How far ahead to publish, as **T+N from the model run** — the forecasting
-# convention, not hours from the reader's clock. One frame by default.
+# Which step to publish, chosen by **valid time** rather than by a fixed
+# offset from the model run. The full argument is on REFRESH_HOURS in
+# fetch-currents.py; the short form is that a lead is anchored to the run,
+# so where it lands relative to the reader is the run's lateness and nothing
+# else — measured on 2026-08-05, a 57-hour-old run put T+36 nineteen hours
+# *behind* the present while that same run carried a step valid now.
 #
-# T+36 rather than T+0, and the reason is what ESPC actually does. It runs
-# daily at 12Z and the aggregation ingests it 24-33 hours later, so its T+0
-# is a field for yesterday lunchtime: measured on 2026-08-03, the newest run
-# was 08-02 12Z and its analysis hour was already 33 hours old. Asking that
-# same run for T+36 gets 08-04 00Z — a few hours ahead of now — from the
-# freshest run there is. The lateness that makes T+0 stale is exactly what
-# brings T+36 to the present.
+# **These two must agree, and it is not a style preference.** The currents
+# and the Navy fields come off one model, and the map credits a source once
+# per run and valid time: two pipelines landing on different steps split
+# that into two attribution lines describing one model, and put a
+# temperature from one hour under a current from another. Both files
+# therefore snap the same way, `check:docs` compares the two constants, and
+# `test-schema.mjs` compares the published headers.
+REFRESH_HOURS = 6
+
+# The window the currents publish, mirrored. `FRAMES` in fetch-currents.py
+# takes this many consecutive steps from the anchor and publishes all of
+# them; this file resolves the same window and publishes **only the last
+# step of it**.
 #
-# It also removes a trap the now-anchored version had. Anchored to the clock,
-# a longer lead reached into an *older* run, because the newest was only
-# ingested out to its own T+36: lead 0 came from 08-02 while lead 36 fell
-# back to 08-01. Stepping forward in time stepped backward in run freshness.
+# **One frame, and the difference from the currents is measured.** Over 48
+# hours the median Navy SST change is 0.1 degC on a ramp spanning 20 and the
+# median salinity change is 0.00 psu, so at the tier a reader sees, most of
+# the ocean did not move. A second frame here costs about 86 MB of tiles to
+# show nobody anything. The currents earn theirs because ESPC carries a
+# semidiurnal tide — see the tide note in CLAUDE.md — so a single sample of
+# a velocity field is one arbitrary phase of it.
 #
-# The consequence to keep in mind: the valid time now moves with the ingest
-# delay rather than with the clock. If a run ever lands promptly, this same
-# T+36 sits a day and a half out instead of a few hours. That is the
-# convention behaving as asked — and it is why the map labels every frame
-# with its valid time in UTC and not with the lead.
-#
-# Override with --leads=0,36 or --leads=0,12,24,36,48; the lowest lead takes
-# the bare filenames. Every frame the rest of this file can build is still
-# one flag away, and nothing downstream needed changing to turn them off.
-#
-# The extra frames were measured and then dropped, and both halves matter.
-# Over 48 hours the median Navy SST change is 0.1 degC on a ramp spanning 20
-# and the median salinity change is 0.00 psu, so at the tier a reader
-# actually sees, most of the ocean did not move. Serving them at full
-# resolution to fix that doubled the tile sets — the published site went to
-# ~700 MB — which is a great deal of storage for a difference that is mostly
-# below one step of an 8-bit channel.
-#
-# So the scaffolding stays and the extra frames go, which leaves room for
-# products that will show a reader something new. Set LEADS back and it all
-# returns: the map builds its control from whatever the data advertises, and
-# with one frame it advertises nothing and the control does not appear.
-LEADS = [36]
+# **The last step rather than the first, and that is not arbitrary.** The
+# map opens each layer on whichever published frame is nearest the reader's
+# clock, so across a six-hour window it shows the currents' *later* frame
+# for four and a half of those hours. A field pinned to the anchor would
+# therefore disagree with the current beside it most of the time — and the
+# credit line names a source, a run and an hour but deliberately not a
+# quantity, so two ESPC lines differing only in the hour cannot be told
+# apart. Publishing the last step inverts that: the two agree for the same
+# four and a half hours, and the field is at worst three hours from the
+# reader instead of six.
+WINDOW = 2
+
+# Fixed leads instead, as **T+N from the model run** — the old behaviour,
+# and still what `--leads=0,12,24,36,48` selects. `None` means choose by
+# valid time. Mirrors fetch-currents.py.
+LEADS: list[int] | None = None
 
 
-def lead_steps(product: dict, leads: list[int]) -> list[tuple[int, str, str, str]]:
-    """(lead, step token, valid time, model run) for each lead, as **T+N from
-    the model run** — see the long note on `pick_leads` in fetch-currents.py
-    for why that is anchored to the run rather than to the clock.
+def time_axes(product: dict) -> tuple[datetime, list[float], list[float], float]:
+    """This product's epoch, valid times, run times, and now.
 
-    Keeps the per-step probing that `usable_step` exists for: HYCOM fails per
-    member file rather than as a whole. The walk goes **backwards through
-    runs** rather than outwards through hours, though, since a neighbouring
-    hour is a different lead: if the newest run cannot serve its T+36, the
-    honest substitute is the run before it at *its* T+36, not this run at
-    T+33 relabelled.
-
-    An analysis has no run and no leads at all; that case never reaches here.
+    Read once and handed to whichever selection is in force. `time_run` is
+    optional: an aggregation without it leaves the list empty and both
+    selections then find no candidates, which is the honest answer for a
+    file that cannot say which run a step came from.
     """
     das = get(f'{base_url(product)}.das', timeout=60)
     marker = 'hours since '
@@ -946,11 +946,114 @@ def lead_steps(product: dict, leads: list[int]) -> list[tuple[int, str, str, str
     except (urllib.error.URLError, TimeoutError, ValueError, OSError):
         pass
 
-    def stamp(h: float) -> str:
-        return (epoch + timedelta(hours=h)).strftime('%Y-%m-%dT%H:%M:%SZ')
-
     now = (datetime.now(timezone.utc) - epoch).total_seconds() / 3600
+    return epoch, hours, runs, now
+
+
+def hour_stamp(epoch: datetime, h: float) -> str:
+    return (epoch + timedelta(hours=h)).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def serves(product: dict, index: int) -> bool:
+    """Whether this step answers a read at all.
+
+    HYCOM fails per member file rather than as a whole, so a step is a thing
+    to test. Probed off the middle of *this product's* grid: fixed indices do
+    not work, since 2000 sits inside the Navy model's 4251 latitudes and
+    outside OISST's 720.
+    """
     y, x = product['nlat'] // 2, product['nlon'] // 2
+    try:
+        fetch(product, str(index), y, y + 4, x, x + 4, 2, 2)
+        return True
+    except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:
+        print(f'  step {index} unusable: {exc}', file=sys.stderr)
+        return False
+
+
+def step_offsets(count: int) -> list[float]:
+    """Hours past the anchor, spread evenly across the window. Mirrors
+    fetch-currents.py — see the long note there for why this is stated in
+    hours rather than as a number of consecutive steps.
+
+    That distinction was a shipped bug and this file is where it bit: the
+    ESPC ice aggregation carries **hourly** steps where `uv3z` and `ts3z`
+    carry 3-hourly ones, off the same run. Counting steps put the ice an
+    hour past the anchor while everything else was three.
+    """
+    return [k * REFRESH_HOURS / count for k in range(count)]
+
+
+def nearest_steps(product: dict, offsets: list[float]) -> list[tuple[int, str, str, str]]:
+    """The steps nearest `anchor + each offset`, all from one run.
+
+    The mirror of `pick_nearest` in fetch-currents.py, and the two must stay
+    in step — see the note on REFRESH_HOURS above. The reasoning is there;
+    the short form is that the run is chosen first and the steps come out of
+    it, so a pair can never straddle two model states, and that the anchor is
+    floored to a REFRESH_HOURS boundary so the answer is stable for the whole
+    window and the tile cache can hit.
+    """
+    epoch, hours, runs, now = time_axes(product)
+    anchor = math.floor(now / REFRESH_HOURS) * REFRESH_HOURS
+    n = min(len(hours), len(runs))
+    if not n:
+        raise RuntimeError('no run axis — cannot anchor a step to a model run')
+
+    for run in sorted({runs[i] for i in range(n)}, reverse=True):
+        own = sorted((i for i in range(n) if abs(runs[i] - run) < 0.5),
+                     key=lambda i: hours[i])
+        chosen: list[int] = []
+        for offset in offsets:
+            i = min(own, key=lambda k: abs(hours[k] - (anchor + offset)))
+            if i not in chosen:
+                chosen.append(i)
+        usable = []
+        for i in chosen:
+            if not serves(product, i):
+                break
+            usable.append(i)
+        if not usable:
+            print(f'  ! {hour_stamp(epoch, run)} run serves nothing at the '
+                  f'anchor — trying an older run', file=sys.stderr)
+            continue
+        out = []
+        for i in usable:
+            lead = round(hours[i] - runs[i])
+            # stderr, because `--tile-key` goes through this and CI captures
+            # its stdout straight into a cache key — a progress line on the
+            # same stream would become part of the key.
+            print(f'  T+{lead}: valid {hour_stamp(epoch, hours[i])} from the '
+                  f'{hour_stamp(epoch, runs[i])} run ({now - runs[i]:.0f} h old, '
+                  f'{hours[i] - now:+.0f} h from now)', file=sys.stderr)
+            out.append((lead, str(i), hour_stamp(epoch, hours[i]),
+                        hour_stamp(epoch, runs[i])))
+        return out
+    raise RuntimeError('no usable time step at the anchor in any run')
+
+
+def lead_steps(product: dict, leads: list[int]) -> list[tuple[int, str, str, str]]:
+    """(lead, step token, valid time, model run) for each lead, as **T+N from
+    the model run** — see the long note on `pick_leads` in fetch-currents.py
+    for why that is anchored to the run rather than to the clock.
+
+    The `--leads=` selection, and no longer the default: see the note on
+    `LEADS`.
+
+    Keeps the per-step probing that `usable_step` exists for: HYCOM fails per
+    member file rather than as a whole. The walk goes **backwards through
+    runs** rather than outwards through hours, though, since a neighbouring
+    hour is a different lead: if the newest run cannot serve its T+36, the
+    honest substitute is the run before it at *its* T+36, not this run at
+    T+33 relabelled.
+
+    An analysis has no run and no leads at all; that case never reaches here.
+    """
+    epoch, hours, runs, now = time_axes(product)
+
+    def stamp(h: float) -> str:
+        return hour_stamp(epoch, h)
+
     out = []
     for lead in leads:
         # Exactly this far past its own run, newest run first. Exact rather
@@ -961,13 +1064,11 @@ def lead_steps(product: dict, leads: list[int]) -> list[tuple[int, str, str, str
             key=lambda i: runs[i], reverse=True,
         )
         for i in order[:4]:
-            try:
-                fetch(product, str(i), y, y + 4, x, x + 4, 2, 2)
-            except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:
-                print(f'  T+{lead} step {i} unusable: {exc}', file=sys.stderr)
+            if not serves(product, i):
                 continue
             print(f'  T+{lead}: valid {stamp(hours[i])} from the '
-                  f'{stamp(runs[i])} run ({now - runs[i]:.0f} h old)')
+                  f'{stamp(runs[i])} run ({now - runs[i]:.0f} h old)',
+                  file=sys.stderr)
             out.append((lead, str(i), stamp(hours[i]), stamp(runs[i])))
             break
         else:
@@ -977,12 +1078,54 @@ def lead_steps(product: dict, leads: list[int]) -> list[tuple[int, str, str, str
     return out
 
 
-def leads_wanted() -> list[int]:
-    """LEADS, or whatever --leads=0,12,24 asked for. Mirrors fetch-currents."""
+def leads_wanted() -> list[int] | None:
+    """Fixed leads to publish, or None to choose by valid time. Mirrors
+    fetch-currents."""
     for arg in sys.argv[1:]:
         if arg.startswith('--leads='):
             return sorted({int(v) for v in arg.split('=', 1)[1].split(',') if v.strip()})
     return LEADS
+
+
+_frames: dict[str, list[tuple[int, str, str, str]]] = {}
+
+
+def forecast_frames(product: dict) -> list[tuple[int, str, str, str]]:
+    """The steps this forecast product publishes, resolved once per product.
+
+    Memoised because it costs OPeNDAP round trips and a probe, and because
+    two calls could disagree: `nearest_steps` reads the clock, so a build
+    running across an anchor boundary would answer differently the second
+    time and name a tile directory for an hour the grids are not.
+    """
+    name = f"{product['prefix']}-{product['key']}"
+    if name not in _frames:
+        leads = leads_wanted()
+        # The last offset of the same ladder the currents publish — one
+        # frame, at the hour the map most often opens on. See WINDOW.
+        # Only that offset is asked for, so only the step actually
+        # published is probed.
+        _frames[name] = (lead_steps(product, leads) if leads is not None
+                         else nearest_steps(product, step_offsets(WINDOW)[-1:]))
+    return _frames[name]
+
+
+def base_lead(product: dict) -> int:
+    """The lead published under this product's bare filenames.
+
+    An analysis has no lead — its own date is the answer — so its single
+    file keeps the bare name whatever the forecast leads are set to. Read
+    from LEADS instead, OISST would be published as sst-oisst-f0h.json the
+    moment the base lead stopped being 0, and the map would find nothing at
+    the name it asks for.
+
+    A forecast reads it off the frames actually resolved, never off the
+    constant: selecting by valid time makes the lead an *output*, so which
+    one is lowest depends on how late the run is.
+    """
+    if product.get('analysis'):
+        return 0
+    return min(lead for lead, *_ in forecast_frames(product))
 
 
 def build_product(product: dict, tiles_only: bool) -> None:
@@ -998,7 +1141,7 @@ def build_product(product: dict, tiles_only: bool) -> None:
         frames = [(0, when, valid, run)]
     else:
         print(f"{product['label']}:")
-        frames = lead_steps(product, leads_wanted())
+        frames = forecast_frames(product)
 
     if tiles_only:
         if not product.get('tiles'):
@@ -1010,12 +1153,7 @@ def build_product(product: dict, tiles_only: bool) -> None:
 
     name = f"{product['prefix']}-{product['key']}"
 
-    # An analysis has no lead — its own date is the answer — so its single
-    # file keeps the bare name whatever the forecast leads are set to. Read
-    # from LEADS instead, OISST would be published as sst-oisst-f0h.json the
-    # moment the base lead stopped being 0, and the map would find nothing
-    # at the name it asks for.
-    base = 0 if product.get('analysis') else min(leads_wanted())
+    base = base_lead(product)
 
     def at_lead(stem: str, lead: int) -> str:
         """sst-navy-atlantic -> sst-navy-atlantic-f24h, bar the base lead.
@@ -1075,9 +1213,43 @@ def build_product(product: dict, tiles_only: bool) -> None:
 
 
 
+def tile_key() -> str:
+    """What CI keys the field tile cache on: every tiled product's run and
+    valid time.
+
+    Its own answer rather than the currents pipeline's, which is what the
+    workflow used to borrow. That held while both were pinned to T+36 and
+    one run meant one hour; selecting by valid time gives each pipeline a
+    step that can in principle move independently, and a cache key that
+    describes some *other* build's contents is the "right run, wrong hour"
+    failure with an extra layer of indirection.
+
+    Only the tiled products, since only their tiles are cached. The rest of
+    the run is a few hundred kilobytes and is rebuilt hourly anyway.
+    """
+    parts = []
+    for product in PRODUCTS:
+        if not product.get('tiles') or product.get('analysis'):
+            continue
+        # Named per product rather than deduplicated. They agree today and
+        # are meant to; a key that collapses them could not move when one
+        # of them stopped agreeing, which is the case worth catching.
+        name = f"{product['prefix']}{product['key']}"
+        for _, _, valid, run in forecast_frames(product):
+            stem = f'{name}{run[:13]}v{valid[:13]}'
+            parts.append(stem.replace('-', '').replace(':', ''))
+    if not parts:
+        raise RuntimeError('no tiled forecast products to key on')
+    return '-'.join(parts)
+
+
 def main() -> int:
     tiles_only = '--tiles' in sys.argv
     only = next((a.split('=')[1] for a in sys.argv if a.startswith('--only=')), None)
+
+    if '--tile-key' in sys.argv:
+        print(tile_key())
+        return 0
 
     failed = []
     for product in PRODUCTS:

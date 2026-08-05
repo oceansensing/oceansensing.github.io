@@ -1504,8 +1504,12 @@ const beforeStep = fetched.length;
    — a step that looks like a step and asks for nothing new. The first
    version of this check picked it and found an empty frame list, which is
    indistinguishable from the swap being broken. */
-const stepButton = forecastButtons().slice(1).find((b) => !b.classList.contains('active'));
-stepButton?.click();
+/* By index, not by node: stepping rebuilds the control's buttons, so the
+   element captured here is detached afterwards and `indexOf` on it returns
+   -1 — which made the two checks below read `undefined` and fail against
+   code the browser had just shown to be correct. */
+const stepIndex = forecastButtons().findIndex((b, i) => i > 0 && !b.classList.contains('active'));
+forecastButtons()[stepIndex]?.click();
 /* Long enough for the swap to land. Slicing the log at a mark is not enough
    on its own — initial loads are still in flight and land inside the slice —
    so the assertions below look only at frame files, which nothing but a step
@@ -1514,6 +1518,36 @@ await new Promise((r) => setTimeout(r, 1500));
 const askedByStep = fetched.slice(beforeStep).map((u) => String(u).split('/map/')[1]).filter(Boolean);
 const frameAsks = askedByStep.filter((f) => /-f\d+h/.test(f));
 const steppedActive = forecastActive();
+
+/* What the flow layer is actually *drawing*, and what it says it is.
+ *
+ * Both of these were wrong and neither was visible from anything the checks
+ * above look at — the button went active, the right file was fetched, and
+ * the layer went on drawing and crediting the hour it was built with.
+ *
+ *  - `applyView` only pushes a grid into the layer when the wanted tier
+ *    differs from the drawn one, and `null` is a legitimate tier: the globe,
+ *    which is what every reader arrives on. So clearing the drawn tier to
+ *    `null` to force a redraw was indistinguishable from "already showing
+ *    the globe" and the swap did nothing.
+ *  - Leaflet reads `options.attribution` once, when a layer is added, and
+ *    the control keeps its own set from then on, so reassigning it later
+ *    changes nothing on screen.
+ *
+ * Measured on the live grids: at 48.6S 63.8W the flow read 0.14 m/s toward
+ * 231°T on *both* frames, where the two files differ in 93% of their wet
+ * cells and reverse at that point. A tidal reversal looks like plausible
+ * water either way, which is why this reads the header rather than watching
+ * the canvas. */
+const steppedFrame = stepIndex;
+const flowLayer = () => Object.values(host._map._layers)
+  .find((l) => l.options?.paneName === 'currents');
+const steppedGridHour = flowLayer()?.options?.data?.[0]?.header?.refTime;
+const steppedCredit = creditText()?.textContent ?? '';
+/* The hour the stepped button stands for, read off the fixture rather than
+   off the layer — deriving it from what is drawn would be circular, which
+   is the trap the particle-speed restore check already fell into once. */
+const steppedWantHour = frameList('currents')[steppedFrame]?.valid;
 
 /* Step back before anything else runs. This is a probe, and everything below
    — the tile tier, the particle drift, the readouts — assumes the map is on
@@ -2448,6 +2482,21 @@ const checks = [
   ['and all of them the same hour',
     frameAsks.length > 0 &&
       new Set(frameAsks.map((f) => f.match(/-f(\d+)h/)[1])).size === 1],
+  /* Fetching the file is not drawing it. `applyView` pushes a grid into the
+     layer only when the wanted tier differs from the drawn one, and `null`
+     is a legitimate tier — the globe, which is where every reader starts —
+     so clearing the drawn tier to force a redraw did nothing at all. The
+     button went active, the right file was fetched, and the layer went on
+     drawing the hour it was built with. */
+  ['and the stepped hour reaches the layer, not just the network',
+    steppedWantHour !== undefined && steppedGridHour === steppedWantHour],
+  /* Leaflet reads `options.attribution` once, when the layer is added, so
+     reassigning it later changes nothing on screen. The credit went on
+     naming the hour the layer was built with — right pixels, wrong label,
+     and the valid time is the one thing making a published pair honest. */
+  ['and the credit names the hour being drawn',
+    steppedWantHour !== undefined &&
+      steppedCredit.includes(steppedWantHour.slice(0, 13).replace('T', ' ') + 'Z')],
 
   ['the offline basemap is offered', !!coastlineBase],
   ['and fetches nothing until it is selected', coastlineRequestsBeforeSwitchOn === 0],

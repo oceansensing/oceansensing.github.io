@@ -106,95 +106,76 @@ Still to lift, roughly in order of independence: the isobath tiers, the KMZ
 drawing side (`kmz.ts` and `warp.ts` already hold the parsing), the point
 readout, and the chrome/controls block.
 
-## Spec: publish the two ESPC steps nearest now, six-hourly
+## Done: the two ESPC steps nearest now, six-hourly
 
-Written to be picked up cold. Every number here was measured on
-2026-08-05 against live HYCOM; nothing needs re-deriving.
+Shipped 2026-08-05. `LEADS = [36]` is gone from both pipelines; they choose
+their step by valid time, snapping the clock back to a six-hour boundary.
+The currents publish the two steps spanning that window and the fields
+publish the last of it. Measured on the live aggregation the same evening:
+the newest run was 57 hours old, so the old T+36 was valid 08-05 00Z — 21
+hours behind — and the new selection returned 18Z and 21Z, the second of
+them the reader's own hour.
 
-### Why
+Three things went differently from the spec above, and each is worth
+knowing before touching this again.
 
-`LEADS = [36]` is a fixed offset from the model run, and the run lands late
-and by a varying amount. Measured at 19Z: the newest run was **55 h old**
-(the docs say 24-33), so T+36 was valid 08-05 00Z — **19 h behind now** —
-while the *same run* held a step valid 08-05 18Z, one hour behind. It carries
-65 steps out to T+192, so a near-present step is essentially always there.
-The lead is just not pointing at it.
+**The cron did not change, and could not.** The spec called for currents on
+`0 */6 * * *`. The pipelines do not run in this repository — `ocean-data-repo`
+checks this one out and runs them hourly, in one job that publishes the whole
+tree, so there is no way to run currents on a different schedule without
+splitting the publish in two. It is also unnecessary: what six-hourly means
+here is that the *selection* is stable for six hours, so five hourly builds in
+six restore their tiles from cache. The rate is set by `REFRESH_HOURS`, not by
+a schedule.
 
-### The constraint that shapes it: ESPC carries tides
+**Each pipeline keys its own tile cache.** The spec said `--run` should print
+the steps too; that would have moved the *field* tile key with the currents'
+step, since the workflow used the currents' run for both. `--run` still prints
+the run, and both pipelines gained `--tile-key`, which names what their own
+tiles contain.
 
-Sampled at 48.6°S 63.8°W across 17 consecutive steps: the eastward component
-reverses sign **8 times in 48 h** against M2's 7.7 (period 12.42 h), speeds
-0.33-1.22 m/s about a mean of 0.78, both components on a rotary ellipse. The
-metadata never mentions tides. See the section in `CLAUDE.md`.
+**The fields publish the window's last step, not the anchor.** The map opens
+each layer on the frame nearest the reader, which for four and a half hours
+of every six is the currents' later frame — so a field pinned to the anchor
+would disagree with the current beside it most of the time, and the credit
+line names an hour but not a quantity, so two ESPC lines cannot be told
+apart. This also puts the field at worst three hours from the reader instead
+of six.
 
-So the refresh cadence cannot be slower than the model's own 3-hourly steps
-without aliasing: 6-hourly sampling is 2.07 points per tidal cycle, and
-consecutive updates would land half a cycle apart, reversing the shelves
-with nothing on screen to explain it.
+### Three bugs it exposed, all silent, none of them new
 
-### The shape chosen
+- **The ESPC ice aggregation is hourly**, where `uv3z` and `ts3z` are
+  3-hourly. Selecting "the next two consecutive steps" put the ice an hour
+  past the anchor while everything else was three. Caught by the new
+  schema check on the first build after it existed; the fix is to state the
+  window in hours.
+- **A stepped flow layer went on drawing the hour it was built with.**
+  `applyView` pushes a grid into the layer only when the wanted tier differs
+  from the drawn one, and `null` is a legitimate tier — the globe. Clearing
+  the drawn tier to `null` to force a redraw was indistinguishable from
+  "already showing the globe". Measured: the flow at 48.6S 63.8W read
+  0.14 m/s toward 231°T on both frames, where the grids differ in 93% of
+  their wet cells and reverse at that point.
+- **A stepped layer went on crediting that hour too.** Leaflet reads
+  `options.attribution` once, when a layer is added. Neither the flow layer
+  nor the scalar layer restated it, so this was never right — it was just
+  never visible with one frame.
 
-**Two frames per run, six-hourly.** The pair covers the 3-hourly grid, so a
-reader is always within ~1.5 h of the best step, while the job runs four
-times a day instead of eight.
+### What holds it
 
-This does **not** reduce HYCOM load and must not be described as if it does:
-each frame is ~636 reads, so eight frame-sweeps a day is ~5,100 reads either
-way. What it buys is half the CI runs, and — the real argument — it restores
-the forecast-hour control over a field that now demonstrably has tidal
-structure, so a reader can step the phase rather than getting one arbitrary
-sample of it.
+- `check:docs` — both pipelines' `REFRESH_HOURS` and window widths must
+  agree, before anything is asked of HYCOM.
+- `test:schema` — every ESPC hour on the map must be one the currents
+  publish, from one run; and a grid and its tiles must be the same hour.
+- `test:map` — a stepped hour must reach the layer and its credit.
 
-**Fields stay at one frame.** SST, salinity and ice have no tidal signal and
-a measured 48-hour median change of 0.1 °C; a second frame there costs about
-86 MB to show nobody anything.
+### If HYCOM starts refusing
 
-### Storage
-
-| | |
-| --- | --- |
-| currents now, 1 frame x 2 depths | 184 MB |
-| **2 frames x 2 depths** | **368 MB** |
-| published tree | ~500 MB -> **~684 MB** of the 1 GB cap |
-
-It fits, but this is spending the headroom that `LEADS = [36]` was holding.
-Go in knowing that, and do not add frames to the fields on top of it.
-
-### What to change
-
-1. **`scripts/fetch-currents.py` — selection.** `pick_leads` currently takes
-   a lead and finds the step exactly that far past its own run. Add selection
-   by **nearest valid time within the newest run that carries one**, returning
-   the two steps bracketing now (nearest, and the next one forward). Keep
-   `usable_step`'s probe and its walk to older runs unchanged — it is what
-   makes a flaky HYCOM degrade legibly.
-
-2. **The tile cache key must carry the step.** Today it is the model run, so
-   an hourly build restores from cache and never re-pulls. Once the chosen
-   step moves with the clock, a run-only key serves the previous step's tiles
-   under the new header — a wrong field that says nothing, which is this
-   project's oldest failure shape. `--run` should print run *and* steps.
-
-3. **`.github/workflows/deploy.yml`** — currents on `0 */6 * * *`; the rest
-   stays hourly. The site still rebuilds hourly for the storm line.
-
-4. **`packages/ocean-map`** — nothing, if the pipeline publishes the pair as
-   `forecast` frames in the existing shape. The map already builds its control
-   from what the data advertises and opens on the frame nearest the reader's
-   clock. Confirm rather than assume: `test:map` covers both.
-
-### How to verify
-
-- `npm run verify` — 864 checks at the time of writing.
-- `test:schema` against the freshly built `public/map`, which is where a
-  malformed `forecast` block shows up.
-- Live: the map's attribution should read within about 1.5 h of now, against
-  the 19 h it drifted to. That line is the whole point and is visible on the
-  page.
-- One case worth a deliberate test: a build whose two steps come from
-  *different* runs must not happen — both frames must share a run, or the
-  reader can step from one model state into another and see a discontinuity
-  that is not the ocean.
+Look at the read count first. One frame per run was ~1,270 reads a day;
+this is roughly **7,600** — the currents rebuild two frames four times a
+day, and the fields are dragged to the same cadence by the shared anchor.
+`REFRESH_HOURS` is the lever, and it cannot go above six without aliasing
+the tide.
 
 ## Open items
 

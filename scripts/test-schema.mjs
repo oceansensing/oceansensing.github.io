@@ -304,6 +304,80 @@ for (const dir of fs.existsSync(MAP) ? fs.readdirSync(MAP).filter((d) => d.inclu
   }
 }
 
+/* A grid and its tiles must be the same hour.
+ *
+ * The two are built by separate invocations — the grids in one run of the
+ * pipeline, the tiles in another behind a cache — so nothing structural
+ * makes them agree. It did not matter while the step was pinned to a fixed
+ * lead, because then one model run meant one hour and the cache key named
+ * the run. Choosing the step by valid time breaks that: the step moves
+ * within a run, so a key that is even slightly wrong, a cache restored from
+ * the previous window, or a build straddling a refresh boundary all land the
+ * same way — sharp, plausible tiles of some other hour under this hour's
+ * header, which is this project's oldest failure shape.
+ *
+ * Skipped when the index is absent: the tiles are gitignored and built in
+ * CI, so a local run legitimately has none.
+ */
+for (const file of fs.existsSync(MAP)
+  ? fs.readdirSync(MAP).filter((f) => f.endsWith('.json')) : []) {
+  const g = read(file);
+  const h = Array.isArray(g) ? g?.[0]?.header : g?.header;
+  if (!h?.tileIndex) continue;
+  const idx = read(h.tileIndex.replace(/^.*\/map\//, ''));
+  if (!idx) continue;
+  checked++;
+  if (idx.refTime !== h.refTime) {
+    fail(file, `is valid ${h.refTime} but its tiles are ${idx.refTime}`);
+  }
+  if (idx.modelRun && h.modelRun && idx.modelRun !== h.modelRun) {
+    fail(file, `is from the ${h.modelRun} run but its tiles are from ${idx.modelRun}`);
+  }
+}
+
+/* No ESPC layer may show an hour the others cannot be stepped to.
+ *
+ * The currents and the Navy fields come off one model through two
+ * pipelines, which choose their step independently — same rule, two copies,
+ * because each is a standalone standard-library script. The credit line
+ * names a source, a run and an hour and deliberately *not* a quantity, so
+ * two ESPC lines differing only in the hour cannot be told apart on screen.
+ *
+ * What has to hold is therefore not equality: the currents publish two
+ * frames and legitimately draw either. It is that every ESPC hour on the
+ * map is one of the hours the currents advertise, and that all of them come
+ * from one run. A field that lands on a third hour is a credit nothing else
+ * can be brought into agreement with.
+ */
+{
+  const espc = [];
+  for (const name of ['currents', 'currents-60m', 'sst-navy', 'sss-navy',
+                      'sic-navy', 'sit-navy']) {
+    const g = read(`${name}.json`);
+    const h = Array.isArray(g) ? g?.[0]?.header : g?.header;
+    if (h?.refTime) espc.push([name, h.refTime, h.modelRun ?? '', h.forecast]);
+  }
+  if (espc.length > 1) {
+    checked++;
+    const base = espc.find(([n]) => n === 'currents') ?? espc[0];
+    const hours = new Set(
+      (base[3]?.map((f) => f.valid) ?? [base[1]]).filter(Boolean)
+    );
+    for (const [name, itsTime, itsRun] of espc) {
+      if (!hours.has(itsTime)) {
+        fail(`${name}.json`, `is valid ${itsTime}, which is not one of the ` +
+          `hours ${base[0]}.json publishes (${[...hours].join(', ')}) — one ` +
+          'model, three hours, so the map carries an ESPC credit no layer ' +
+          'can be stepped into agreement with');
+      }
+      if (itsRun !== base[2]) {
+        fail(`${name}.json`, `is from the ${itsRun} run but ${base[0]}.json ` +
+          `is from ${base[2]} — one model, two runs`);
+      }
+    }
+  }
+}
+
 // ---- vector overlays --------------------------------------------------
 
 const coast = read('coastline.json');
