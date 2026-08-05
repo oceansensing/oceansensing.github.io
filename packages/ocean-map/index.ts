@@ -555,6 +555,20 @@ export async function createOceanMap(
      this to exist, because restoreView and Reset both call it. */
   let applyParticleSpeed = () => {};
 
+  /* The colour swatches and the speed slider for a field are only meaningful
+     while that field is drawn — the same argument as the platform keys, and
+     stronger here: these are *controls*, so one for a layer that is off does
+     not merely mislead, it does nothing when used. Registered as the
+     controls are built and toggled from the layer events. */
+  const flowControls: { field: 'current' | 'wind'; el: HTMLElement }[] = [];
+  const showFlowControls = () => {
+    for (const { field, el } of flowControls) {
+      el.hidden = !flows.some(
+        (f) => (f.kind.reads === 'from' ? 'wind' : 'current') === field && map.hasLayer(f.group)
+      );
+    }
+  };
+
   /** Put the sliders where the numbers are — after a restore or a reset,
       which change the value without touching the input. */
   const syncSpeedSliders = () => {
@@ -1819,6 +1833,11 @@ export async function createOceanMap(
     }
   }
 
+  /* Both particle controls follow their field, from the same events. Bound
+     here rather than inside either block, so it fires once whichever of them
+     the host has chosen to render. */
+  map.on('overlayadd overlayremove', showFlowControls);
+
   /* ---- the particle colour control ------------------------------------
 
      A named-colour picker, not a colour picker. A free picker lets a reader
@@ -1893,6 +1912,7 @@ export async function createOceanMap(
           made.push(swatch);
         }
         swatches[field] = made;
+        flowControls.push({ field, el: group });
         picker.append(group);
       }
 
@@ -2029,9 +2049,16 @@ export async function createOceanMap(
         box.append(label);
         speedSliders[field] = slider;
         speedShow[field] = show;
+        flowControls.push({ field, el: label });
       }
     }
   }
+
+  /* Now that both particle controls exist, put them in the state the layers
+     are actually in — the event above only fires on a change, and a reader
+     arriving with the wind off would otherwise see its controls until they
+     touched something. */
+  showFlowControls();
 
   /* Reader control over the colour scale. Three things, all per field and
      all live: which colormap, what range it spans, and a way back to
@@ -3027,6 +3054,40 @@ export async function createOceanMap(
     'EEZ boundaries': eez,
     'Lat/lon grid': graticule,
   };
+
+  /* The platform keys follow their layers.
+
+     **Placed after `overlays` deliberately.** It reads the switcher's own
+     map of names to layers, and sitting above that declaration threw a
+     temporal-dead-zone error on every load — which `astro check` cannot
+     see, being a runtime ordering fault rather than a type one, and which
+     `test:map` did not fail on either because an uncaught rejection
+     during init is not a failed check. The browser console was the only
+     place it showed.
+
+     A legend entry for a layer that is off is a promise the map is not
+     keeping — the reader looks for magenta dots that are not there and
+     concludes the fleet is missing rather than switched off. The animated
+     fields already worked this way; these were static markup and did not.
+
+     Driven off the switcher's own names, so a key naming a layer that does
+     not exist simply never shows rather than throwing — and `check:docs`
+     already fails on a name that is not in `overlays`, which is what stops
+     that being silent. */
+  {
+    const keys = Array.from(root.querySelectorAll<HTMLElement>('[data-layer-key]'));
+    if (keys.length) {
+      const showPlatformKeys = () => {
+        for (const key of keys) {
+          const layer = overlays[key.dataset.layerKey ?? ''];
+          key.hidden = !layer || !map.hasLayer(layer);
+        }
+      };
+      map.on('overlayadd overlayremove', showPlatformKeys);
+      showPlatformKeys();
+    }
+  }
+
   /* A page's preset, applied before the defaults are captured below — so
      "default" still means one thing, and Reset returns here rather than to
      the map's own opening state.

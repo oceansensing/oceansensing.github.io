@@ -851,7 +851,7 @@
 /* The relocated attribution. Leaflet styles it as a translucent box pinned to
    a corner; below the map it is simply caption text, so the box goes and the
    type matches the rest of the figure's prose. */
-.ocean-map .om-credit {
+.om-credit {
   margin: 0.35rem 0 0;
   font-size: var(--text-xs, 0.8125rem);
   line-height: 1.45;
@@ -863,7 +863,7 @@
   color: var(--map-credit, #4c5865);
 }
 
-.ocean-map .om-credit .leaflet-control-attribution {
+.om-credit .leaflet-control-attribution {
   background: none;
   box-shadow: none;
   margin: 0;
@@ -873,17 +873,17 @@
   color: inherit;
 }
 
-.ocean-map .om-credit .leaflet-control-attribution a {
+.om-credit .leaflet-control-attribution a {
   color: var(--link, #1b4f72);
 }
 
 /* One colour bar per scalar field that is on. The swatch is the field's own
    ramp, so two fields on at once cannot be told apart only by their numbers. */
-.ocean-map .om-key-scalar::before {
+.om-key-scalar::before {
   background: var(--sst-ramp, linear-gradient(to right, #2c7fb8, #edf8b1));
 }
 
-.ocean-map [data-sst-key] {
+[data-sst-key] {
   display: inline-flex;
   flex-wrap: wrap;
   gap: var(--space-xs, 0.5rem);
@@ -891,7 +891,7 @@
 }
 
 /* The row holding one colour-scale control set per field on. */
-.ocean-map .om-field-controls-row {
+.om-field-controls-row {
   display: inline-flex;
   flex-wrap: wrap;
   gap: var(--space-xs, 0.5rem);
@@ -900,28 +900,29 @@
 
 /* Shown only when two fields are on, so a reader can tell which set edits
    which. With one field the colour bar above already says. */
-.ocean-map .om-field-name {
+.om-field-name {
   font-size: var(--text-sm, 0.875rem);
   color: var(--text-muted, #5b6672);
 }
 
 /* Per-field particle speed sliders. */
-.ocean-map .om-particle-speed {
+.om-particle-speed {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-xs, 0.5rem);
+  gap: 0.5rem 0.9rem;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: var(--text-sm, 0.875rem);
   color: var(--map-credit, #4c5865);
 }
 
-.ocean-map .om-particle-speed label {
+.om-particle-speed label {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
 }
 
-.ocean-map .om-particle-speed input[type='range'] {
+.om-particle-speed input[type='range'] {
   inline-size: 5rem;
 }
 
@@ -930,9 +931,13 @@
    which is what let the current field's readout shove the wind slider along
    the row. Every value is five characters now, and tabular figures keep them
    the same five widths. */
-.ocean-map .om-speed-readout {
+.om-speed-readout {
   font-variant-numeric: tabular-nums;
-  inline-size: 3.5rem;
+  /* Same overflow trap: "1.19×" filled a 3.5rem box exactly and the gap
+     vanished, so the number touched the next field's name. The padding is
+     inside the fixed width, so the position still cannot move. */
+  inline-size: 4.5rem;
+  padding-inline-end: 0.5rem;
   text-align: end;
   flex: 0 0 auto;
 }
@@ -940,13 +945,14 @@
 /* The whole control gets a fixed footprint for the same reason — the label
    text differs between fields ("Current" against "Wind"), so without this
    the two sliders start at different offsets. */
-.ocean-map .om-particle-speed label {
+.om-particle-speed label {
   flex: 0 0 auto;
 }
 
-.ocean-map .om-speed-name {
+.om-speed-name {
   color: var(--map-credit, #4c5865);
-  inline-size: 4rem;
+  inline-size: 5.5rem;
+  padding-inline-end: 0.4rem;
   flex: 0 0 auto;
 }
 
@@ -956,25 +962,49 @@
    is the choice rather than a label for it. A disabled swatch still shows
    its colour: that is what makes the refusal legible — the reader can see it
    is too close to the water instead of being told so. */
-.ocean-map .om-tints {
+.om-tints {
   display: inline-flex;
   align-items: center;
-  gap: 0.2rem;
+  gap: 0.25rem;
+  margin-inline-end: 0.9rem;
 }
 
-.ocean-map .om-tint-name {
-  inline-size: 4rem;
+.om-tint-name {
+  /* Wide enough for the longest label in this monospace at this size, plus
+     its own trailing space. It was 4rem, which "Current" overflows — and an
+     overflowing fixed box eats the flex `gap`, so the word ran straight into
+     the first swatch. */
+  inline-size: 5.5rem;
+  padding-inline-end: 0.4rem;
   flex: 0 0 auto;
   color: var(--map-credit, #4c5865);
 }
 
-.ocean-map .om-tint {
-  inline-size: 1rem;
-  block-size: 1rem;
+.om-tint {
+  /* **No `.ocean-map` ancestor selector here, and that is not a style
+     choice.** `ocean-map` is the class the module puts on the *canvas*
+     container; the legend and every control in it live in the figure's
+     caption, which is the canvas's sibling. So `.ocean-map .om-…` matches
+     nothing for caption chrome — a whole set of rules written that way were
+     dead, silently, and the symptom was a control that looked unstyled
+     rather than an error. The `om-` prefix is the namespace on its own; see
+     `.om-legend` and `.om-key-flow` above, which have always been bare.
+
+     **`appearance: none` first, or none of the rest lands.** iOS Safari
+     applies its own button styling — a grey rounded-rect with a system
+     background — which overrides `background` and `border-radius` both. The
+     swatches came out as grey squares on a phone while being correct on a
+     desktop, which is the whole point of the control gone. */
+  appearance: none;
+  -webkit-appearance: none;
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
   padding: 0;
+  margin: 0;
   border: 1px solid var(--map-credit, #4c5865);
   border-radius: 50%;
-  background: var(--om-tint, transparent);
+  background-color: var(--om-tint, transparent);
+  background-image: none;
   cursor: pointer;
   flex: 0 0 auto;
 }
@@ -982,20 +1012,20 @@
 /* Auto has no fixed colour — it is whatever the search lands on — so it is
    marked rather than painted, with the colour it currently resolves to
    showing through. */
-.ocean-map .om-tint-auto {
+.om-tint-auto {
   background:
     linear-gradient(135deg, transparent 44%, currentColor 44%, currentColor 56%, transparent 56%),
     var(--om-tint, transparent);
 }
 
-.ocean-map .om-tint.is-chosen {
+.om-tint.is-chosen {
   outline: 2px solid currentColor;
   outline-offset: 1px;
 }
 
 /* Not hidden: an unavailable colour still shows what it would draw, which is
    the whole point. Dimmed and un-clickable instead. */
-.ocean-map .om-tint:disabled {
+.om-tint:disabled {
   cursor: default;
   opacity: 0.4;
 }

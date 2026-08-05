@@ -857,6 +857,28 @@ if the internals it reads are ever renamed; `test:map` asserts the semicolons
 survive, so a Leaflet upgrade that moves them fails a check rather than
 quietly restoring an ambiguous line.
 
+**Caption chrome takes bare `om-` selectors, never `.ocean-map …`.** The
+`ocean-map` class is applied to the *canvas container*; the legend and every
+control in it live in the figure's caption, which is the canvas's **sibling**.
+So a rule written `.ocean-map .om-tint` matches nothing — and the symptom is a
+control that merely looks unstyled rather than an error, which is how a whole
+set of them stayed dead through several rounds of "verified in the browser".
+`.om-legend` and `.om-key-flow` have always been bare; the `om-` prefix is the
+namespace on its own.
+
+**`appearance: none` on any button in that chrome.** iOS Safari applies its
+own button styling — a grey rounded-rect with a system background — which
+overrides `background` and `border-radius` both. The particle swatches came
+out as grey squares on a phone while being correct on a desktop, which is the
+whole point of that control gone. It only shows on a real phone: the browser
+pane does not reproduce it.
+
+**A fixed box that its own text overflows eats the flex `gap`.** The speed
+readout was `inline-size: 3.5rem` and "1.19×" filled it exactly, so the number
+touched the next field's name. Fixed widths are right here — they are what
+stops one control moving when another's label grows — but they have to be
+wide enough for the longest string plus its own padding.
+
 **Never inline a colour in `AssetMap.astro`.** They live in
 `packages/ocean-map/data/map-palette.json`, which the component imports and
 `npm run test:contrast` checks — a hardcoded colour is invisible to the gate.
