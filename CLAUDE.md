@@ -2856,7 +2856,7 @@ Two things follow, both in `fetch-ocean-fields.py`:
   missing water and says nothing.
 
 **That second guard was half-built for a long time, and the missing half was
-the ordering.** `build_tiles` wrote `index.json` and raised *afterwards*, so
+the ordering.** `build_tiles` wrote its tile index and raised *afterwards*, so
 the short list reached disk either way — and `main` only keeps the previous
 data when **every** product fails, so one product's tile failure published a
 short index while the build exited 0 and reported success. Found while
