@@ -904,3 +904,29 @@
   font-size: var(--text-sm, 0.875rem);
   color: var(--text-muted, #5b6672);
 }
+
+/* Per-field particle speed sliders. */
+.ocean-map .om-particle-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs, 0.5rem);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--map-credit, #4c5865);
+}
+
+.ocean-map .om-particle-speed label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.ocean-map .om-particle-speed input[type='range'] {
+  inline-size: 5rem;
+}
+
+/* Tabular so the row does not jog as the multiple changes width. */
+.ocean-map .om-speed-readout {
+  font-variant-numeric: tabular-nums;
+  min-inline-size: 2.5rem;
+}

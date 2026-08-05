@@ -531,6 +531,40 @@ export async function createOceanMap(
   /** The reader's request per field, as an exemplar hex from `NAMED_TINTS`,
       or null for automatic. */
   const particleTint: Record<'current' | 'wind', string | null> = { current: null, wind: null };
+
+  /** How fast the reader wants each field drawn, as a multiple of its own
+      calibrated drift. 1 is the map's own answer.
+
+      **A multiplier, never a replacement.** `DRIFT` cancels the measured
+      26.7x between wind and water and `WIND_BOOST` is a stated legibility
+      factor over that parity — both are measurements the gates hold, and a
+      slider that overwrote them would make those gates check a number
+      nothing draws. This scales what they produce and leaves them alone.
+
+      It changes only the *rate*, never the direction or the relative speeds
+      within a field, and the point readout still reports m/s straight from
+      the grid — so nothing on screen claims a speed the data does not
+      support. That is the same argument WIND_BOOST already rests on. */
+  const particleSpeed: Record<'current' | 'wind', number> = { current: 1, wind: 1 };
+  const speedSliders: Partial<Record<'current' | 'wind', HTMLInputElement>> = {};
+  /* Each slider's own redraw, kept so a restore or a Reset can move the
+     thumb *and* the number beside it. Dispatching a synthetic event was
+     the first attempt and is a no-op — nothing listens for one. */
+  const speedShow: Partial<Record<'current' | 'wind', () => void>> = {};
+  /* Assigned when the control is built; a host with no slider still needs
+     this to exist, because restoreView and Reset both call it. */
+  let applyParticleSpeed = () => {};
+
+  /** Put the sliders where the numbers are — after a restore or a reset,
+      which change the value without touching the input. */
+  const syncSpeedSliders = () => {
+    for (const field of ['current', 'wind'] as const) {
+      const slider = speedSliders[field];
+      if (!slider) continue;
+      slider.value = String(Math.log2(particleSpeed[field]));
+      speedShow[field]?.();
+    }
+  };
   const particleChoice: Partial<Record<'current' | 'wind', RampChoice>> = {};
 
   /** What the particles are actually drawn over.
@@ -783,7 +817,14 @@ export async function createOceanMap(
            correction and the magnitude is ours to pick. This is the same
            number the old code arrived at, having multiplied by two factors
            and then divided both back out. */
-        drift: kind.drift,
+        /* Scaled by the reader's slider **at construction**, not only when
+           the slider moves. A restored view is applied before the flow
+           layers exist — they are built after their grid arrives — so
+           applying the speed only from `restoreView` left the control
+           reading 0.25x while the field drew at 1x: the map disagreeing
+           with its own chrome, and nothing on screen to say which was
+           right. */
+        drift: kind.drift * particleSpeed[kind.reads === 'from' ? 'wind' : 'current'],
         maxVelocity: kind.maxVelocity,
         colorScale: kind.colours,
         /* Denser and thicker than a wind-tuned default: ocean particles move
@@ -1856,6 +1897,83 @@ export async function createOceanMap(
             : '';
         }
       };
+    }
+  }
+
+  /* ---- how fast each velocity field is drawn ---------------------------
+
+     One slider per animated field, scaling its own calibrated drift.
+
+     **The rate is the only thing a reader can move**, and that is what makes
+     it safe to offer. Direction comes from the grid, relative speeds within
+     a field come from the grid, and the point readout quotes m/s from the
+     grid — so a field drawn fast is a field drawn fast, not a field claiming
+     to be fast. The wind layer already rests on exactly this argument: it is
+     drawn at twice parity because circulations are only legible if a streak
+     runs far enough to be seen turning.
+
+     Sliders rather than buttons, and unlike the forecast-hour control that
+     is safe here: stepping a lead calls `setOptions({data})`, which tears
+     the animation down and restarts it, while drift is read fresh on the
+     next frame and changes nothing else. Dragging one is continuous and
+     costs nothing per frame. */
+  {
+    const box = find<HTMLElement>('[data-particle-speed]');
+    if (box) {
+      box.textContent = '';
+      const applySpeed = (field: 'current' | 'wind') => {
+        for (const entry of flows) {
+          if ((entry.kind.reads === 'from' ? 'wind' : 'current') !== field) continue;
+          (entry.layer as unknown as { setOptions?: (o: object) => void } | null)
+            /* `kind.drift` stays the base — scaling it in place would
+               compound every time the slider moved. */
+            ?.setOptions?.({ drift: entry.kind.drift * particleSpeed[field] });
+        }
+      };
+      applyParticleSpeed = () => {
+        applySpeed('current');
+        applySpeed('wind');
+      };
+
+      for (const field of ['current', 'wind'] as const) {
+        const label = document.createElement('label');
+        const name = document.createElement('span');
+        name.textContent = field === 'wind' ? 'Wind speed' : 'Current speed';
+        name.className = 'om-vh';
+        label.append(name);
+
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        /* A quarter to four times, logarithmic in feel by being linear in
+           the exponent: the useful range is multiplicative, so a linear
+           slider would spend three quarters of its travel above 1x. */
+        slider.min = '-2';
+        slider.max = '2';
+        slider.step = '0.25';
+        slider.value = '0';
+        slider.dataset.particleSpeed = field;
+        slider.setAttribute('aria-label', `${name.textContent}, multiple of the calibrated rate`);
+
+        const readout = document.createElement('span');
+        readout.className = 'om-speed-readout';
+        const show = () => {
+          const at = particleSpeed[field];
+          readout.textContent = at === 1 ? '1×' : `${at < 1 ? at.toFixed(2) : at.toFixed(at < 10 ? 1 : 0)}×`;
+          slider.title = `${name.textContent}: ${readout.textContent} the calibrated rate`;
+        };
+        slider.addEventListener('input', () => {
+          particleSpeed[field] = 2 ** Number(slider.value);
+          applySpeed(field);
+          show();
+          saveView();
+        });
+        show();
+
+        label.append(slider, readout);
+        box.append(label);
+        speedSliders[field] = slider;
+        speedShow[field] = show;
+      }
     }
   }
 
@@ -3252,6 +3370,9 @@ export async function createOceanMap(
              background may differ by then, and what they asked for is
              "green", not that particular green. */
           tints: particleTint,
+          /* Same reasoning as the tints: the page reloads itself hourly and
+             a rate the reader chose has to survive it. */
+          speeds: particleSpeed,
         })
       );
     } catch {
@@ -3308,6 +3429,19 @@ export async function createOceanMap(
        reader the automatic choice. Whether it clears *this* background is
        not checked here: the resolver does that on every background change
        and hands an inadmissible one back to auto. */
+    /* Clamped to the slider's own range: a stored value outside it would
+       leave the thumb pinned at an end while the field drew at something
+       else. */
+    const speeds = saved.speeds as Record<string, unknown> | undefined;
+    if (speeds) {
+      for (const field of ['current', 'wind'] as const) {
+        const at = speeds[field];
+        if (typeof at === 'number' && at >= 0.25 && at <= 4) particleSpeed[field] = at;
+      }
+      syncSpeedSliders();
+      applyParticleSpeed();
+    }
+
     const tints = saved.tints as Record<string, unknown> | undefined;
     if (tints) {
       const offered = new Set(NAMED_TINTS.map(([, tint]) => tint));
@@ -3703,6 +3837,11 @@ export async function createOceanMap(
     particleTint.current = null;
     particleTint.wind = null;
     resolveParticleColours();
+
+    particleSpeed.current = 1;
+    particleSpeed.wind = 1;
+    syncSpeedSliders();
+    applyParticleSpeed();
 
     // Back to the hour nearest the reader's clock, which is where the map
     // opens — not to lead 0, which on a late run is not the same thing.

@@ -937,6 +937,45 @@ discrete dot from a drifting trail whatever the fill does. That argument —
 form and motion carrying what colour does not — is what every concession here
 leans on, and its limits are visible in the list getting longer.
 
+#### The reader sets how fast each field is drawn
+
+One slider per animated field, in the legend row, scaling that field's own
+calibrated drift from a quarter to four times.
+
+**A multiplier, never a replacement.** `DRIFT` cancels the measured 26.7×
+between wind and water, and `WIND_BOOST` is a stated legibility factor over
+that parity. Both are measurements the gates hold — `check:docs` compares the
+base ratio numerically and requires the boost to be stated here — and a
+slider that overwrote them would leave those gates checking a number nothing
+draws. This scales what they produce and leaves them alone.
+
+**What makes it safe to offer is that the rate is the only thing it
+moves.** Direction comes from the grid, relative speeds within a field come
+from the grid, and the point readout quotes m/s from the grid — so a field
+drawn fast is drawn fast, not claiming to be fast. That is the same argument
+the wind layer already rests on at twice parity.
+
+Linear in the *exponent* — the slider runs −2 to 2 and the multiple is
+`2**value` — because the useful range is multiplicative and a linear slider
+would spend three quarters of its travel above 1×.
+
+Sliders rather than the buttons the forecast-hour control uses, and the
+difference is mechanical: stepping a lead calls `setOptions({data})`, which
+tears the animation down and restarts it, so a dragged slider would do that
+once per value. Drift is read fresh on the next frame and changes nothing
+else, so dragging costs nothing.
+
+**The scale is applied where the layer is built, not only where the slider
+moves**, and that was a bug before it was a note. A restored view is applied
+before the flow layers exist — they are built when their grid arrives — so
+applying it only from `restoreView` left the control reading 0.25× while the
+field drew at 1×: the map disagreeing with its own chrome, with nothing on
+screen to say which was right. `kind.drift` also stays the base and is never
+scaled in place, or every slider move would compound the last.
+
+It rides in the saved view like the colour choices, so the hourly self-reload
+does not silently revert it, and Reset returns both fields to 1×.
+
 #### Particle colours are chosen against what is behind them
 
 `packages/ocean-map/contrast.ts`. Every other colour on this map is fixed and

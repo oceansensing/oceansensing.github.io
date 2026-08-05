@@ -117,6 +117,11 @@ const {
       <!-- Sandbox only: adjustable particle colours. A hue picker rather than
            a colour picker — see the note in the module. -->
       <span class="om-particle-colours" data-particle-colours></span>
+      <!-- A container, not a control. The module builds one speed slider per
+           animated field into it. The slider scales that field's calibrated
+           drift; it cannot change direction or relative speeds, and the
+           readout still quotes m/s from the grid. -->
+      <span class="om-particle-speed" data-particle-speed></span>
       <span class="om-kmz-controls" data-kmz-controls>
         <label class="om-kmz-add">
           <span>Add KML or KMZ…</span>

@@ -87,6 +87,11 @@ const {
            see the note in the module for why that is what lets it ship
            without a live contrast readout beside it. -->
       <span class="om-particle-colours" data-particle-colours></span>
+      <!-- A container, not a control. The module builds one speed slider per
+           animated field into it. The slider scales that field's calibrated
+           drift; it cannot change direction or relative speeds, and the
+           readout still quotes m/s from the grid. -->
+      <span class="om-particle-speed" data-particle-speed></span>
       <!-- A container, not a control. The module fills it with one set of
            colour-scale inputs per scalar field that is on — ice draws over
            temperature, so there can be two, and a single set would have to
