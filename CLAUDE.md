@@ -277,8 +277,29 @@ The remaining seams, in order of what they unlock:
   prefix rather than leaking into the host page. `.om-vh` is duplicated from
   the site's own utility deliberately — leaning on a host to define it is the
   kind of invisible dependency whose failure is silent.
+- **`index.ts` is being split, one seam at a time.** It reached 4,542 lines in
+  a single closure, which is a problem of *ordering* rather than size: three
+  bugs in one session were use-before-declaration inside it, invisible to
+  `astro check` because each sat in a callback that could not run until later.
+  A module boundary turns that into a signature.
+
+  Out so far: `graticule.ts` (the lat/lon grid), `measure.ts` (distance and
+  bearing) and `scalar-layer.ts` (the field raster, `FIELDS` and
+  `FieldDescriptor`) — about 500 lines, taking it to ~4,030. Each one was
+  taken alone, with `npm run verify` and a browser check between, because the
+  failure mode of a half-finished move is a tree the next session has to
+  finish rather than a clean start.
+
+  The rule that has held: **behaviour moves, the reader's state stays.**
+  `choices` and `particleTint` are per map, and a module-level copy of either
+  would put two maps on a page back to sharing one — the singleton bug this
+  package already paid to remove.
+
+  Remaining seams, roughly in order of independence: the isobath tiers, the
+  KMZ drawing side (`kmz.ts` and `warp.ts` already hold the parsing), the
+  point readout, and the chrome/controls block.
 - **Still to do**: the chrome markup is the host's, so a second site
-  reproduces the legend and controls; the module is one 3,600-line file; and
+  reproduces the legend and controls; and
   the fleet is assumed — the legend names hurricanes, USVs, ocean gliders and
   Argo, and the layer switcher matches. Against that, the renderer-independent
   half has kept growing — `geo`, `ramp`, `tiles`, `schema`, `warp`, `kmz`, now
@@ -2258,6 +2279,29 @@ All three are numeric grids drawn by one canvas layer in the `sst` pane
 exclusive with each other**, not just the two SSTs: they share that pane, so
 the upper one hides the lower and the map would name two fields while showing
 one.
+
+**That layer is `packages/ocean-map/scalar-layer.ts`**, along with `FIELDS`
+— the catalogue of what it can paint — and the `FieldDescriptor` that says
+what a paintable quantity is.
+
+What kept it in the closure was two pieces of the **reader's own state**: the
+colormap they picked and any range they pinned. Those arrive as one
+`choice()` accessor now, and the accessor is the load-bearing part. A
+snapshot taken at construction would freeze the scale at whatever it was when
+the grid first arrived — and a layer is built *when its data lands*, which is
+before most readers have touched anything. Mutation-tested by replacing the
+accessor with exactly that snapshot: **four checks fail**, including the
+pinned range surviving a pan.
+
+The state itself stayed in `index.ts` on purpose. `choices` is per map, and a
+module-level copy would have two maps on a page silently sharing one set of
+colour scales — the singleton bug this package spent a whole pass removing,
+reintroduced by a refactor.
+
+Verified in a browser as well: `jet` paints `[0, 0, 171]` where `cmo.haline`
+paints `[39, 34, 120]` at the same pixel, and a field's own `pane` still
+routes ice to `ice` and temperature to `sst` — which is the descriptor
+travelling across the new module boundary intact.
 
 **The tiers differ per product, and OISST has no tile tier on purpose.**
 Tiles exist to reach a product's native resolution; OISST *is* 1/4° natively,
