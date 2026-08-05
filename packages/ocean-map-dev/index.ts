@@ -9,6 +9,7 @@ import { coordText, elapsed, hoursAhead, hourStamp, initialBearing, spanText,
   stamp } from './geo';
 import { rampColour, rampStops } from './ramp';
 import { createGraticule } from './graticule';
+import { createMeasureTool } from './measure';
 import { VelocityLayer } from './velocity-layer';
 import { pickRamp, admissible, clearance, NAMED_TINTS, type RampChoice } from './contrast';
 import basemapWater from './data/basemap-ocean.json';
@@ -2746,6 +2747,12 @@ export async function createOceanMap(
     });
   };
 
+  /* The measuring tool, built before its first consumer rather than 700
+     lines below it — see `measure.ts`. It used to be declared down beside
+     the point readout and reached from the hit-target handler above, which
+     worked only because that handler cannot run until a reader clicks. */
+  const measure = createMeasureTool(map, host);
+
   /* ---- hit targets --------------------------------------------------
 
      How close a tap has to land. The dots are drawn small so a crowded
@@ -2804,8 +2811,8 @@ export async function createOceanMap(
          the glider is, not 20 px away where the finger landed. Tracks are
          lines with no one position, so those take the click. */
       const at = (layer as L.CircleMarker).getLatLng?.() ?? e.latlng;
-      if (measuring) {
-        addMeasurePoint(at);
+      if (measure.active) {
+        measure.addPoint(at);
         return;
       }
       /* Assets carry the state of the water they are sitting in, on top
@@ -3570,113 +3577,7 @@ export async function createOceanMap(
 
   L.control.scale({ imperial: false }).addTo(map);
 
-  /* ---- measuring, and the point readout ----------------------------- */
-
-  const measured = L.layerGroup().addTo(map);
-  let measuring = false;
-  let points: L.LatLng[] = [];
-  let readout: HTMLElement | null = null;
-
-  const drawMeasurement = () => {
-    measured.clearLayers();
-    if (!points.length) return;
-
-    if (points.length > 1) {
-      /* A light halo under a dark line, so the measurement reads on the
-         pale Esri basemap and the dark GEBCO one alike. The halo is an
-         outline, themed in CSS like the track casings rather than gated
-         as a feature colour. */
-      L.polyline(points, { className: 'map-measure-halo', weight: 6, lineCap: 'round' }).addTo(measured);
-      L.polyline(points, {
-        color: MEASURE,
-        weight: 2.5,
-        dashArray: '7,5',
-        lineCap: 'round',
-      }).addTo(measured);
-    }
-
-    points.forEach((point, i) => {
-      L.circleMarker(point, {
-        radius: 4,
-        color: MEASURE,
-        weight: 2,
-        fillColor: '#ffffff',
-        fillOpacity: 1,
-      })
-        .addTo(measured)
-        .bindTooltip(
-          i === 0
-            ? `Start · ${coordText(point)}`
-            : `Leg ${i}: ${spanText(points[i - 1]!.distanceTo(point))} · ` +
-              `${initialBearing(points[i - 1]!, point).toFixed(0)}°T<br>${coordText(point)}`,
-          { direction: 'top' }
-        );
-    });
-
-    if (readout) {
-      const total = points.reduce(
-        (sum, point, i) => (i ? sum + points[i - 1]!.distanceTo(point) : 0),
-        0
-      );
-      const legs = points.length - 1;
-      readout.textContent =
-        legs < 1
-          ? 'Click a second point'
-          : `${spanText(total)}${legs > 1 ? ` over ${legs} legs` : ''} · ` +
-            `${initialBearing(points[0]!, points[points.length - 1]!).toFixed(0)}°T direct`;
-    }
-  };
-
-  const setMeasuring = (on: boolean) => {
-    measuring = on;
-    host.style.cursor = on ? 'crosshair' : '';
-    if (!on) {
-      points = [];
-      measured.clearLayers();
-    }
-    if (readout) readout.textContent = on ? 'Click a point to start' : '';
-    if (button) {
-      button.setAttribute('aria-pressed', String(on));
-      button.classList.toggle('active', on);
-    }
-  };
-
-  let button: HTMLAnchorElement | null = null;
-  const Measure = L.Control.extend({
-    options: { position: 'topleft' },
-    onAdd() {
-      const bar = L.DomUtil.create('div', 'leaflet-bar measure-control');
-      button = L.DomUtil.create('a', '', bar) as HTMLAnchorElement;
-      button.href = '#';
-      button.textContent = '📏';
-      button.title = 'Measure distance and bearing';
-      button.setAttribute('role', 'button');
-      button.setAttribute('aria-label', 'Measure distance and bearing');
-      button.setAttribute('aria-pressed', 'false');
-      readout = L.DomUtil.create('span', 'measure-readout', bar);
-      L.DomEvent.on(button, 'click', (e) => {
-        L.DomEvent.stop(e);
-        setMeasuring(!measuring);
-      });
-      L.DomEvent.disableClickPropagation(bar);
-      return bar;
-    },
-  });
-  map.addControl(new Measure());
-
-  const addMeasurePoint = (at: L.LatLng) => {
-    points.push(at);
-    drawMeasurement();
-  };
-
-  map.on('click', (e: L.LeafletMouseEvent) => {
-    if (!measuring) return;
-    addMeasurePoint(e.latlng);
-  });
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && measuring) setMeasuring(false);
-  });
+  /* ---- the point readout -------------------------------------------- */
 
   /* Right-click, or a long press on a touch screen, reports the position.
      Leaflet raises contextmenu for the mouse; iOS Safari does not raise it
@@ -3817,7 +3718,7 @@ export async function createOceanMap(
   };
 
   map.on('contextmenu', (e: L.LeafletMouseEvent) => {
-    if (measuring) return;
+    if (measure.active) return;
     describePoint(e.latlng);
   });
 
@@ -3827,7 +3728,7 @@ export async function createOceanMap(
   container.addEventListener(
     'touchstart',
     (e: TouchEvent) => {
-      if (measuring || e.touches.length !== 1) return;
+      if (measure.active || e.touches.length !== 1) return;
       const touch = e.touches[0]!;
       pressStart = { x: touch.clientX, y: touch.clientY };
       pressTimer = window.setTimeout(() => {
@@ -3922,7 +3823,7 @@ export async function createOceanMap(
     // opens — not to lead 0, which on a late run is not the same thing.
     if (forecast.frames.length) showLead(nearestFrame(forecast.frames).lead);
 
-    setMeasuring(false);
+    measure.stop();
     map.closePopup();
     try {
       sessionStorage.removeItem(VIEW_KEY);

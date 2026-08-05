@@ -2816,13 +2816,37 @@ instead, which is why an outage there shows up as stale rather than wrong.
 
 ### Measuring, and the point readout
 
-Two tools on the hurricane map, both in `AssetMap.astro`.
+Two tools on the map. Measuring is `packages/ocean-map/measure.ts`; the point
+readout is still in `index.ts`.
 
 **Measure** (📏 in the top-left bar) takes clicks and reports great-circle
 distance per leg and overall, in **km and nautical miles**, with the initial
 bearing in degrees true. Escape clears it. Distance and bearing are both
 great-circle: a rhumb line is what you would steer, but quoting the two from
 different geometries invites the reader to combine them.
+
+**It was the second thing lifted out of `index.ts`, and it is the clearest
+example of why.** It was declared *700 lines below* one of its callers — the
+hit-target handler, which reads whether the tool is armed to decide if a
+click is a survey point or a popup. That only worked because a click handler
+cannot run during setup, so the reference was resolved long after the line
+that made it. Nothing said so, and nothing would have caught it changing.
+
+`createMeasureTool(map, host)` returns the three things a caller needs —
+`active`, `addPoint`, `stop` — and is built above its first consumer, so the
+dependency is now a parameter rather than a line number. `active` is a
+getter, not a snapshot: a boolean copied at wiring time would read false
+forever, which is exactly what the mutation test plants.
+
+Escape is the one handler here bound on the `document` rather than the
+container. A reader pressing it has usually not clicked into the map first,
+so a container-scoped listener would never see it; with two maps on a page
+it cancels both, which is what a global cancel key should do.
+
+Verified in a browser as well as the harness, because moving where the
+control is added moves where it lands in the top-left stack: it is still
+zoom → 📏 → Basin/Global/Reset, and Norfolk to Halifax still reads
+`1367 km · 738 nm · 47°T direct`.
 
 **Hovering a point asset names it beside the pointer** — a sticky Leaflet
 tooltip, so it tracks the cursor rather than anchoring to the shape's centre,
