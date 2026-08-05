@@ -926,11 +926,76 @@
 }
 
 /* Tabular so the row does not jog as the multiple changes width. */
+/* Fixed, not minimum: a `min-inline-size` still grows when the text does,
+   which is what let the current field's readout shove the wind slider along
+   the row. Every value is five characters now, and tabular figures keep them
+   the same five widths. */
 .ocean-map .om-speed-readout {
   font-variant-numeric: tabular-nums;
-  min-inline-size: 2.5rem;
+  inline-size: 3.5rem;
+  text-align: end;
+  flex: 0 0 auto;
+}
+
+/* The whole control gets a fixed footprint for the same reason — the label
+   text differs between fields ("Current" against "Wind"), so without this
+   the two sliders start at different offsets. */
+.ocean-map .om-particle-speed label {
+  flex: 0 0 auto;
 }
 
 .ocean-map .om-speed-name {
   color: var(--map-credit, #4c5865);
+  inline-size: 4rem;
+  flex: 0 0 auto;
+}
+
+/* ---- particle colour swatches ----------------------------------------
+
+   Each is painted in the colour that will actually be drawn, so the control
+   is the choice rather than a label for it. A disabled swatch still shows
+   its colour: that is what makes the refusal legible — the reader can see it
+   is too close to the water instead of being told so. */
+.ocean-map .om-tints {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.ocean-map .om-tint-name {
+  inline-size: 4rem;
+  flex: 0 0 auto;
+  color: var(--map-credit, #4c5865);
+}
+
+.ocean-map .om-tint {
+  inline-size: 1rem;
+  block-size: 1rem;
+  padding: 0;
+  border: 1px solid var(--map-credit, #4c5865);
+  border-radius: 50%;
+  background: var(--om-tint, transparent);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+/* Auto has no fixed colour — it is whatever the search lands on — so it is
+   marked rather than painted, with the colour it currently resolves to
+   showing through. */
+.ocean-map .om-tint-auto {
+  background:
+    linear-gradient(135deg, transparent 44%, currentColor 44%, currentColor 56%, transparent 56%),
+    var(--om-tint, transparent);
+}
+
+.ocean-map .om-tint.is-chosen {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+
+/* Not hidden: an unavailable colour still shows what it would draw, which is
+   the whole point. Dimmed and un-clickable instead. */
+.ocean-map .om-tint:disabled {
+  cursor: default;
+  opacity: 0.4;
 }

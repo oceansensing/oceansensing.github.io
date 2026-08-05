@@ -959,6 +959,14 @@ Linear in the *exponent* — the slider runs −2 to 2 and the multiple is
 `2**value` — because the useful range is multiplicative and a linear slider
 would spend three quarters of its travel above 1×.
 
+**Every part of the row has a fixed width**, which is a correctness matter
+rather than tidiness: the readout printed "1×" at exactly one and "1.1×" a
+step later, and the extra character pushed the *wind* slider sideways — a
+control moving under the pointer because a different control's label grew.
+Two decimals always, tabular figures, and a fixed size on the readout and the
+field name. Measured: the wind slider's left edge holds at 252.7 px across
+1.00×, 0.25× and back.
+
 Sliders rather than the buttons the forecast-hour control uses, and the
 difference is mechanical: stepping a lead calls `setOptions({data})`, which
 tears the animation down and restarts it, so a dragged slider would do that
@@ -1030,9 +1038,24 @@ So the resolve order — currents first, wind against a background that already
 includes the currents' answer — is load-bearing rather than tidy.
 
 **The reader can ask for a colour, and only the ones that work are offered.**
-Ten named colours per field, each re-tested against the current background;
-one that would not clear is disabled rather than removed, so the list does not
-reshuffle under the pointer. That is what lets the control ship with no ΔE
+Ten choices per field, each re-tested against the current background; one that
+would not clear is disabled rather than removed, so the list does not
+reshuffle under the pointer.
+
+**Swatches, not names, and the name was actively misleading.** The control was
+a `<select>` of colour names, and a name is only ever an approximation of what
+the search returns: it filters to ΔE ≤ 18 of an exemplar, so "Blue" over blue
+water is legitimately the nearest admissible blue-ish ramp and reads as
+violet. The name then argues with the pixels and the pixels win. Each swatch
+is painted in **the ramp that will actually be drawn** for that request
+against the background up right now, so it is not a label for the choice, it
+*is* the choice. The word survives as the accessible name and the tooltip.
+
+A disabled swatch still shows its colour. That is what makes the refusal
+legible — the reader can see it sits too close to the water rather than being
+told so — and it is why the greying is not simply hiding. Auto has no fixed
+colour to show, so it is marked with a diagonal and tinted with whatever it
+currently resolves to. That is what lets the control ship with no ΔE
 readout beside it — the sandbox had one, and it is not needed when an
 unusable choice is simply not selectable. Measured across all 27 backgrounds,
 the thinnest case still offers **five** named colours for the current and

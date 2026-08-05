@@ -1840,29 +1840,60 @@ export async function createOceanMap(
      would collide with the other field goes unavailable rather than drawing
      two indistinguishable sets of trails. */
   {
-    const picker = find<HTMLElement>('[data-particle-colours]');
+    /* The word is still worth having for a screen reader and a tooltip, even
+     though the swatch is what a sighted reader goes by. */
+  const tintName = (hex: string) =>
+    NAMED_TINTS.find(([, value]) => value === hex)?.[0] ?? hex;
+
+  const picker = find<HTMLElement>('[data-particle-colours]');
     if (picker) {
-      const selects: Partial<Record<'current' | 'wind', HTMLSelectElement>> = {};
+      /* **Swatches, not names.** The list was a `<select>` of colour names,
+         and a name is only ever an approximation of what the search returns:
+         it filters to ΔE ≤ 18 of an exemplar, so "Blue" over blue water is
+         legitimately the nearest admissible blue-ish ramp and can read as
+         violet. The name then argues with the pixels, and the pixels win.
+
+         Each swatch is painted in **the colour that will actually be drawn**
+         — the mid stop of the ramp `pickRamp` returns for that request
+         against the background up right now — so it is not a label for the
+         choice, it is the choice. The name survives as the accessible name
+         and the tooltip, which is where a word still helps.
+
+         Repainted whenever the background moves, for the same reason the
+         availability is: the answer for a given request is not fixed. */
+      const swatches: Partial<Record<'current' | 'wind', HTMLButtonElement[]>> = {};
       for (const field of ['current', 'wind'] as const) {
-        const label = document.createElement('label');
+        const group = document.createElement('span');
+        group.className = 'om-tints';
+        group.setAttribute('role', 'radiogroup');
+        const label = field === 'wind' ? 'Wind' : 'Current';
+        group.setAttribute('aria-label', `${label} particle colour`);
+
         const name = document.createElement('span');
-        name.textContent = field === 'wind' ? 'Wind' : 'Current';
-        label.append(name);
-        const select = document.createElement('select');
-        select.setAttribute('aria-label', `${name.textContent} particle colour`);
-        for (const [label_, tint] of [['Auto', ''] as const, ...NAMED_TINTS]) {
-          const option = document.createElement('option');
-          option.value = tint;
-          option.textContent = label_;
-          select.append(option);
+        name.className = 'om-tint-name';
+        name.textContent = label;
+        group.append(name);
+
+        const made: HTMLButtonElement[] = [];
+        for (const [tintName, tint] of [['Auto', ''] as const, ...NAMED_TINTS]) {
+          const swatch = document.createElement('button');
+          swatch.type = 'button';
+          swatch.className = 'om-tint';
+          swatch.dataset.tint = tint;
+          swatch.setAttribute('role', 'radio');
+          /* Auto has no fixed colour to show — it is whatever the search
+             lands on — so it is marked rather than painted. */
+          if (!tint) swatch.classList.add('om-tint-auto');
+          swatch.addEventListener('click', () => {
+            if (swatch.disabled) return;
+            particleTint[field] = tint || null;
+            resolveParticleColours();
+          });
+          group.append(swatch);
+          made.push(swatch);
         }
-        select.addEventListener('change', () => {
-          particleTint[field] = select.value || null;
-          resolveParticleColours();
-        });
-        label.append(select);
-        picker.append(label);
-        selects[field] = select;
+        swatches[field] = made;
+        picker.append(group);
       }
 
       refreshTintOptions = () => {
@@ -1870,31 +1901,43 @@ export async function createOceanMap(
         if (!background.length) return;
         const currentRamp = particleChoice.current?.ramp ?? [];
         for (const field of ['current', 'wind'] as const) {
-          const select = selects[field];
-          if (!select) continue;
           /* The wind must also stay clear of whatever the current ended up
              with; the current has nothing above it to avoid. */
           const apartFrom = field === 'wind' ? currentRamp : [];
-          for (const option of Array.from(select.options)) {
-            if (!option.value) continue;   // Auto always works: it searches everything
-            const choice = pickRamp(background, [...MARKER_COLOURS, ...apartFrom], option.value);
-            option.disabled = !admissible(
+          for (const swatch of swatches[field] ?? []) {
+            const tint = swatch.dataset.tint ?? '';
+            const chosen = particleTint[field] ?? '';
+            swatch.setAttribute('aria-checked', String(tint === chosen));
+            swatch.classList.toggle('is-chosen', tint === chosen);
+
+            if (!tint) {
+              // Auto always works: it searches the whole gamut.
+              swatch.disabled = false;
+              const auto = particleChoice[field]?.ramp ?? [];
+              swatch.style.setProperty('--om-tint',
+                auto.length ? auto[Math.floor(auto.length / 2)]! : 'transparent');
+              swatch.title = 'Automatic — the clearest colour over what is behind the particles';
+              continue;
+            }
+
+            const choice = pickRamp(background, [...MARKER_COLOURS, ...apartFrom], tint);
+            const usable = admissible(
               choice.ramp,
               { background, markers: MARKER_COLOURS, apartFrom },
               palette.bars
             );
+            swatch.disabled = !usable;
+            /* Painted in the resolved ramp either way. A disabled swatch
+               still shows what it *would* draw, which is what makes the
+               refusal legible: the reader can see it is too close to the
+               water rather than being told so. */
+            swatch.style.setProperty('--om-tint', choice.ramp[Math.floor(choice.ramp.length / 2)]!);
+            swatch.title = usable
+              ? String(tintName(tint))
+              : `${tintName(tint)} would not stand out from what is behind the particles ` +
+                'right now, so it cannot be chosen until the background changes.';
+            swatch.setAttribute('aria-label', String(tintName(tint)));
           }
-          /* Keep the reader's request selected even when it is unavailable
-             — it is deferred, not discarded. The browser greys a disabled
-             option, and the tooltip says why, since a greyed selection on
-             its own does not explain itself. */
-          select.value = particleTint[field] ?? '';
-          const selected = select.selectedOptions[0];
-          select.title = selected?.disabled
-            ? `${selected.textContent} would not stand out from what is behind the ` +
-              'particles right now, so they are drawn in the best available colour ' +
-              'until it does.'
-            : '';
         }
       };
     }
@@ -1963,8 +2006,15 @@ export async function createOceanMap(
         const readout = document.createElement('span');
         readout.className = 'om-speed-readout';
         const show = () => {
+          /* **Always two decimals**, so every value is the same number of
+             characters. It printed "1×" at exactly one and "1.1×" a step
+             later, and the width difference pushed the wind slider sideways
+             — a control moving under the pointer because a *different*
+             control's label got longer. Tabular figures and a fixed width
+             on the readout finish the job; this is the half that has to be
+             in the string. */
           const at = particleSpeed[field];
-          readout.textContent = at === 1 ? '1×' : `${at < 1 ? at.toFixed(2) : at.toFixed(at < 10 ? 1 : 0)}×`;
+          readout.textContent = `${at.toFixed(2)}×`;
           slider.title = `${name.textContent}: ${readout.textContent} the calibrated rate`;
         };
         slider.addEventListener('input', () => {

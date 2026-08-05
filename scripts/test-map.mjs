@@ -1973,10 +1973,15 @@ const speed = await (async () => {
   };
 })();
 
-const tintSelects = [...(host.closest('[data-ocean-map]')
-  ?.querySelectorAll('[data-particle-colours] select') ?? [])];
-const tintOptions = (i) => [...(tintSelects[i]?.options ?? [])]
-  .map((o) => ({ name: o.textContent, value: o.value, disabled: o.disabled }));
+const tintGroups = [...(host.closest('[data-ocean-map]')
+  ?.querySelectorAll('[data-particle-colours] .om-tints') ?? [])];
+/* Swatches, not options: each is painted in the colour that will actually be
+   drawn, so `value` is the exemplar it was asked for and `paint` is what the
+   search returned for it. */
+const tintOptions = (i) => [...(tintGroups[i]?.querySelectorAll('.om-tint') ?? [])]
+  .map((b) => ({ name: b.getAttribute('aria-label') ?? 'Auto', value: b.dataset.tint,
+                 disabled: b.disabled, paint: b.style.getPropertyValue('--om-tint'),
+                 chosen: b.classList.contains('is-chosen'), el: b }));
 
 const currentTints = tintOptions(0);
 const someTintDisabled = currentTints.some((o) => o.value && o.disabled);
@@ -2026,20 +2031,21 @@ const drawnRamp = () => {
   return ramp ?? null;
 };
 const rampMid = () => drawnRamp()?.[2] ?? null;
-if (tintSelects[0]) {
-  const red = [...tintSelects[0].options].find((o) => o.textContent === 'Red');
+if (tintGroups[0]) {
+  const red = tintOptions(0).find((o) => o.name === 'Red');
   if (red && !red.disabled) {
-    tintSelects[0].value = red.value;
-    tintSelects[0].dispatchEvent(new window.Event('change', { bubbles: true }));
+    red.el.click();
     await new Promise((r) => setTimeout(r, 60));
     const redDrawn = rampMid();
-    staleChoiceTaken = tintSelects[0].value === red.value && redDrawn !== null;
+    staleChoiceTaken = tintOptions(0).find((o) => o.name === 'Red')?.chosen === true && redDrawn !== null;
 
     overlayLabelled(/SST \(ESPC\)/)?.querySelector('input')?.click();
     await new Promise((r) => setTimeout(r, 400));
-    const greyedOption = [...tintSelects[0].options].find((o) => o.textContent === 'Red');
-    staleChoiceKept = tintSelects[0].value === red.value;
-    staleChoiceGreyed = greyedOption?.disabled === true;
+    const greyed = tintOptions(0).find((o) => o.name === 'Red');
+    /* Kept means still *marked as chosen*, not merely still present — the
+       swatch stays in the row either way, so presence proves nothing. */
+    staleChoiceKept = greyed?.chosen === true;
+    staleChoiceGreyed = greyed?.disabled === true;
     /* Not "the ramp changed" — it would change anyway, since the ramp for a
        given colour depends on the background it was searched against, so
        that version passed even when the inadmissible request was still being
@@ -2053,11 +2059,12 @@ if (tintSelects[0]) {
       palette.bars
     );
     // A greyed selection does not explain itself; the tooltip has to.
-    staleChoiceExplained = /would not stand out/.test(tintSelects[0].title ?? '');
+    staleChoiceExplained = /would not stand out/.test(greyed?.el?.title ?? '');
 
     overlayLabelled(/SST \(ESPC\)/)?.querySelector('input')?.click();
     await new Promise((r) => setTimeout(r, 500));
-    staleChoiceResumed = rampMid() === redDrawn && tintSelects[0].value === red.value;
+    staleChoiceResumed = rampMid() === redDrawn &&
+      tintOptions(0).find((o) => o.name === 'Red')?.chosen === true;
   }
 }
 
@@ -2783,7 +2790,9 @@ const checks = [
   ['a restored rate reaches the layer, not just the control',
     Number.isFinite(speed.base) && speed.restoredDrift !== null &&
       Math.abs(speed.restoredDrift - speed.base * 2) < 1e-9],
-  ['and the control agrees with what is drawn', speed.restoredShown === '2.0×'],
+  /* Two decimals always: every value is the same width, so the current
+     field's readout cannot shove the wind slider along the row. */
+  ['and the control agrees with what is drawn', speed.restoredShown === '2.00×'],
   ['moving one scales that field',
     speed.afterMove !== null && Math.abs(speed.afterMove - speed.base * 2) < 1e-9],
   /* Scaling kind.drift in place would make every move compound the last, so
@@ -2791,7 +2800,17 @@ const checks = [
   ['and does not compound with the move before it',
     speed.afterSecondMove !== null && Math.abs(speed.afterSecondMove - speed.base) < 1e-9],
   ['and leaves the other field alone', speed.otherUntouched],
-  ['the reader can choose a particle colour', tintSelects.length === 2],
+  ['the reader can choose a particle colour', tintGroups.length === 2],
+  /* **The swatch shows the colour that will be drawn.** The list used to be
+     colour *names*, and a name is only ever an approximation of what the
+     search returns — it filters to ΔE 18 of an exemplar, so "Blue" over blue
+     water is legitimately the nearest admissible blue-ish ramp and can read
+     as violet. The name then argues with the pixels. Every swatch must carry
+     a painted colour, including the disabled ones: an unavailable choice
+     still shows what it would draw, which is what makes the refusal legible
+     rather than merely stated. */
+  ['every swatch is painted in the colour it would draw',
+    currentTints.length > 1 && currentTints.every((o) => /^#[0-9a-f]{6}$/i.test(o.paint))],
   /* Both halves. A control that disabled everything would satisfy the first
      of these and be useless; one that disabled nothing would satisfy the
      second and be the bug this replaces. */
