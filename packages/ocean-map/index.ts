@@ -1937,9 +1937,15 @@ export async function createOceanMap(
 
       for (const field of ['current', 'wind'] as const) {
         const label = document.createElement('label');
+        /* **Visible, not screen-reader-only.** These were `om-vh` and the row
+           came out as two anonymous sliders with a multiple beside each —
+           nothing said which was the wind. Short here because the row is
+           crowded; the full phrase stays on the slider's own aria-label and
+           title, so the accessible name is still "Wind speed, multiple of
+           the calibrated rate" rather than "Wind". */
         const name = document.createElement('span');
-        name.textContent = field === 'wind' ? 'Wind speed' : 'Current speed';
-        name.className = 'om-vh';
+        name.textContent = field === 'wind' ? 'Wind' : 'Current';
+        name.className = 'om-speed-name';
         label.append(name);
 
         const slider = document.createElement('input');

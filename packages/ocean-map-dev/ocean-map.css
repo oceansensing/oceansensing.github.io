@@ -930,3 +930,7 @@
   font-variant-numeric: tabular-nums;
   min-inline-size: 2.5rem;
 }
+
+.ocean-map .om-speed-name {
+  color: var(--map-credit, #4c5865);
+}

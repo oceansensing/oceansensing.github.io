@@ -39,6 +39,7 @@ const dom = new JSDOM(
   // the markup did would prove nothing.
   '<span data-flow-key>STALE</span>' +
   '<span class="om-particle-colours" data-particle-colours></span>' +
+  '<span class="om-particle-speed" data-particle-speed></span>' +
   // A bare container, as the component's markup is: the module builds one
   // set of colour-scale inputs per field into it.
   '<span class="field-controls" data-field-controls hidden></span>' +
@@ -508,6 +509,15 @@ const SEEDED_VIEW = {
     'Country & state borders',
     'Lat/lon grid',
   ],
+  /* A rate the reader chose, deliberately not 1. The flow layers are built
+     when their grid arrives, so this is the case where applying the scale
+     only on slider input left the control reading one rate while the field
+     drew another. */
+  /* 2x rather than a quarter, and the direction matters: the seeded rate is
+     live for the whole run, and a quarter-speed field drops the per-frame
+     displacement below the sub-pixel floor another check measures. Seeding
+     *faster* exercises the same construction path without starving it. */
+  speeds: { current: 2, wind: 1 },
   /* No `known` list, exactly as every view saved before that field existed.
      Argo is missing from `overlays` for the same reason — it did not exist
      either — and must therefore keep its default rather than be treated as
@@ -1283,6 +1293,24 @@ const salinity = await (async () => {
   return out;
 })();
 
+/* The restored particle rate, captured **before** the Reset check below —
+   Reset puts both fields back to 1x, so measuring after it would test
+   nothing and would have looked like the restore failing. */
+const restoredSpeed = (() => {
+  const scope = host.closest('[data-ocean-map]');
+  let drift = null;
+  host._map.eachLayer((l) => {
+    if (!l.isVelocityLayer) return;
+    const mine = (l.options?.particleSeconds ?? 0) >= 8 ? 'wind' : 'current';
+    if (mine === 'current' && drift === null) drift = l.options.drift;
+  });
+  return {
+    drift,
+    shown: scope?.querySelector('[data-particle-speed] input[data-particle-speed="current"]')
+      ?.closest('label')?.querySelector('.om-speed-readout')?.textContent ?? null,
+  };
+})();
+
 /* Reader control over the colour scale. Three separable behaviours, so three
    checks: the colormap actually changes the pixels, a pinned range survives a
    pan that would otherwise rescale it, and Auto gives the view back. */
@@ -1894,6 +1922,57 @@ const flowKeyRamps = [...(flowKey()?.querySelectorAll('.om-key-flow') ?? [])]
    screen. */
 /* Scoped through `[data-ocean-map]` like every other chrome lookup here —
    `host` is the canvas, and the legend row is its sibling in the caption. */
+/* ---- particle speed ----------------------------------------------------
+
+   A multiplier over each field's calibrated drift. Three separable claims:
+   the slider moves the field it names, the base is not compounded, and a
+   *restored* rate reaches the layer — the last being a bug that shipped,
+   because a saved view is applied before the flow layers exist. */
+const speed = await (async () => {
+  const scope = host.closest('[data-ocean-map]');
+  const sliders = [...(scope?.querySelectorAll('[data-particle-speed] input') ?? [])];
+  /* **Read from the module, not derived from what was measured.** Deriving
+     the base as `restoredDrift * 4` made the restore check circular — it
+     asserted `restoredDrift === (restoredDrift * 4) * 0.25`, which is true
+     whatever the layer is doing, and it passed against a layer that had
+     ignored the restored rate entirely. */
+  const source = fs.readFileSync('packages/ocean-map/index.ts', 'utf8');
+  const base = Number(/const DRIFT = \{ current: ([\d.]+)/.exec(source)?.[1]);
+
+  const driftOf = (kind) => {
+    let at = null;
+    host._map.eachLayer((l) => {
+      if (!l.isVelocityLayer) return;
+      const mine = (l.options?.particleSeconds ?? 0) >= 8 ? 'wind' : 'current';
+      if (mine === kind && at === null) at = l.options.drift;
+    });
+    return at;
+  };
+  const cur = sliders.find((s) => s.dataset.particleSpeed === 'current');
+  const windBefore = driftOf('wind');
+
+  const move = async (to) => {
+    if (!cur) return null;
+    cur.value = String(to);
+    cur.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 150));
+    return driftOf('current');
+  };
+  const afterMove = await move(1);        // 2^1
+  const afterSecondMove = await move(0);  // 2^0 — the base, not two doublings
+  const windAfter = driftOf('wind');
+
+  return {
+    sliders: sliders.length,
+    labelled: sliders.length > 0 && sliders.every((s) =>
+      (s.closest('label')?.querySelector('.om-speed-name')?.textContent ?? '').trim().length > 0 &&
+      !!s.getAttribute('aria-label')),
+    base, restoredDrift: restoredSpeed.drift, restoredShown: restoredSpeed.shown,
+    afterMove, afterSecondMove,
+    otherUntouched: windBefore !== null && windBefore === windAfter,
+  };
+})();
+
 const tintSelects = [...(host.closest('[data-ocean-map]')
   ?.querySelectorAll('[data-particle-colours] select') ?? [])];
 const tintOptions = (i) => [...(tintSelects[i]?.options ?? [])]
@@ -2696,6 +2775,22 @@ const checks = [
      the property that actually matters: the whole point of the key is that
      two sets of drifting lines can be told apart. */
   /* ---- the particle colour picker ---------------------------------- */
+  /* ---- particle speed ---------------------------------------------- */
+  ['a speed slider is offered per animated field', speed.sliders === 2],
+  ['and each says which field it drives', speed.labelled],
+  /* Seeded at 0.25x, so the layer must be *built* at a quarter of its base
+     rather than at the base with the slider merely showing a quarter. */
+  ['a restored rate reaches the layer, not just the control',
+    Number.isFinite(speed.base) && speed.restoredDrift !== null &&
+      Math.abs(speed.restoredDrift - speed.base * 2) < 1e-9],
+  ['and the control agrees with what is drawn', speed.restoredShown === '2.0×'],
+  ['moving one scales that field',
+    speed.afterMove !== null && Math.abs(speed.afterMove - speed.base * 2) < 1e-9],
+  /* Scaling kind.drift in place would make every move compound the last, so
+     two moves must land on the second value rather than on their product. */
+  ['and does not compound with the move before it',
+    speed.afterSecondMove !== null && Math.abs(speed.afterSecondMove - speed.base) < 1e-9],
+  ['and leaves the other field alone', speed.otherUntouched],
   ['the reader can choose a particle colour', tintSelects.length === 2],
   /* Both halves. A control that disabled everything would satisfy the first
      of these and be useless; one that disabled nothing would satisfy the

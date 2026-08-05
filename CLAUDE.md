@@ -976,6 +976,25 @@ scaled in place, or every slider move would compound the last.
 It rides in the saved view like the colour choices, so the hourly self-reload
 does not silently revert it, and Reset returns both fields to 1×.
 
+`test:map` seeds a **non-default** rate into the saved view, which is the
+only way to exercise the construction path at all, and holds seven claims:
+the sliders exist, each says which field it drives, a restored rate reaches
+the layer *and* the control agrees with it, moving one scales that field,
+two moves do not compound, and the other field is untouched. Mutation-tested
+against all three failure shapes — applying the rate only on input, scaling
+`kind.drift` in place, and hiding the label.
+
+Three things about writing that gate are worth not repeating. The first
+version derived the base as `restoredDrift * 4`, which made the restore
+check **circular** — it asserted a number against itself and passed against
+a layer ignoring the restored rate entirely; the base is read out of
+`index.ts` now. The restored rate has to be captured **before** the harness
+clicks Reset, or it measures 1× and looks like the restore failing. And the
+seed is 2× rather than a quarter, because it stays live for the whole run
+and a quarter-speed field drops the per-frame displacement below the
+sub-pixel floor another check measures — a fixture starving a test that had
+nothing to do with it.
+
 #### Particle colours are chosen against what is behind them
 
 `packages/ocean-map/contrast.ts`. Every other colour on this map is fixed and
