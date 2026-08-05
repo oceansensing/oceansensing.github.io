@@ -1076,19 +1076,10 @@
   pointer-events: none;
   user-select: none;
   margin: 0 8px 8px 0;
-  padding: 3px 8px;
+  /* Tight to the type, so the name fills the plate rather than floating in
+     it — the plate is a backing for legibility, not a frame. */
+  padding: 2px 9px 3px;
   border-radius: 4px;
-  /* **Deliberately not the site's type.** Everything else here is Inter or
-     JetBrains Mono, which is the page's voice; this is the instrument's
-     name, and it should read as a mark on a display rather than as more of
-     the page that happens to be sitting on a map.
-
-     Small caps at wide tracking is the whole effect — it is what a legend
-     block on a nautical chart and a readout on a bridge console have in
-     common, and it costs no webfont: the stack is the same monospace the
-     rest of the chrome falls back to, worked differently. A downloaded
-     display face would be a render-blocking request on a page whose first
-     paint we just spent real effort on. */
   /* Chakra Petch — angular, clipped corners, telemetry rather than costume
      sci-fi, which matters when the thing under it is a Navy forecast and a
      real glider fleet.
@@ -1098,25 +1089,49 @@
      reads, and one that wants its own sets `--om-brand-font`. The package
      never depends on a font it cannot see. */
   font-family: var(--om-brand-font, 'Chakra Petch', ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.68rem;
+  font-size: 0.95rem;
   font-weight: 700;
-  /* Real small caps where the face has them, synthesised where it does not:
-     the text is set in uppercase, so this only affects faces that offer a
-     true small-cap set. */
   font-variant-caps: all-small-caps;
   text-transform: uppercase;
-  /* Wide enough to read as spacing rather than as a loose word. The last
-     letter's trailing space is trimmed so the plate stays optically even. */
-  letter-spacing: 0.22em;
-  text-indent: 0.22em;
-  line-height: 1.5;
+  letter-spacing: 0.2em;
+  text-indent: 0.2em;
+  line-height: 1.25;
   white-space: nowrap;
-  color: var(--text-muted, #5b6672);
-  background: color-mix(in srgb, var(--bg, #ffffff) 78%, transparent);
-  border: 1px solid var(--border, #d6dbe0);
+
+  /* **Keyed to the basemap, not the page theme**, which is the fourth time
+     this rule has been paid for here after the shoreline, the isobath halo
+     and the graticule labels: what a mark over the map is seen against is
+     the water under it, not the page around it. A reader in dark mode over
+     the pale Esri basemap needs dark ink; the same reader over GEBCO's navy
+     needs light. The plate is deliberately thin — it is a backing that lifts
+     the type off the water, not a panel that hides it — which makes what is
+     behind matter more, not less.
+
+     Light basemap is the default case; the dark override follows. */
+  color: #1b2530;
+  background: color-mix(in srgb, #ffffff 46%, transparent);
+  border: 1px solid color-mix(in srgb, #1b2530 22%, transparent);
+  text-shadow: 0 1px 0 color-mix(in srgb, #ffffff 55%, transparent);
+}
+
+/* Dark water — GEBCO and the coastline basemap. Light ink, dark plate.
+   Written flat rather than nested under a theme block on purpose: a
+   `:root[data-theme='dark'] .ocean-map` selector is three compounds and
+   would out-specify this two-compound one, which is exactly how the isobath
+   halo resolved to the wrong casing in dark mode for weeks. */
+.ocean-map[data-basemap-tone='dark'] .om-brand {
+  color: #eef3f8;
+  background: color-mix(in srgb, #0b1219 46%, transparent);
+  border-color: color-mix(in srgb, #eef3f8 26%, transparent);
+  text-shadow: 0 1px 2px color-mix(in srgb, #000000 65%, transparent);
 }
 
 /* A browser without color-mix gets the flat surface rather than nothing. */
+/* A browser without color-mix gets flat plates rather than none. */
 @supports not (background: color-mix(in srgb, red 50%, transparent)) {
-  .ocean-map .om-brand { background: var(--bg, #ffffff); }
+  .ocean-map .om-brand { background: rgba(255, 255, 255, 0.46); border-color: rgba(27, 37, 48, 0.22); }
+  .ocean-map[data-basemap-tone='dark'] .om-brand {
+    background: rgba(11, 18, 25, 0.46);
+    border-color: rgba(238, 243, 248, 0.26);
+  }
 }
