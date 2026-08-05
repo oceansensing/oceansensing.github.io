@@ -112,6 +112,29 @@ export async function createOceanMap(
   const find = <T extends Element>(selector: string): T | null =>
     root.querySelector<T>(selector);
 
+  /* **Every piece of chrome that follows the layers registers here**, so it
+     can be re-run when the layers move without going through the control.
+
+     `overlayadd`/`overlayremove` fire only from the layers control — a
+     *checkbox*. `map.addLayer` and `map.removeLayer` do not fire them, and
+     `restoreView` uses exactly those to put a saved view back. So on a
+     reload the chrome was synced once during setup, `restoreView` then
+     switched layers on and off underneath it, and nothing told it: the
+     platform keys sat there naming layers that were off until the reader
+     touched any checkbox, which fired the event and corrected everything at
+     once. That is precisely the shape it looked like — right after a toggle,
+     wrong on arrival.
+
+     Binding to `layeradd`/`layerremove` instead would catch the programmatic
+     case, and is the wrong fix: a LayerGroup already on the map forwards
+     every child add to the map, so the four thousand Argo markers would
+     each fire it. */
+  const chromeSyncs: (() => void)[] = [];
+  const syncChrome = () => {
+    for (const sync of chromeSyncs) sync();
+  };
+
+
   const CONFIG = {
     /* Where the generated grids live. Every fetch below is relative to
        this, so another site points it at a URL and is done — the files are
@@ -1823,6 +1846,7 @@ export async function createOceanMap(
         }
       };
       map.on('overlayadd overlayremove', showFlowKeys);
+      chromeSyncs.push(showFlowKeys);
       /* And whenever the ramps are re-picked, which a layer event does not
          cover: changing the colour scale changes the background, which
          changes the particle colours, with no layer going on or off. A
@@ -1837,6 +1861,7 @@ export async function createOceanMap(
      here rather than inside either block, so it fires once whichever of them
      the host has chosen to render. */
   map.on('overlayadd overlayremove', showFlowControls);
+  chromeSyncs.push(showFlowControls);
 
   /* ---- the particle colour control ------------------------------------
 
@@ -3084,6 +3109,7 @@ export async function createOceanMap(
         }
       };
       map.on('overlayadd overlayremove', showPlatformKeys);
+      chromeSyncs.push(showPlatformKeys);
       showPlatformKeys();
     }
   }
@@ -3592,6 +3618,10 @@ export async function createOceanMap(
   };
 
   const restored = restoreView();
+  /* The view is in place now, and it got there by adding and removing layers
+     directly rather than through the control — so nothing has told the
+     chrome. */
+  syncChrome();
   map.on('moveend zoomend baselayerchange overlayadd overlayremove', saveView);
 
   /* Isobath opacity, in the legend row beside the colour-scale controls
@@ -4213,6 +4243,7 @@ export async function createOceanMap(
      were written once and never revisited, which is exactly why they went on
      naming platforms that had been switched off. */
   map.on('overlayadd overlayremove', showStatus);
+  chromeSyncs.push(showStatus);
 
   const rad = Math.PI / 180;
 

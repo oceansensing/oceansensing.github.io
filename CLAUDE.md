@@ -892,6 +892,20 @@ touched the next field's name. Fixed widths are right here — they are what
 stops one control moving when another's label grows — but they have to be
 wide enough for the longest string plus its own padding.
 
+**`overlayadd`/`overlayremove` fire only from the layers control**, and that
+caught every piece of this at once. They are a *checkbox* event:
+`map.addLayer` and `map.removeLayer` do not fire them, and `restoreView` uses
+exactly those to put a saved view back. So on a reload the chrome synced once
+during setup, `restoreView` then moved layers underneath it, and nothing said
+so — the platform keys named layers that were off until the reader touched
+any checkbox, which fired the event and corrected everything at once. Right
+after a toggle, wrong on arrival, which is what it looked like.
+
+Every sync registers in `chromeSyncs` and is re-run after `restoreView`.
+Binding to `layeradd`/`layerremove` instead would catch the programmatic case
+and is the wrong fix: a `LayerGroup` already on the map forwards every child
+add to the map, so four thousand Argo markers would each fire it.
+
 **Chrome describing a layer is hidden while that layer is off**, and that
 now covers the legend keys, both particle controls, and every fact in the
 status line. A count of something the reader cannot see is worse than no
