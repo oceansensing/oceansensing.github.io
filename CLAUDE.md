@@ -711,6 +711,69 @@ black. The active basemap's tone is published as `data-basemap-tone` on the
 map container and **only light basemaps are dimmed**. Add a basemap and it
 counts as dark unless you list it in `LIGHT_BASEMAPS`.
 
+### How quickly the map appears
+
+Reported as a 2–3 second delay before the map showed up at all. Measured on
+the live site, fully cached: **one synchronous task of 1,669 ms**, and the
+first basemap tile was not *requested* until 1,681 ms.
+
+**Caching could not have helped, and that is worth stating because it is the
+obvious first guess.** The profiled load was already fully cached —
+`responseEnd` 4 ms, every resource served from cache — and still took
+1,669 ms. The cost is parse plus execute, which a warm cache pays in full.
+
+Decomposed with `performance.mark` against a local production build, which
+is the only way to see inside one long task:
+
+| segment | ms |
+| --- | --- |
+| module start → map object | 41 |
+| building the field layers and chrome | 350 |
+| the basemap swap inside `restoreView` | 322 |
+| **`map.setView()`** | **973** |
+
+`setView` dominated because it was the moment the map first *had* a view, so
+every already-attached layer rendered at once — graticule, isobaths, the
+scalar canvas, the particle field, four thousand Argo markers — with the
+browser unable to paint until all of it finished.
+
+Two changes, and between them they moved everything:
+
+- **The reader gets a view before anything is built.** Leaflet requests no
+  tiles until the map has a centre and a zoom, so the opening view is read
+  straight out of storage — not through `restoreView`, which cannot run yet
+  because it restores *which overlays are on* and they do not exist at that
+  point. This is only the where-am-I-looking half.
+- **One `await` after the basemap is attached**, so the browser can paint it
+  before the remaining layers are built. `setTimeout`, **not**
+  `requestAnimationFrame`: rAF does not fire at all in a hidden tab, so a
+  map built in a background tab would never finish starting — the same trap
+  the particle loop has a note about, reached from the other side.
+
+| | before | after |
+| --- | --- | --- |
+| first tile requested | 1,681 ms | **41 ms** |
+| `domContentLoaded` | 1,734 ms | **41 ms** |
+| longest blocking task | 1,669 ms | 350–690 ms, and now *after* first paint |
+
+**Opening on the reader's own basemap rather than the default.** Once the map
+has a view several thousand lines earlier than it used to, swapping tile
+layers stops being free — it discards a loaded set and requests another,
+measured at 654 ms. `restoreView` now skips the swap when the right basemap
+is already on.
+
+**That guard immediately broke the basemap tone, and `test:map` caught it.**
+`markBasemapTone` was called *inside* the swap, and with no swap to make it
+never ran, so the tile pane was GEBCO while the container still advertised
+the default. It is called outside the swap now. Exactly the failure shape
+this project keeps meeting — right pixels, wrong label — and the only reason
+it did not ship is that a check already asserted the tone follows the
+basemap actually showing.
+
+Still on the table: the ~350 ms of layer and chrome construction that now
+runs after first paint. It no longer delays the map appearing, so it is a
+smoothness problem rather than a blank-box one.
+
 ### How big the map is
 
 **It scales with the window in both axes, and neither is capped.** That took
