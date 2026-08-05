@@ -582,6 +582,14 @@ process.on('unhandledRejection', (reason) => noteError('node unhandledRejection'
 await import('./' + path.join('..', 'dist', '_astro', bundle));
 await new Promise((r) => setTimeout(r, 1500));
 
+/* **Taken here, before the harness touches a single control.** Every data
+   layer used to fetch its grid at startup — three velocity fields and six
+   scalar fields — whether or not the preset or the saved view ever showed
+   one. This snapshot is what makes "was never fetched" answerable; asking
+   later measures the harness's own toggling instead, which is exactly how
+   the first version of this check failed. */
+const startupFetches = fetched.map(String);
+
 const host = document.getElementById('asset-map');
 
 /* Found by the layer's own public tag rather than by a private field of
@@ -2268,8 +2276,35 @@ if (resizeWatch) {
 host._map.setView([25, -75], 6, { animate: false });
 await new Promise((r) => setTimeout(r, 300));
 
+/* ---- a layer nobody is looking at is not fetched --------------------
+
+   Every data layer used to fetch its grid at startup: three velocity fields
+   and six scalar fields, whether or not the preset or the saved view showed
+   any of them. The seeded view above turns on the surface current and no
+   scalar field at all, so salinity is the case — a layer that exists in the
+   switcher, has never been shown, and must therefore have cost nothing.
+
+   Both halves are needed. "It was not fetched" alone would also pass if the
+   layer were broken and never fetched at all, so the same layer is then
+   switched on and has to load. */
+const grid = (name) => fetched.some((u) => String(u).includes(name));
+const sssBeforeShown = startupFetches.some((u) => u.includes('sss-navy.json'));
+
+const sssLabel = [...host.ownerDocument.querySelectorAll(
+  '.leaflet-control-layers-overlays label')].find((l) => l.textContent.includes('SSS (ESPC)'));
+sssLabel?.querySelector('input')?.click();
+await new Promise((r) => setTimeout(r, 600));
+const sssAfterShown = grid('sss-navy.json');
+
+// And the layer the seeded view *did* ask for was fetched, so the deferral
+// is not simply refusing to load anything.
+const shownWasFetched = startupFetches.some((u) => u.includes('currents.json'));
+
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
+  ['a layer nobody has shown is never fetched', sssBeforeShown === false],
+  ['and it loads as soon as it is switched on', sssAfterShown],
+  ['while a layer the view did ask for was fetched', shownWasFetched],
   /* The drift is a constant in pixels per (m/s) and must **not** move with
      the view. It used to: the old plugin multiplied by the viewport area and
      the projection's Jacobian, so the map measured those and divided them

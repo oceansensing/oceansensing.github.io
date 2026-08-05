@@ -68,6 +68,20 @@ export interface OceanMapOptions {
       and a hurricane map differ in their preset and their home bounds, not in
       their code. Reset returns to the preset, not to the built-in defaults. */
   layers?: string[];
+  /** Layers to fetch and build at startup even though they open switched
+      off. `data-map-preload`, as a JSON array.
+
+      A layer costs a fetch and a construction, and until this existed every
+      one of them paid that on every page load whether or not the reader
+      ever looked at it. The default is now to build a layer the first time
+      it is shown, so **the preset decides what gets built** — which is the
+      right rule for nearly every page, and needs nothing set here.
+
+      This is the escape hatch for the case that rule gets wrong: a layer a
+      page expects readers to reach for immediately, where waiting for the
+      fetch after the click is worse than paying for it up front. Naming a
+      layer here that is already in `layers` is harmless and redundant. */
+  preload?: string[];
 }
 
 
@@ -164,6 +178,9 @@ export async function createOceanMap(
        opening state, which is what every deployment had before presets. */
     layers:
       options.layers ?? readJson<string[] | undefined>(host.dataset.mapLayers, undefined),
+    /* Built at startup despite opening off — see `preload` in the options. */
+    preload:
+      options.preload ?? readJson<string[] | undefined>(host.dataset.mapPreload, undefined),
   };
 
   const BASIN = CONFIG.home;
@@ -860,11 +877,56 @@ export async function createOceanMap(
     reads: 'toward' | 'from';
   };
 
+  /* ---- building a layer only once somebody looks at it ----------------
+
+     Every data layer used to fetch its grid and construct itself at startup:
+     three velocity fields and six scalar fields, whether or not the page's
+     preset showed any of them. On `/visualization/` that is four layers on
+     screen and fourteen built for nobody.
+
+     A layer registers its loader here instead, and it runs the first time
+     the layer is actually shown. So **the preset decides what gets built**,
+     with no list to keep in step — a page that opens on SST pays for SST,
+     and a page that does not, does not.
+
+     `group.once('add')` rather than the map's `overlayadd`, and that is the
+     load-bearing detail. `overlayadd` is a *checkbox* event: it fires only
+     from the layers control, so a layer switched on by the preset or by a
+     restored view would never have loaded, and the reader would get an
+     empty layer that filled in only if they toggled it off and on again.
+     A layer's own `add` fires however it was added.
+
+     The entry in `flows`/`ssts` is still registered eagerly, because the
+     point readout and the exclusivity groups index by group and both
+     already ask `map.hasLayer` before reading anything. Only the fetch and
+     the construction wait. */
+  const pendingLoads = new Map<L.Layer, () => void>();
+
+  /** `fetch`, held until the layer is first shown.
+
+      Shaped as a fetch on purpose: every tier chain below is a long promise
+      chain, and swapping one call for another leaves all of them untouched.
+      Restructuring them into deferred bodies was the alternative and is a
+      far larger edit for the same behaviour. */
+  const fetchWhenShown = (group: L.LayerGroup, url: string): Promise<Response> =>
+    new Promise<Response>((resolve) => {
+      let done = false;
+      const go = () => {
+        if (done) return;
+        done = true;
+        pendingLoads.delete(group);
+        resolve(fetch(url));
+      };
+      pendingLoads.set(group, go);
+      if (map.hasLayer(group)) go();
+      else group.once('add', go);
+    });
+
   const buildFlow = (url: string, group: L.LayerGroup, kind: FlowKind) => {
     const entry: { group: L.LayerGroup; layer: L.Layer | null; kind: FlowKind } =
       { group, layer: null, kind };
     flows.push(entry);
-    fetch(url).then((r) => r.json())
+    fetchWhenShown(group, url).then((r) => r.json())
     .then((loadedCoarse) => {
       // Reassignable: stepping to another forecast hour swaps the whole
       // chain — this grid, its regions and its tiles — for that hour's.
@@ -1292,7 +1354,7 @@ export async function createOceanMap(
     const entry: { group: L.LayerGroup; layer: ScalarLayer } = { group, layer };
     ssts.push(entry);
 
-    fetch(url)
+    fetchWhenShown(group, url)
       .then((r) => r.json())
       .then((loadedCoarse: ScalarGrid) => {
         // Reassignable for the same reason as the flow layer's: a forecast
@@ -2768,6 +2830,18 @@ export async function createOceanMap(
       if (wanted.has(name) && !map.hasLayer(layer)) map.addLayer(layer);
       if (!wanted.has(name) && map.hasLayer(layer)) map.removeLayer(layer);
     }
+  }
+
+  /* **Warm anything the page asked for beyond its preset.** Applied after
+     the preset, because the preset has just decided what is on and those
+     have loaded themselves already; this is only for layers that open off
+     and are still expected to be reached for.
+
+     Names are the switcher's, the same identities a preset uses, so a
+     misspelling here does nothing at all — which is why `check:docs` reads
+     the names out of `overlays` and holds both lists to them. */
+  for (const name of CONFIG.preload ?? []) {
+    pendingLoads.get(overlays[name] as L.Layer)?.();
   }
 
   /* What "default" means, captured rather than restated. Every layer that

@@ -774,6 +774,51 @@ Still on the table: the ~350 ms of layer and chrome construction that now
 runs after first paint. It no longer delays the map appearing, so it is a
 smoothness problem rather than a blank-box one.
 
+#### A layer nobody is looking at costs nothing
+
+Every data layer used to fetch its grid at startup — three velocity fields
+and six scalar fields — whether or not the page ever showed one. On
+`/visualization/` that is four layers on screen and fourteen built for
+nobody. Measured: **nine grid fetches on open, now one.**
+
+**The preset decides what gets built, and there is no second list.** A layer
+registers its loader and it runs the first time the layer is actually shown,
+so a page that opens on SST pays for SST and a page that does not, does not.
+Nothing has to be kept in step with the preset because the preset *is* the
+input — which is what makes this adjustable per page rather than a fixed
+idea of "unused".
+
+`preload` is the escape hatch, for a layer that opens off but the page
+expects readers to reach for immediately, where waiting for the fetch after
+the click is worse than paying up front. `check:docs` holds it to the same
+rule as `layers` — both name layers out of the module's `overlays`, and a
+misspelling in either does nothing at all, silently.
+
+**`group.once('add')`, never the map's `overlayadd`**, and that is the whole
+correctness of it. `overlayadd` is a *checkbox* event: it fires only from
+the layers control, so a layer switched on by the preset or by a restored
+view would never have loaded and the reader would get an empty layer that
+filled in only if they toggled it off and on again. A layer's own `add`
+fires however it was added. Same trap the chrome sync already has a note
+about, met from the other side.
+
+The registry entry in `flows`/`ssts` is still made eagerly. The point
+readout and the exclusivity groups index by group and both already ask
+`map.hasLayer` before reading anything, so only the fetch and the
+construction wait.
+
+**It is shaped as a `fetch`** — `fetchWhenShown(group, url)` returning a
+promise of a `Response` — because every tier chain is a long promise chain
+and swapping one call for another leaves all of them untouched.
+Restructuring them into deferred bodies was tried first and is a far larger
+edit for identical behaviour.
+
+**What this does not fix is the blocking task**, and that is worth stating
+plainly: it is still ~700 ms, because that is synchronous construction and
+`setView`, not fetching. What it buys is nine requests down to one, less
+work after load, and a data host that is not asked for eight grids nobody
+opened. Mutation-tested by making the loaders fire immediately again.
+
 ### How big the map is
 
 **It scales with the window in both axes, and neither is capped.** That took

@@ -439,11 +439,20 @@ if (overlayBlock) {
     .map((f) => `src/pages/${f}`);
   for (const page of pages) {
     const text = fs.readFileSync(page, 'utf8');
-    const preset = /layers=\{\[([\s\S]*?)\]\}/.exec(text);
-    if (!preset) continue;
-    for (const [, name] of preset[1].matchAll(/'([^']+)'/g)) {
-      if (!known.has(name)) {
-        note(page, `opens the map on \`${name}\`, which is not a layer the map offers`);
+    /* Both lists, because they fail the same silent way. `layers` is what
+       opens on; `preload` is what is fetched at startup despite opening
+       off. A misspelling in either does nothing at all — the preset simply
+       switches nothing on, and the preload simply warms nothing. */
+    for (const [prop, verb] of [
+      ['layers', 'opens the map on'],
+      ['preload', 'preloads'],
+    ]) {
+      const list = new RegExp(`${prop}=\\{\\[([\\s\\S]*?)\\]\\}`).exec(text);
+      if (!list) continue;
+      for (const [, name] of list[1].matchAll(/'([^']+)'/g)) {
+        if (!known.has(name)) {
+          note(page, `${verb} \`${name}\`, which is not a layer the map offers`);
+        }
       }
     }
   }
