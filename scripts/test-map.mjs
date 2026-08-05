@@ -547,6 +547,38 @@ if (!bundle) {
   console.error('no AssetMap bundle in dist/_astro — run `npm run build` first');
   process.exit(1);
 }
+/* ---- anything thrown while the map sets itself up is a failure --------
+
+   **It was not, and that is how a temporal-dead-zone error shipped.** A
+   block read `overlays` from above its declaration; `astro check` cannot see
+   a runtime ordering fault, and the module's setup runs inside a promise, so
+   the rejection surfaced as an unhandled rejection that nothing was
+   listening for. Every check kept passing — most of them measure things that
+   were built before the throw — and the browser console was the only place
+   it appeared.
+
+   Three routes are covered because a throw can take any of them: a
+   synchronous error inside the module reaches `window.onerror`, an async one
+   reaches `unhandledrejection` in the jsdom window, and one thrown outside
+   any jsdom handler reaches Node's own. Recording rather than exiting, so
+   the run still reports every other check and this shows up beside them
+   instead of truncating the output.
+
+   Mutation-tested by reinstating the original fault — moving the block that
+   reads `overlays` back above its declaration. Before this existed the run
+   passed 230 checks with the map half-built; now it fails. Worth knowing
+   *how* it fails: for that particular fault the harness dies during import
+   rather than reaching the check, so what `verify` sees is a crash rather
+   than a named line. Either way the gate is no longer green on a map that
+   did not finish starting, which is the property that was missing. */
+const setupErrors = [];
+const noteError = (what, err) => {
+  setupErrors.push(`${what}: ${err?.message ?? err?.reason?.message ?? String(err)}`);
+};
+window.addEventListener('error', (e) => noteError('error', e.error ?? e));
+window.addEventListener('unhandledrejection', (e) => noteError('unhandledrejection', e.reason ?? e));
+process.on('unhandledRejection', (reason) => noteError('node unhandledRejection', reason));
+
 await import('./' + path.join('..', 'dist', '_astro', bundle));
 await new Promise((r) => setTimeout(r, 1500));
 
@@ -2919,6 +2951,11 @@ const checks = [
      the property that actually matters: the whole point of the key is that
      two sets of drifting lines can be told apart. */
   /* ---- the particle colour picker ---------------------------------- */
+  /* The map has to *start*. Every other check here measures something the
+     module built; none of them notices if it stopped building halfway. */
+  ['nothing throws while the map sets itself up',
+    setupErrors.length === 0 || setupErrors.join(' | ')],
+
   /* ---- chrome on arrival ---------------------------------------------- */
   ['every legend key is named after a real layer', chromeOnArrival.named > 0],
   ['and agrees with its layer before anything is touched',

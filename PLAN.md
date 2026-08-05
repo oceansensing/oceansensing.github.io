@@ -132,13 +132,14 @@ them written down.
   pre-`known` older-view fallback. One map per run cannot seed both. The fix
   is a second map instance in the harness, or a second harness.
 
-- **An uncaught error during map setup does not fail anything.** A
-  temporal-dead-zone error shipped this session — a block reading `overlays`
-  from above its declaration — and `astro check` cannot see a runtime
-  ordering fault while `test:map` treats an unhandled rejection during init
-  as nothing at all. The browser console was the only place it appeared. A
-  handler that fails the run on any uncaught error would have caught it, and
-  would be a few lines.
+- ~~An uncaught error during map setup does not fail anything.~~ **Closed.**
+  `test:map` listens on `window.onerror`, the window's `unhandledrejection`
+  and Node's own, and fails the run on any of them. Mutation-tested by
+  reinstating the original temporal-dead-zone fault: the run used to pass 230
+  checks with the map half-built. One rough edge left — for that fault the
+  harness dies during import rather than reaching the check, so `verify` sees
+  a crash rather than a named failure. It fails either way, which was the
+  missing property; a tidier report would be nice and is not urgent.
 
 ### The exclusivity checkbox desync
 
