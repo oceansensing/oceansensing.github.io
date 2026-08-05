@@ -2419,6 +2419,32 @@ exclusive with each other**, not just the two SSTs: they share that pane, so
 the upper one hides the lower and the map would name two fields while showing
 one.
 
+**The raster is painted 30% past every visible edge**, the same
+`VIEW_MARGIN` the particle field uses and for the same reason: the canvas is
+positioned in *layer* coordinates, so a drag carries it and what was painted
+stays over the water it was painted for. A pan up to that margin reveals
+field that is already there instead of a blank strip that fills in on
+`moveend`.
+
+**The automatic range is bounded to the viewport, not the canvas**, and that
+is not tidiness. The margin is 2.56x the area, so letting it into the range
+pass would let water the reader cannot see stretch the ramp and flatten what
+they can — a margin reaching into much colder water would do it silently,
+with the legend printing bounds that do not describe the picture. Paint
+wide, measure narrow.
+
+It costs a repaint: measured on a 1358x696 viewport, `_render` went from
+~55 ms to **98 ms**. Bounding the range pass is what keeps that from being
+the full 2.56x. The repaint happens on `moveend`, after the drag, and what
+the reader sees during the drag is the pre-painted margin.
+
+**The margin is only as good as the grid under it.** Over the global grid it
+is fully painted; on a regional grid the margin can reach past the region's
+own bounds and stay blank — measured, a view of -90 to -30 against an 80
+degree region left the left margin 2/9 painted. That ground was blank before
+too, so nothing regressed; it is simply not a promise the margin can keep
+everywhere.
+
 **That layer is `packages/ocean-map/scalar-layer.ts`**, along with `FIELDS`
 — the catalogue of what it can paint — and the `FieldDescriptor` that says
 what a paintable quantity is.
@@ -3220,7 +3246,15 @@ defeated the `hidden` attribute, because a class that sets `display` beats
 `[hidden]` at equal specificity. The browser check that passed before the CSS
 fix proved nothing about after it. **Re-verify after a fix, not before it.**
 
-**A check that cannot fail.** A restore assertion derived its expected value
+**A check that cannot fail.** `test:map` prints `ok` for any *truthy* value,
+so the tidy-looking `condition || 'why it failed'` idiom passes whenever the
+condition is false — the reason string is truthy. Two checks written this
+session had it, including the setup-error gate, which had been reported as
+mutation-tested: the fault it was tried against killed the harness during
+import, so the run went red without the check ever being reached, and its
+own failure path had never once executed. Put the detail in the check's
+*name* and give the value as a strict boolean.
+A restore assertion derived its expected value
 from the measurement it was checking. A label check ran `every()` over an
 empty list. A mutation planted in one package was masked by the sandbox copy,
 because `builtCss` concatenates all of `dist`. Every one of these was green

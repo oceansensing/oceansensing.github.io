@@ -2276,6 +2276,43 @@ if (resizeWatch) {
 host._map.setView([25, -75], 6, { animate: false });
 await new Promise((r) => setTimeout(r, 300));
 
+/* ---- the field is painted past the visible edge ----------------------
+
+   A pan reveals ground the field has already been drawn for, rather than a
+   blank strip that fills in on `moveend`. The canvas is positioned in layer
+   coordinates, so the pane carries it and what was painted stays over the
+   water it was painted for.
+
+   jsdom does no layout, so this asserts the geometry — the canvas is 1.6x
+   the viewport in each axis — rather than the pixels. The painting itself
+   is checked in a browser, where a canvas has a rendering context. */
+/* Switched on here rather than relying on whatever an earlier block left
+   showing. The seeded view carries no scalar field at all, and layers are
+   built lazily now, so "find one that is on" measured harness state and not
+   the layer — which is how the first version of this passed once and failed
+   the next run. */
+const marginLabel = [...host.ownerDocument.querySelectorAll(
+  '.leaflet-control-layers-overlays label')].find((l) => l.textContent.includes('SST (OISST'));
+const marginInput = marginLabel?.querySelector('input');
+if (marginInput && !marginInput.checked) marginInput.click();
+await new Promise((r) => setTimeout(r, 900));
+host._map.setView([20, -50], 4, { animate: false });
+await new Promise((r) => setTimeout(r, 900));
+
+const scalarForMargin = Object.values(host._map._layers).find(
+  (l) => typeof l.getGrid === 'function' && l._canvas && host._map.hasLayer(l)
+);
+const scalarCv = scalarForMargin?._canvas ?? null;
+const mapSize = host._map.getSize();
+const marginRatio = scalarCv && mapSize.x > 0
+  ? { x: scalarCv.width / mapSize.x, y: scalarCv.height / mapSize.y }
+  : null;
+/* Whole pixels are rounded, so an exact 1.6 is not required — but 1.0 is
+   the pre-margin behaviour and must not pass. */
+const paintsPastEdge = !!marginRatio
+  && marginRatio.x > 1.5 && marginRatio.x < 1.7
+  && marginRatio.y > 1.5 && marginRatio.y < 1.7;
+
 /* ---- a layer nobody is looking at is not fetched --------------------
 
    Every data layer used to fetch its grid at startup: three velocity fields
@@ -2302,6 +2339,9 @@ const shownWasFetched = startupFetches.some((u) => u.includes('currents.json'));
 
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
+  [`the field is painted 30% past every edge`
+    + (paintsPastEdge ? '' : ` — ratio was ${JSON.stringify(marginRatio)}`),
+    paintsPastEdge],
   ['a layer nobody has shown is never fetched', sssBeforeShown === false],
   ['and it loads as soon as it is switched on', sssAfterShown],
   ['while a layer the view did ask for was fetched', shownWasFetched],
@@ -2988,8 +3028,9 @@ const checks = [
   /* ---- the particle colour picker ---------------------------------- */
   /* The map has to *start*. Every other check here measures something the
      module built; none of them notices if it stopped building halfway. */
-  ['nothing throws while the map sets itself up',
-    setupErrors.length === 0 || setupErrors.join(' | ')],
+  [`nothing throws while the map sets itself up`
+    + (setupErrors.length ? `: ${setupErrors.join(' | ')}` : ''),
+    setupErrors.length === 0],
 
   /* ---- chrome on arrival ---------------------------------------------- */
   ['every legend key is named after a real layer', chromeOnArrival.named > 0],

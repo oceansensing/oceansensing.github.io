@@ -16,6 +16,19 @@ import L from 'leaflet';
 import { rampColour } from './ramp';
 import type { ScalarGrid } from './schema';
 
+/* How far past the visible edge the raster is painted, as a fraction of the
+   viewport on every side.
+
+   The same 30% the particle field uses, and for the same reason: the canvas
+   is positioned in *layer* coordinates, so a drag carries it and whatever
+   was painted stays over the water it was painted for. Without a margin the
+   strip a pan reveals is simply unpainted until the next `moveend` render,
+   so the field arrives a beat after the basemap under it.
+
+   It costs 1.6x in each dimension, so 2.56x the pixels — see the note on
+   `_render`, where that is measured rather than assumed. */
+const VIEW_MARGIN = 0.3;
+
 /* What a scalar layer needs to know about the quantity it is painting.
    `FIELDS` below is the whole set; a new scalar is an entry there and one in
    the pipeline's PRODUCTS, not another layer. */
@@ -233,12 +246,18 @@ const SstLayer = L.Layer.extend({
     if (!map || !cv) return;
 
     const size = map.getSize();
-    if (cv.width !== size.x || cv.height !== size.y) {
-      cv.width = size.x;
-      cv.height = size.y;
+    /* Whole pixels, so the container-point offsets below stay integers and
+       a row or column cannot land half a pixel off the lattice. */
+    const mx = Math.round(size.x * VIEW_MARGIN);
+    const my = Math.round(size.y * VIEW_MARGIN);
+    if (cv.width !== size.x + mx * 2 || cv.height !== size.y + my * 2) {
+      cv.width = size.x + mx * 2;
+      cv.height = size.y + my * 2;
     }
-    // Pin the canvas to the map pane's origin so it travels with a drag.
-    L.DomUtil.setPosition(cv, map.containerPointToLayerPoint([0, 0]));
+    /* Pinned in *layer* coordinates, offset by the margin, so the pane
+       carries it through a drag and the pre-painted margin is already over
+       the water it belongs to when that water comes into view. */
+    L.DomUtil.setPosition(cv, map.containerPointToLayerPoint([-mx, -my]));
 
     const ctx = cv.getContext('2d');
     if (!ctx) return;
@@ -269,7 +288,7 @@ const SstLayer = L.Layer.extend({
     const wraps = Math.abs(h.nx * h.dx - 360) < h.dx;
     const cols = new Float64Array(w);
     for (let x = 0; x < w; x++) {
-      const lng = map.containerPointToLatLng([x + 0.5, 0]).lng;
+      const lng = map.containerPointToLatLng([x + 0.5 - mx, 0]).lng;
       const u = ((((lng - h.lo1) % 360) + 360) % 360) / h.dx;
       if (wraps) cols[x] = u % h.nx;
       else cols[x] = u >= 0 && u <= h.nx - 1 ? u : -1;
@@ -321,16 +340,24 @@ const SstLayer = L.Layer.extend({
        paint — so invert the projection for them once and keep them. */
     const rowV = new Float64Array(ht);
     for (let y = 0; y < ht; y++) {
-      rowV[y] = (h.la1 - map.containerPointToLatLng([0, y + 0.5]).lat) / h.dy;
+      rowV[y] = (h.la1 - map.containerPointToLatLng([0, y + 0.5 - my]).lat) / h.dy;
     }
 
     /* First pass, on a coarse stride: the range only needs the extremes,
        and sampling every sixteenth pixel finds them just as well as
-       sampling all 650,000 while costing a fraction of the work. */
+       sampling all 650,000 while costing a fraction of the work.
+
+       **Bounded to the viewport, not the canvas**, and that is not tidiness.
+       The canvas runs 30% past every edge so a pan has field to reveal, but
+       the automatic range is defined as the bounds of the water *in view* —
+       and the margin is 2.56x the area, so letting it in would let water the
+       reader cannot see stretch the ramp and flatten what they can. A margin
+       reaching into much colder water would do it silently, with the legend
+       printing a range that does not describe the picture. */
     const seen: number[] = [];
-    for (let y = 0; y < ht; y += 4) {
+    for (let y = my; y < ht - my; y += 4) {
       if (rowV[y]! < 0 || rowV[y]! > h.ny - 1) continue;
-      for (let x = 0; x < w; x += 4) {
+      for (let x = mx; x < w - mx; x += 4) {
         const u = cols[x]!;
         if (u < 0) continue;
         const v = sample(u, rowV[y]!);
