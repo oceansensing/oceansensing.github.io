@@ -82,6 +82,17 @@ export interface OceanMapOptions {
       fetch after the click is worse than paying for it up front. Naming a
       layer here that is already in `layers` is harmless and redundant. */
   preload?: string[];
+  /** A short label drawn over the map's bottom-right corner.
+      `data-map-brand`.
+
+      **The host's, never the package's.** This map is built to be embedded
+      elsewhere and ported to iOS, so a name baked into the module would put
+      one lab's branding on somebody else's map. Absent means no label, which
+      is what any other deployment gets until it asks for one.
+
+      It is a mark on the canvas rather than a line of chrome, so a
+      screenshot of the map carries it. */
+  brand?: string;
 }
 
 
@@ -181,6 +192,7 @@ export async function createOceanMap(
     /* Built at startup despite opening off — see `preload` in the options. */
     preload:
       options.preload ?? readJson<string[] | undefined>(host.dataset.mapPreload, undefined),
+    brand: options.brand ?? host.dataset.mapBrand ?? '',
   };
 
   const BASIN = CONFIG.home;
@@ -3428,6 +3440,29 @@ export async function createOceanMap(
   if (!restored) map.fitBounds(BASIN);
 
   L.control.scale({ imperial: false }).addTo(map);
+
+  /* The viewer's name, over the map rather than beside it — so a screenshot
+     of the map carries it and arrives somewhere still saying what it is.
+     Bottom-right, which the credit vacated when it moved into the caption,
+     and which balances the scale bar opposite.
+
+     `pointer-events: none` in the stylesheet, because a mark that eats a
+     click is worse than no mark: this map reads a right-click, a long press
+     and a measuring click, and all three land on the canvas underneath. */
+  if (CONFIG.brand) {
+    const Brand = L.Control.extend({
+      options: { position: 'bottomright' },
+      onAdd() {
+        const el = L.DomUtil.create('div', 'om-brand');
+        el.textContent = CONFIG.brand;
+        /* Decoration, not content: the page's own heading already names
+           this, so a screen reader meeting it again here learns nothing. */
+        el.setAttribute('aria-hidden', 'true');
+        return el;
+      },
+    });
+    map.addControl(new Brand());
+  }
 
   /* ---- the point readout -------------------------------------------- */
 

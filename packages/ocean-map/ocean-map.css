@@ -1054,3 +1054,61 @@
 [data-flow-key][hidden] {
   display: none;
 }
+
+/* ---- the viewer's name, over the map ---------------------------------
+
+   A branding mark rather than chrome: it sits on the canvas so a screenshot
+   of the map carries it, in the bottom-right corner the credit vacated when
+   it moved into the caption, balancing the scale bar opposite.
+
+   **It must never take a pointer event.** This map reads a right-click for
+   the point readout, a long press for the same on touch, and a plain click
+   while measuring — all of which land on the canvas underneath this. A mark
+   that swallows one of them is worse than no mark at all.
+
+   Legibility comes from its own backing rather than from a colour chosen
+   against the water, and that is deliberate: the thing behind it is any of
+   four basemaps or any of twenty-five colour scales, so no single ink clears
+   them all. A translucent plate of the map's own surface colour, the way the
+   scale bar opposite is treated, keeps it readable over every one of them
+   without entering the contrast gate's argument at all. */
+.ocean-map .om-brand {
+  pointer-events: none;
+  user-select: none;
+  margin: 0 8px 8px 0;
+  padding: 3px 8px;
+  border-radius: 4px;
+  /* **Deliberately not the site's type.** Everything else here is Inter or
+     JetBrains Mono, which is the page's voice; this is the instrument's
+     name, and it should read as a mark on a display rather than as more of
+     the page that happens to be sitting on a map.
+
+     Small caps at wide tracking is the whole effect — it is what a legend
+     block on a nautical chart and a readout on a bridge console have in
+     common, and it costs no webfont: the stack is the same monospace the
+     rest of the chrome falls back to, worked differently. A downloaded
+     display face would be a render-blocking request on a page whose first
+     paint we just spent real effort on. */
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.62rem;
+  font-weight: 600;
+  /* Real small caps where the face has them, synthesised where it does not:
+     the text is set in uppercase, so this only affects faces that offer a
+     true small-cap set. */
+  font-variant-caps: all-small-caps;
+  text-transform: uppercase;
+  /* Wide enough to read as spacing rather than as a loose word. The last
+     letter's trailing space is trimmed so the plate stays optically even. */
+  letter-spacing: 0.22em;
+  text-indent: 0.22em;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--text-muted, #5b6672);
+  background: color-mix(in srgb, var(--bg, #ffffff) 78%, transparent);
+  border: 1px solid var(--border, #d6dbe0);
+}
+
+/* A browser without color-mix gets the flat surface rather than nothing. */
+@supports not (background: color-mix(in srgb, red 50%, transparent)) {
+  .ocean-map .om-brand { background: var(--bg, #ffffff); }
+}

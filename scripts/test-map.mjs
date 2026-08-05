@@ -30,7 +30,10 @@ const dom = new JSDOM(
   '<div class="storm-status" data-storm-status><span class="label">STALE</span>' +
   '<ul><li><strong>STALE</strong><span class="facts">STALE</span></li></ul></div>' +
   '<figure class="map-figure" data-ocean-map>' +
-  '<div id="asset-map" data-ocean-map-canvas data-map-storage-key="asset-map-view"></div>' +
+    /* `data-map-brand` mirrors AssetMap.astro: the branding string is the
+     host's, so the harness has to supply one the way a page does. */
+  '<div id="asset-map" data-ocean-map-canvas data-map-storage-key="asset-map-view"' +
+  ' data-map-brand="C4PO Ocean Viewer"></div>' +
   '<figcaption>' +
   '<p class="om-credit" data-map-credit></p>' +
   /* The platform keys, as the component renders them: each names the layer
@@ -2276,6 +2279,22 @@ if (resizeWatch) {
 host._map.setView([25, -75], 6, { animate: false });
 await new Promise((r) => setTimeout(r, 300));
 
+/* ---- the viewer's name, over the map ---------------------------------
+
+   A branding mark on the canvas, so a screenshot of the map carries it. Two
+   things have to hold and only one is obvious: it has to be there, and it
+   must not take a pointer event — this map reads a right-click, a long
+   press and a measuring click, and all three land on the canvas underneath.
+
+   The string is the host's, set in markup, because the package is built to
+   be embedded elsewhere. Read from the container rather than hardcoded, so
+   this tests the wiring and not one site's name. */
+const brandEl = host.querySelector('.om-brand');
+const brandWanted = host.dataset.mapBrand || '';
+const brandShown = !!brandEl && brandWanted !== '' && brandEl.textContent === brandWanted;
+const brandRule = builtCss.replace(/\s+/g, ' ').match(/\.om-brand\s*\{[^}]*\}/)?.[0] ?? '';
+const brandInert = /pointer-events:\s*none/.test(brandRule);
+
 /* ---- the field is painted past the visible edge ----------------------
 
    A pan reveals ground the field has already been drawn for, rather than a
@@ -2339,6 +2358,8 @@ const shownWasFetched = startupFetches.some((u) => u.includes('currents.json'));
 
 const checks = [
   ['leaflet initialised', host.classList.contains('leaflet-container')],
+  ['the viewer name is drawn over the map', brandShown],
+  ['and it never takes a pointer event', brandInert],
   [`the field is painted 30% past every edge`
     + (paintsPastEdge ? '' : ` — ratio was ${JSON.stringify(marginRatio)}`),
     paintsPastEdge],

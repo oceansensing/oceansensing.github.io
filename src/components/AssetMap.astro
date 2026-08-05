@@ -41,6 +41,11 @@ const {
 ---
 
 <figure class="map-figure" data-ocean-map>
+  <!-- data-map-brand is this site's own branding, set here rather than in
+       the package: the map is built to be embedded elsewhere and ported to
+       iOS, and a name compiled into the module would put one lab's mark on
+       somebody else's map. It is drawn over the canvas, so a screenshot of
+       the map carries it. -->
   <div
     id="asset-map"
     data-ocean-map-canvas
@@ -48,6 +53,7 @@ const {
     data-map-storage-key={storageKey}
     data-map-layers={layers ? JSON.stringify(layers) : undefined}
     data-map-home={home ? JSON.stringify(home) : undefined}
+    data-map-brand="C4PO Ocean Viewer"
     role="application"
     aria-label={label}>
     <noscript>
