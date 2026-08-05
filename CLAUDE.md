@@ -399,6 +399,21 @@ from a wide window as a fleet that stops dead at both edges.
 not the constant 2 it used to be — `minZoomForWidth` in `geo.ts`, applied at
 startup and on every resize by the same ResizeObserver that refits the map.
 
+**A fractional zoom has to be declared, not merely used**, and skipping that
+shipped a visibly broken basemap. Leaflet supports a fractional zoom only
+when `zoomSnap` is 0; left at its default of 1 it rounds every requested
+zoom to a whole number while the map actually sits at 2.41, so its
+tile-range arithmetic and its transform disagree and the basemap comes up
+partly tiled — reported as a cross of tiles over empty space. `zoomSnap: 0`
+with `zoomDelta: 1` keeps the +/- buttons stepping a whole level. Measured
+after, on a 1758 px container at minZoom 2.78: **100% tile coverage** on
+arrival, at the minimum, and after a zoom round trip, with 40 tiles where
+the broken configuration left 12.
+
+Nothing in `verify` caught it: jsdom loads no tile images, so the harness
+cannot see which part of a container a basemap covers. It was found by
+looking at the map.
+
 It is **fractional**, and that is the part worth keeping. Rounding up to a
 whole level was the first idea and is worse: between 1025 and 2047 px it
 jumps to a zoom showing half the world, so the reader loses the global view

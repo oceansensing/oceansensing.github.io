@@ -273,6 +273,16 @@ export async function createOceanMap(
        saved view wraps on the way out. */
     worldCopyJump: false,
     minZoom: FLOOR_ZOOM,
+    /* **Fractional zoom has to be declared, not just used.** `minZoom` below
+       is the zoom at which one world exactly fills the container, which is
+       almost never a whole number — and Leaflet only supports a fractional
+       zoom when `zoomSnap` is 0. Left at its default of 1 it rounds every
+       requested zoom to an integer while the map actually sits at 2.41, so
+       its tile-range arithmetic and its transform disagree and the basemap
+       comes up partly tiled: reported as a cross of tiles over empty space.
+       `zoomDelta` keeps the +/- buttons stepping by a whole level. */
+    zoomSnap: 0,
+    zoomDelta: 1,
     attributionControl: true,
   });
 
