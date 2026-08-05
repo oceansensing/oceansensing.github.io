@@ -39,6 +39,7 @@ import pathlib
 import re
 import socket
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -786,12 +787,52 @@ def build_tiles(product: dict, when: str, valid: str, run: str = '', lead: int =
     ]
     ahead = f' +{lead}h' if lead else ''
     print(f"  {len(corners)} tiles, {product['label']}{ahead}")
+
+    # **Stop at the first confirmed failure.** A confirmed failure has already
+    # had its four spaced attempts, so it is not transient — and since any
+    # failure abandons the index below, working through the rest only to
+    # abandon it anyway is pure waiting. Measured on the arithmetic: 162 tiles
+    # at 31 s of backoff each over four workers is about 21 minutes per
+    # product to reach a conclusion known after the first tile, and there are
+    # six products on an hourly build.
+    stop = threading.Event()
+
+    def one(corner: tuple[float, float]) -> tuple[str | None, str]:
+        if stop.is_set():
+            return None, 'skipped'
+        got = build_tile(product, when, valid, run, *corner, lead=lead)
+        if got[1] == 'failed':
+            stop.set()
+        return got
+
     with ThreadPoolExecutor(max_workers=TILES['workers']) as pool:
-        results = list(pool.map(lambda c: build_tile(product, when, valid, run, *c, lead=lead), corners))
+        results = list(pool.map(one, corners))
 
     available = sorted(k for k, _ in results if k)
     failed = sum(1 for _, why in results if why == 'failed')
     empty = sum(1 for _, why in results if why == 'empty')
+    skipped = sum(1 for _, why in results if why == 'skipped')
+
+    if failed:
+        # **Raise before writing anything**, and that ordering is the whole
+        # point. This used to write the index and raise afterwards, so the
+        # short list reached disk either way — and `main` only keeps the
+        # previous data when *every* product fails, so one product's tile
+        # failure published a short index while the build reported success.
+        # Measured by injecting a total tile failure: the index went to disk
+        # with zero entries.
+        #
+        # Leaving it unwritten is what makes the failure legible. A restored
+        # cache keeps the previous complete index; with no cache the map gets
+        # a 404 and falls back to the regional grid — the same picture as a
+        # short index, but arrived at by something a person can see, rather
+        # than by a file that looks correct and is not.
+        print(f'  ! {failed} of {len(corners)} tiles failed'
+              + (f', {skipped} not attempted' if skipped else '')
+              + ' — leaving the index alone rather than publishing a short one',
+              file=sys.stderr)
+        raise RuntimeError(f'{failed} of {len(corners)} tiles failed')
+
     tile_dir = MAP_DIR / tile_dir_name(product, lead)
     tile_dir.mkdir(parents=True, exist_ok=True)
     (tile_dir / 'index.json').write_text(json.dumps({
@@ -805,14 +846,8 @@ def build_tiles(product: dict, when: str, valid: str, run: str = '', lead: int =
         'available': available,
     }, separators=(',', ':')) + '\n')
     total = sum((tile_dir / f'{k}.json').stat().st_size for k in available)
-    print(f'  wrote {len(available)} tiles ({empty} all land, {failed} failed), '
+    print(f'  wrote {len(available)} tiles ({empty} all land), '
           f'{total / 1024 / 1024:.1f} MB')
-    if failed:
-        # Loud, and non-zero exit, because a short index is invisible on the
-        # map: it just quietly reads the coarse grid over the missing water.
-        print(f'  ! {failed} tiles missing from the index — the map will fall back '
-              f'to the regional grid over that water', file=sys.stderr)
-        raise RuntimeError(f'{failed} of {len(corners)} tiles failed')
 
 
 def usable_step(product: dict) -> tuple[str, str, str]:
@@ -1054,8 +1089,20 @@ def main() -> int:
             # One source being down must not take the other with it, and a
             # previous file standing is better than an empty map. HYCOM in
             # particular serves metadata while refusing data reads.
+            #
+            # **This deliberately still exits 0 when some products fail**, and
+            # the exit code is the part that is right. An outage should
+            # degrade to stale rather than block a deploy — the same bargain
+            # the currents pipeline strikes. What was wrong was `build_tiles`
+            # writing a short tile index on its way out, so "degraded" meant a
+            # file that looked complete. It leaves the index alone now, and
+            # this line is the only place that says so.
             print(f"! {product['key']} unavailable: {exc}", file=sys.stderr)
             failed.append(product['key'])
+
+    if failed:
+        print(f"! {len(failed)} of {len(PRODUCTS)} products unavailable: "
+              f"{', '.join(failed)}", file=sys.stderr)
 
     if failed and len(failed) == len(PRODUCTS):
         if (MAP_DIR / 'sst-oisst.json').exists():

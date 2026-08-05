@@ -2855,6 +2855,35 @@ Two things follow, both in `fetch-ocean-fields.py`:
   otherwise invisible, because the map just reads the coarse grid over the
   missing water and says nothing.
 
+**That second guard was half-built for a long time, and the missing half was
+the ordering.** `build_tiles` wrote `index.json` and raised *afterwards*, so
+the short list reached disk either way — and `main` only keeps the previous
+data when **every** product fails, so one product's tile failure published a
+short index while the build exited 0 and reported success. Found while
+hardening the currents pipeline, and confirmed by injecting a total tile
+failure: the index went to disk with **zero** entries.
+
+It raises before writing now. Leaving the file alone is what makes the
+failure legible — a restored cache keeps the previous complete index, and
+with no cache the map gets a 404 and falls back to the regional grid. That
+is the same picture a short index gives, arrived at by something a person
+can see rather than by a file that looks correct and is not.
+
+**The exit code was not the bug and did not change.** It still exits 0 when
+some products fail, deliberately: an outage should degrade to stale rather
+than block a deploy. What was wrong was the comment claiming a non-zero
+exit, and a "degraded" state that meant a plausible-looking file. `main`
+also names which products failed now, since the per-product lines scroll
+away in a six-product run.
+
+Both pipelines **stop at the first confirmed failure**. A confirmed failure
+has already had its spaced attempts, so it is not transient, and since any
+failure abandons the index there is nothing to learn from the rest: 162
+tiles × 31 s of backoff over four workers is ~21 minutes per product to
+reach a conclusion known after the first tile, and there are six products on
+an hourly build. Measured on the fixed code, a total outage costs **4 tile
+reads instead of 648**.
+
 **`fetch-currents.py` has all of this now, plus one thing the fields
 pipeline still lacks.** It had none of it: ~318 tile fetches per run across
 two depths with **no retry at all**, and any single failure aborted the lot.
