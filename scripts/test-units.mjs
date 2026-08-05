@@ -21,6 +21,8 @@ import {
   coordText,
   ddm,
   elapsed,
+  gridLabel,
+  gridStepFor,
   hourStamp,
   hoursAhead,
   initialBearing,
@@ -81,6 +83,38 @@ check('a longitude two turns out', wrapLongitude(720 + 45), 45);
 
 // It also accepts a {lat, lng} — which is what an L.LatLng is, structurally.
 check('accepts a point object', coordText({ lat: 37.5, lng: -75.5 }), coordText(37.5, -75.5));
+
+// ---- the graticule's ladder and labels ------------------------------------
+
+/* The step ladder. Its whole point is that a fixed spacing is unreadable at
+   both ends, so the two ends are what these check: a globe view must not
+   get the 1° grid (540 polylines, all noise) and a close view must not get
+   the 30° one (often not a single line on screen). */
+check('the globe view takes the coarsest step', gridStepFor(2), 30);
+check('and a close view the finest', gridStepFor(12), 1);
+check('the ladder descends', gridStepFor(5) > gridStepFor(7), true);
+/* Boundaries, which is where an off-by-one lives: the ladder is keyed on
+   `zoom <= upTo`, so each rung must own its own number. */
+check('a rung owns its own zoom', gridStepFor(3), 30);
+check('and the next zoom steps down', gridStepFor(4), 10);
+
+/* The label is the short form, and its padding is what makes a column of
+   them scan — the same argument the readout's three-digit longitude rests
+   on, at a different precision. */
+check('a longitude label pads to three', gridLabel(-40, 'E', 'W', 3), '040°W');
+check('a latitude label pads to two', gridLabel(20, 'N', 'S', 2), '20°N');
+check('and reads south below the equator', gridLabel(-5, 'N', 'S', 2), '05°S');
+
+/* Neither end of an axis takes a hemisphere. "0°E" is the prime meridian and
+   "0°W" is the same line under a different name; "180°W" is contradicted by
+   the "180°E" one line further east, for the very same meridian. */
+check('the equator takes no hemisphere', gridLabel(0, 'N', 'S', 2), '00°');
+check('nor does the prime meridian', gridLabel(0, 'E', 'W', 3), '000°');
+check('nor the antimeridian', gridLabel(180, 'E', 'W', 3), '180°');
+/* And it must still be the antimeridian when the view has panned past it —
+   a graticule at 540°E is drawing the same line as one at 180°E. */
+check('a meridian panned past the seam folds back', gridLabel(540, 'E', 'W', 3), '180°');
+check('and one panned the other way', gridLabel(-190, 'E', 'W', 3), '170°E');
 
 // ---- distance and bearing -------------------------------------------------
 

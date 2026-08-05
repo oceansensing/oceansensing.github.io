@@ -198,8 +198,9 @@ complain.
 
 **The renderer-independent half is now its own set of modules**, which is the
 seam an iOS port turns on: `geo.ts` (bearings, degrees-and-decimal-minutes,
-spans, timestamps), `ramp.ts` (colour ramps) and `tiles.ts` (which tiles a view
-needs). None imports Leaflet or the DOM — they typecheck standalone — so a
+spans, timestamps, the graticule's step ladder and labels), `ramp.ts` (colour
+ramps) and `tiles.ts` (which tiles a view needs). None imports Leaflet or the
+DOM — they typecheck standalone — so a
 native port reimplements only the drawing. `Point` is a plain `{lat, lng}`,
 which `L.LatLng` satisfies structurally, so callers needed no conversion.
 
@@ -1844,6 +1845,18 @@ measured, the tiles are RGBA and **97.7% fully transparent** across the Gulf,
 
 ### The lat/lon grid
 
+`packages/ocean-map/graticule.ts` draws it; `geo.ts` owns the step ladder and
+the label wording. It was the **first thing lifted out of `index.ts`**, and
+it was chosen for that because it captured nothing from the closure but the
+map itself — the seam was already there and only the file boundary was
+missing. `createGraticule(map)` wires its own redraws and hands back a layer
+group, so the caller owes it nothing.
+
+Splitting it turned up one piece of dead state: a `gridDrawn` guard that was
+written on every draw and **never read**. It could not have worked — the
+labels are pinned to the viewport, so they have to be rebuilt whether or not
+the step changed, which is exactly what the code below it says.
+
 Reported as hard to see and unlabelled, and both were true.
 
 **The line.** A grey hairline at `weight: 0.5` over GEBCO's navy measures a
@@ -1871,6 +1884,17 @@ view.
 They are in the short form — `060°W`, `40°N` — not the degrees-and-decimal-
 minutes the readout uses. A graticule label is read at a glance and sits over
 the map; the readout is where a position is read exactly.
+
+**Neither end of an axis takes a hemisphere.** 0 is the equator or the prime
+meridian, and 180 is the antimeridian — `180°W` is both wrong and, one line
+further east, contradicted by `180°E` for the same meridian. Verified across
+the date line in a browser: `170°E · 180° · 170°W`, continuous and with no
+label drawn twice.
+
+Both rules are now in `test:units`, which needs no build and no jsdom because
+they are pure functions in `geo.ts`. Mutation-tested three ways — dropping
+180 from the no-hemisphere rule, moving the ladder's `<=` to `<`, and
+removing the longitude fold — and each fails at least one case.
 
 Their colour is **keyed to the basemap, not the theme**, which is the third
 time that lesson has been paid for here after the shoreline and the isobath

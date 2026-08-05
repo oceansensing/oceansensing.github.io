@@ -108,3 +108,39 @@ export function elapsed(from?: string, to?: string): string {
   const days = Math.floor((Date.parse(to) - Date.parse(from)) / 86400000);
   return Number.isFinite(days) && days >= 0 ? ` · day ${days + 1}` : '';
 }
+
+/* The graticule's spacing ladder, and the labels that ride it.
+
+   These live here rather than beside the drawing because they are the
+   renderer-independent half of a graticule: a native port reimplements the
+   polylines and keeps the ladder and the wording exactly. */
+
+/** Degrees between grid lines at a zoom. */
+const GRID_STEPS: readonly (readonly [number, number])[] = [
+  [3, 30], [5, 10], [7, 5], [9, 2], [99, 1],
+];
+
+/** **Spacing follows the zoom.** A fixed 10° was unreadable at both ends:
+    eighteen meridians crowding the globe view, and at zoom 8 often not one
+    line on screen — a grid that is either noise or absent is not a grid.
+    The ladder stops at 1° because below a degree the scale bar is the
+    better instrument. */
+export function gridStepFor(zoom: number): number {
+  return GRID_STEPS.find(([upTo]) => zoom <= upTo)![1];
+}
+
+/** Short form — `060°W`, `40°N` — not the degrees-and-decimal-minutes the
+    readout uses. A graticule label is read at a glance and sits over the
+    map; the readout is where a position is read exactly.
+
+    Longitude is padded to three digits and latitude to two, so a column of
+    them scans straight. */
+export function gridLabel(v: number, pos: string, neg: string, pad: number): string {
+  const at = pad === 3 ? wrapLongitude(v) : v;
+  const d = Math.abs(at);
+  /* Neither end of the axis takes a hemisphere: 0 is the equator or the
+     prime meridian, and 180 is the antimeridian — "180°W" is both wrong and,
+     one line further east, contradicted by "180°E" for the same meridian. */
+  const hemi = d === 0 || d === 180 ? '' : at > 0 ? pos : neg;
+  return `${String(Math.round(d)).padStart(pad, '0')}°${hemi}`;
+}
