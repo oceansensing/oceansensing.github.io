@@ -22,10 +22,12 @@ ECMWF 10 m wind, sea-surface temperature from both an observed analysis
 (OISST) and the Navy forecast, Navy sea-surface salinity, isobaths from 20 m
 to 10,000 m with an opacity the reader sets, a detailed coastline, and EEZ
 boundaries. The map fills the window in both axes and the page's text aligns
-to its edges. The ESPC fields are T+36
-from the newest run rather than its nowcast hour — the run lands a day or so
-late, so T+36 is about the present — and the attribution says which hour
-they are valid for and how far ahead of now that is. Twenty-five colour
+to its edges. The ESPC layers show the step nearest the reader's own clock
+rather than a fixed offset from the model run — the currents publish the
+two steps spanning a six-hour window and a forecast-hour control steps
+between them, which is what makes the tide in that model visible instead of
+sampled once — and the attribution says which hour is drawn and how far
+from now that is. Twenty-five colour
 scales, with the range either following the view or pinned by hand, and a
 reset that puts everything back. Hovering an asset names it; clicking one
 reports its details plus the depth, current, wind, temperature and — when the
@@ -70,7 +72,7 @@ website, `PORTING-IOS.md` for the iOS app, and `BOUNDARIES.md` for anyone
 adding to it — those separations are what keep the other two possible, and
 they are easy to breach by accident.
 
-`npm run verify` stands at **864 printed `ok` lines** across nine steps:
+`npm run verify` stands at **866 printed `ok` lines** across nine steps:
 build, type-check, docs, the renderer-independent units, the published data
 contract, colour contrast, the rendered map, two maps on a page, and the
 clock. Counted as `npm run verify | grep -c '^ok'`, which is the only figure
@@ -183,6 +185,101 @@ this is roughly **7,600** — the currents rebuild two frames four times a
 day, and the fields are dragged to the same cadence by the shared anchor.
 `REFRESH_HOURS` is the lever, and it cannot go above six without aliasing
 the tide.
+
+## Queued: two new data layers
+
+Both are specified, neither is started. They are independent — take them in
+either order, but **task 1 first and then stop**, because task 2 is large
+enough to want a fresh context.
+
+### 1. 2 m air temperature, from ECMWF
+
+**The cheapest layer this map will ever gain.** `fetch-wind.py` already
+fetches a byte range out of ECMWF's open IFS forecast, reading the `.index`
+sidecar to find the messages it wants. `2t` is in that same index, on the
+same step, at `levtype=sfc` — measured on the 2026-08-05 12z run's +12h
+step, **657,778 bytes**, alongside the `10u` and `10v` the pipeline already
+takes. So this is one more entry in the params list and one more grid
+written; there is no new source, no new dependency and no new failure mode.
+
+It is a **scalar**, so it joins `FIELDS` and the scalar layer rather than
+the particle layer — closer to how SST was added than to how the wind was.
+Points to settle when it is built:
+
+- **It is not masked to the ocean**, for the same reason the wind is not: an
+  air temperature over land is a fact, and the interesting cases — a cold
+  outbreak coming off the continent, a storm's warm sector — are exactly
+  where the coast is. That makes it the *second* layer on the map that
+  paints over land, and the first scalar one, so check what it does to the
+  basemap-tone reasoning and to `drawAbove`.
+- **Its ramp has to clear the gate**, and it is the hardest case yet: air
+  temperature spans a far wider range than SST, so a ramp travelling the
+  same perceptual distance has more room to collide with the markers. Run
+  the search in `scripts/lib/colour.mjs` rather than picking one.
+- **It is a nowcast**, like the wind and unlike the ESPC fields — IFS runs
+  four times a day and lands within hours, so `pick_step` already does the
+  right thing and there is no anchor to share.
+- The same index carries `2d`, `msl`, `skt`, `tcc`, `tp` and `sithick` if
+  any of those are ever wanted. Adding one is the same one-entry change.
+
+### 2. ECCOFS, and the fact that it is observations
+
+New data repository, as asked: **`oceansensing/eccofs-data-repo`**, on the
+model of `ocean-data-repo` — pipelines stay in this repo, that one checks
+this one out and runs them, `schema.ts` stays the contract, and its own
+Pages site gets its own gigabyte.
+
+**But the source is not what the request assumed, and that has to be
+settled before anything is built.** The ask was "the same fields ESPC shows,
+minus the ice". Probed 2026-08-05:
+
+- `ECCOFS_INSITU_OBS` is **tabledap, not griddap** — CORA in-situ near
+  real-time observations in the ECCOFS domain, published by Rutgers. Long
+  format: `time, latitude, longitude, depth, value, type, provenance`.
+- `type` carries **6 and 7 only** — the ROMS observation codes for
+  temperature and salinity. There is no velocity in it, so "currents at 0 m
+  and 60 m" has no counterpart here.
+- It is **live**: latest time 2026-08-05, and timestamps are binned to the
+  day. **533,024 rows over three days**, ~178,000 a day, of which about
+  17,000 a day are shallower than 5 m.
+- Domain -100..-38 E, -3..53 N — the US East Coast, the Gulf, the Caribbean
+  and the tropical west Atlantic.
+- The Rutgers ERDDAP has **six griddap datasets in total and none of them is
+  ECCOFS**. The gridded model output is on their THREDDS at
+  `roms/eccofs/3km_fwd_Run02/avg` — one 3 km run covering **2024-08-26 to
+  2024-09-01**, carrying an explicit notice that it is preliminary and not
+  for scientific analysis. It is a demo week from over a year ago, not a
+  live product.
+
+So there is no live gridded ECCOFS to mirror the ESPC rasters with. What
+there *is* is better in one specific way: it is the only **observational**
+temperature and salinity on the map besides the platforms themselves — the
+points the model is fitted to, in the lab's own region.
+
+**Which makes it a point layer, not a raster**, and that changes the
+engineering:
+
+- Argo is the precedent, and the scale is different: 4,000 dots against
+  ~17,000 surface observations a day. Canvas renderer, certainly; and a
+  thinning rule needs measuring rather than guessing — by cell, by
+  provenance, or a nearest-neighbour decimation on a lattice.
+- **Colour is the interesting part.** Draw the obs on the *same ramp and
+  the same range* as the ESPC field beneath them and a reader can see the
+  model and the observations disagree — which is the whole reason to want
+  this layer. That is a real feature and it is not free: the ramps are
+  currently chosen so markers clear them by ΔE 22, and here the marker is
+  deliberately the same colour as the field.
+- `provenance` (801-825) decodes through the `ECCOFS_PROVENANCE` tabledap,
+  which is what would let the popup say *which* programme an observation
+  came from.
+- Depth is a real axis here — 0.5 m to 6,000 m — so this layer wants a
+  depth band the way the currents want a level, not a surface-only
+  simplification, once it works at all.
+
+**Decide before building:** whether this is (a) the in-situ observation
+layer described above, (b) blocked until a live gridded ECCOFS is found —
+Rutgers may serve one elsewhere, and asking them is cheaper than searching —
+or (c) both, with the obs first.
 
 ## Open items
 

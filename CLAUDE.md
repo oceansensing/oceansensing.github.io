@@ -87,11 +87,28 @@ switched off.
 
 It also checks **numbers the docs quote from the code** — the tile zoom
 threshold, the coastal erosion threshold, the particle lifetime, the Argo
-cycle window and how many glider sources there are — by reading each from its
-own source file. Every one of those has gone stale at least once. The
-document is whitespace-normalised before matching, because these files are
-hard-wrapped and a claim can straddle a line break; without that the check
-reports drift that is only a newline.
+cycle window, the refresh window, how many frames the currents publish and
+how many glider sources there are — by reading each from its own source
+file. Every one of those has gone stale at least once. The document is
+whitespace-normalised before matching, because these files are hard-wrapped
+and a claim can straddle a line break; without that the check reports drift
+that is only a newline.
+
+**A claim has to be specific enough to be falsifiable.** The refresh window
+was first matched as "six-hour", which passed for `REFRESH_HOURS = 3`
+because the prose already described the model's own 3-hourly steps — a
+different quantity that happens to share a word. It matches "six-hour
+boundary" now. Mutation-test a doc claim by changing the constant, not by
+reading the regex.
+
+**It also holds two constants against each other**, which is not a docs
+check at all but lives here because this is where numbers are read out of
+source. The two ESPC pipelines must snap to the same `REFRESH_HOURS` and
+resolve the same window width: they select their step independently — same
+rule, two copies, because each is a standalone standard-library script —
+and a mismatch puts one hour of temperature under another hour of current.
+`test:schema` catches it in the published data, which is stronger; this
+catches it before anything has been asked of HYCOM.
 
 `npm run check` truncates long diagnostics when piped through `tail`; read the
 whole output or grep for `^- [0-9]+ error`.
@@ -662,6 +679,24 @@ The checks bite. Mutation-tested: a truncated grid, a timestamp missing its
 `Z`, a string where a number belongs, storm intensity turned into a number, an
 unknown platform kind, a latitude of 200, a missing required field — all
 caught.
+
+**Two of them are about agreement between files rather than the shape of
+one**, and both exist because the step is chosen by valid time now:
+
+- **A grid and its tiles must be the same hour.** They are built by separate
+  invocations, the tiles behind a cache, so nothing structural makes them
+  agree — a stale cache, a slightly wrong key or a build straddling a
+  refresh boundary all land the same way, as sharp plausible tiles of some
+  other hour under this hour's header.
+- **Every ESPC hour on the map must be one the currents publish**, from one
+  run. Not equality: the currents publish two frames and legitimately draw
+  either. A credit line names a source, a run and an hour and deliberately
+  *not* a quantity — that is what lets six ESPC layers contribute one line —
+  so a field landing on a third hour is a credit nothing else can be
+  brought into agreement with. This caught a real one the first time it
+  ran: the ESPC **ice aggregation is hourly** where `uv3z` and `ts3z` are
+  3-hourly, so selecting "the next two consecutive steps" put the ice an
+  hour past the anchor and everything else three.
 
 **It runs twice in CI, and that is not redundancy.** `npm run verify` runs
 *before* the data-refresh steps, so inside `verify` it only ever sees the
@@ -1489,9 +1524,13 @@ fixing Greenland while the Bering Strait stayed broken showed.
 
 Built by `npm run data:tiles`; 159 of 162 exist per depth, the other three
 being pure land. **They are gitignored** — 92 MB has no business in the repo
-— so CI builds them and deploys them with the site, keyed on the model run so
-hourly builds restore from cache instead of pulling from HYCOM twenty-four
-times a day. `scripts/fetch-currents.py --run` prints that key.
+— so CI builds them and deploys them with the site, keyed on what they
+contain so hourly builds restore from cache instead of pulling from HYCOM
+twenty-four times a day. `scripts/fetch-currents.py --tile-key` prints that
+key: the model run **and every valid time built from it**, because the step
+moves within a run now. `--run` still prints just the run, which is the
+answer to "which run is the map showing" and no longer enough to key a
+cache on.
 
 Two depths means **two tile sets**, so the artifact and the daily tile run
 both roughly double. The request *rate* on HYCOM's public server does not:
@@ -3199,10 +3238,12 @@ throughout, so the server looks healthy.
 
 Two things follow, both in `fetch-ocean-fields.py`:
 
-- **The time step is probed before it is used.** `usable_step()` walks the
-  eight steps nearest now, testing each with a handful of cells, and takes
-  the first that answers. Picking the nearest and giving up loses the whole
-  field to one bad member file when the step an hour either side is fine.
+- **The time step is probed before it is used.** `serves()` tests a
+  candidate with a handful of cells, and the selection walks past one that
+  does not answer: an analysis walks the days nearest now (`usable_step()`),
+  a forecast walks back through model runs. Picking one step and giving up
+  loses the whole field to a single bad member file when a neighbour is
+  fine.
 - **A failed tile is not an empty tile.** Those were conflated, and a run
   against a flaky server wrote 81 of 162 tiles and reported "81 empty" as
   though that were the coastline. Tiles are retried three times, failures
@@ -3248,13 +3289,13 @@ A healthy model went unpublished over one bad read.
   pipeline puts it around the tile. `component` is the one choke point every
   OPeNDAP read goes through, so the regional and global grids get the same
   protection for free.
-- **The candidates are the same lead from successively older runs**, not
-  neighbouring hours. This pipeline anchors a lead to the model run, so
-  stepping an hour either side would relabel T+33 as T+36; stepping back a
-  run keeps the lead exact and degrades something visible, since the run
-  stamp is published in every header and shown in the attribution.
-  `pick_leads` already computed those candidates and threw all but the
-  newest away, so probing them costs only the reads.
+- **The candidates are successively older runs**, not neighbouring hours,
+  and both selections walk them that way. Under `--leads=` a lead is
+  anchored to the run, so stepping an hour either side would relabel T+33
+  as T+36. Under the default the reasoning is stronger still: the step grid
+  is absolute, so an older run carries the *same hours* — walking back a
+  run costs nothing but the run stamp, which is published in every header
+  and shown in the attribution.
 - **The sweep stops at the first confirmed failure**, and this is the part
   the fields pipeline does *not* do. Without it the retry costs more than it
   buys: a confirmed failure has already had four spaced attempts, and since
@@ -3265,9 +3306,10 @@ A healthy model went unpublished over one bad read.
   this is the case HYCOM actually presents — up, answering metadata, failing
   a fraction of reads.
 
-Verified against live HYCOM rather than only against mocks: `--run` probes
-and returns in 2 s, and a full build of all six grids takes 10.8 s and
-passes `test-schema`. Fifteen injected-failure cases cover the rest, each
+Verified against live HYCOM rather than only against mocks: `--tile-key`
+probes both frames and returns in 1.5 s, a full currents build of both
+depths and both frames takes 22 s, all six field grids take 30 s, and both
+pass `test-schema`. Fifteen injected-failure cases cover the rest, each
 written so the unfixed behaviour differs.
 
 ### Measuring, and the point readout
