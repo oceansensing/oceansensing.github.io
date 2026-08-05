@@ -2855,8 +2855,36 @@ Two things follow, both in `fetch-ocean-fields.py`:
   otherwise invisible, because the map just reads the coarse grid over the
   missing water and says nothing.
 
-The current pipeline has neither guard yet; it degrades to the previous file
-instead, which is why an outage there shows up as stale rather than wrong.
+**`fetch-currents.py` has all of this now, plus one thing the fields
+pipeline still lacks.** It had none of it: ~318 tile fetches per run across
+two depths with **no retry at all**, and any single failure aborted the lot.
+A healthy model went unpublished over one bad read.
+
+- **The retry sits in `component()`**, not around each tile — the fields
+  pipeline puts it around the tile. `component` is the one choke point every
+  OPeNDAP read goes through, so the regional and global grids get the same
+  protection for free.
+- **The candidates are the same lead from successively older runs**, not
+  neighbouring hours. This pipeline anchors a lead to the model run, so
+  stepping an hour either side would relabel T+33 as T+36; stepping back a
+  run keeps the lead exact and degrades something visible, since the run
+  stamp is published in every header and shown in the attribution.
+  `pick_leads` already computed those candidates and threw all but the
+  newest away, so probing them costs only the reads.
+- **The sweep stops at the first confirmed failure**, and this is the part
+  the fields pipeline does *not* do. Without it the retry costs more than it
+  buys: a confirmed failure has already had four spaced attempts, and since
+  any failure fails the run, grinding the rest is pure waiting — 159 tiles ×
+  2 depths × 31 s of backoff over four workers is **41 minutes** to reach a
+  conclusion known after the first tile, on a build that runs hourly. The
+  step probe does not cover this; it catches a server that is *down*, and
+  this is the case HYCOM actually presents — up, answering metadata, failing
+  a fraction of reads.
+
+Verified against live HYCOM rather than only against mocks: `--run` probes
+and returns in 2 s, and a full build of all six grids takes 10.8 s and
+passes `test-schema`. Fifteen injected-failure cases cover the rest, each
+written so the unfixed behaviour differs.
 
 ### Measuring, and the point readout
 

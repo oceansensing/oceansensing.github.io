@@ -34,6 +34,8 @@ import math
 import pathlib
 import re
 import sys
+import threading
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -365,6 +367,45 @@ def pick_time() -> tuple[int, str, str]:
     return index, valid, run
 
 
+def usable_step(matches: list[int], runs: list[float], lead: int) -> int | None:
+    """The newest candidate step that actually serves data, or None.
+
+    **The candidates are the same lead from successively older runs**, not
+    neighbouring hours, and that distinction is the whole design. This
+    pipeline anchors a lead to the model run — T+36 means T+36 — so stepping
+    to the hour either side would quietly relabel T+33 as T+36. Stepping to
+    an older run keeps the lead exact and degrades something the reader can
+    actually see: the run stamp is published in every header and shown in
+    the map's attribution.
+
+    `pick_leads` already computes these and throws all but the newest away,
+    so probing them costs nothing but the reads.
+
+    Probed with a deliberately tiny slab rather than the real fetch: a step
+    that is broken fails on any read, so 3x3 cells at the middle of the grid
+    settle it in about a second against a minute for the global grid. The
+    probe passes `backoff=(0,)` — a dead step should be rejected quickly,
+    and the retry inside `component` is for transient faults, which is a
+    different question from whether this step exists at all.
+
+    Surface only. The levels share a time axis, so a step that serves 0 m
+    serves 60 m; probing each depth would multiply the cost to answer the
+    same question.
+    """
+    y = NLAT // 2
+    x = NLON // 2
+    for index in sorted(matches, key=lambda i: runs[i], reverse=True):
+        try:
+            component('water_u', index, LEVELS[0]['index'],
+                      y, y + 4, x, x + 4, 2, 2, backoff=(0,))
+            return index
+        except (urllib.error.URLError, TimeoutError, RuntimeError,
+                ValueError, OSError) as exc:
+            print(f'  T+{lead}: step {index} unusable, trying an older run '
+                  f'— {exc}', file=sys.stderr)
+    return None
+
+
 def pick_leads(leads: list[int]) -> list[tuple[int, int, str, str]]:
     """(lead, index, valid time, model run) for each lead, as **T+N from the
     model run** — the forecasting convention, not hours from the clock.
@@ -425,7 +466,11 @@ def pick_leads(leads: list[int]) -> list[tuple[int, int, str, str]]:
         if not matches:
             print(f'  ! no run carries T+{lead} — skipped', file=sys.stderr)
             continue
-        index = max(matches, key=lambda i: runs[i])
+        index = usable_step(matches, runs, lead)
+        if index is None:
+            print(f'  ! no usable step for T+{lead} in {len(matches)} '
+                  f'candidate run(s) — skipped', file=sys.stderr)
+            continue
         age = now - runs[index]
         # stderr, because `--run` goes through this and CI captures its
         # stdout straight into a cache key — a progress line on the same
@@ -438,14 +483,55 @@ def pick_leads(leads: list[int]) -> list[tuple[int, int, str, str]]:
     return out
 
 
+# How long to wait before believing a failed read, in seconds. The first
+# attempt is immediate.
+#
+# **Spaced, not back-to-back**, and that is measured rather than chosen: the
+# fields pipeline tried three immediate retries and still lost 24 of 162
+# tiles, because a transient fault is still there a millisecond later. The
+# waiting is the point.
+BACKOFF = (0, 3, 8, 20)
+
+
 def component(name: str, t: int, z: int, y0: int, y1: int, x0: int, x1: int,
-              stride_lat: int, stride_lon: int) -> list[list[float | None]]:
+              stride_lat: int, stride_lon: int,
+              backoff: tuple[int, ...] | None = None) -> list[list[float | None]]:
+    """One slab of one velocity component, retried before it is believed.
+
+    **HYCOM fails per request, not outright.** Measured on 2026-08-02, index
+    70 returned a full global field while index 76 answered 500 "Stale file
+    handle" for the identical request minutes apart, and a small read that
+    had just succeeded failed on the next try. Metadata keeps working
+    throughout, so the server looks healthy the whole time.
+
+    The retry sits here rather than around each tile — where the fields
+    pipeline puts it — because this is the one choke point every OPeNDAP
+    read goes through, so the regional and global grids get the same
+    protection as the tiles for free. A currents run makes about 318 tile
+    fetches across two depths and had **no** retry at all, and one failure
+    aborted the lot.
+
+    Callers that are probing rather than fetching pass `backoff=(0,)`: a
+    dead step should be rejected in a second, not in half a minute.
+    """
     url = (f'{BASE}.ascii?{name}[{t}][{z}]'
            f'[{y0}:{stride_lat}:{y1}][{x0}:{stride_lon}:{x1}]')
-    grid = rows(get(url))
-    if not grid:
-        raise RuntimeError(f'{name}: no rows returned')
-    return grid
+    # Resolved here rather than as a default argument, which Python binds
+    # once at definition and would make the constant unpatchable.
+    backoff = BACKOFF if backoff is None else backoff
+    last: Exception | None = None
+    for wait in backoff:
+        if wait:
+            time.sleep(wait)
+        try:
+            grid = rows(get(url))
+            if not grid:
+                raise RuntimeError(f'{name}: no rows returned')
+            return grid
+        except (urllib.error.URLError, TimeoutError, RuntimeError,
+                ValueError, OSError) as exc:
+            last = exc
+    raise RuntimeError(f'{name}[{t}][{z}] failed after {len(backoff)} tries: {last}')
 
 
 def build(spec: dict, t: int, level: dict, valid: str, run: str,
@@ -552,8 +638,22 @@ def build(spec: dict, t: int, level: dict, valid: str, run: str,
 
 
 def build_tile(t: int, level: dict, valid: str, run: str,
-               south: float, west: float, lead: int = 0) -> str | None:
-    """One full-resolution tile. Returns its key, or None if it is all land."""
+               south: float, west: float, lead: int = 0) -> tuple[str | None, str]:
+    """One full-resolution tile, as (key, outcome).
+
+    Outcome is 'written', 'empty' or 'failed', and **the last two must never
+    be conflated.** The fields pipeline conflated them and a run against a
+    flaky server wrote 81 of 162 tiles while reporting "81 empty" as though
+    that were the coastline — the map then falls back to the coarse grid
+    over everything missing, with nothing on screen to say so.
+
+    This pipeline could not produce that exact file, because a raised
+    exception used to abort the whole run. But it aborted it for *any*
+    failure, including a single transient one out of 318 reads, so a healthy
+    model went unpublished over one bad tile. The retry in `component` fixes
+    that half; naming the outcome is what stops the fix from turning a real
+    failure into a silently short index.
+    """
     north = min(south + TILES['size'], TILES['north'])
     east = west + TILES['size']
 
@@ -578,13 +678,22 @@ def build_tile(t: int, level: dict, valid: str, run: str,
         ]
         return parts[0] if len(parts) == 1 else [w + e for w, e in zip(*parts)]
 
-    u = grab('water_u')
-    v = grab('water_v')
+    key = f'{south:g}_{west:g}'
+    try:
+        u = grab('water_u')
+        v = grab('water_v')
+    except (urllib.error.URLError, TimeoutError, RuntimeError,
+            ValueError, OSError) as exc:
+        # Reported here rather than raised, so one bad tile does not cost the
+        # other 317. `build_tiles` fails the run on the count.
+        print(f'  ! tile {key} failed: {exc}', file=sys.stderr)
+        return None, 'failed'
+
     if len(u) != len(v) or len(u[0]) != len(v[0]):
         raise RuntimeError(f'tile {south}/{west}: u and v disagree in shape')
 
     if not erode_land(u, v, False):
-        return None                      # nothing but land; do not write a file
+        return None, 'empty'             # nothing but land; do not write a file
 
     ny, nx = len(u), len(u[0])
     la1 = LAT0 + (y0 + (ny - 1) * stride_lat) * DLAT
@@ -607,7 +716,7 @@ def build_tile(t: int, level: dict, valid: str, run: str,
     out = MAP_DIR / tile_dir_name(level, lead) / f'{key}.json'
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, separators=(',', ':')) + '\n')
-    return key
+    return key, 'written'
 
 
 def tile_dir_name(level: dict, lead: int) -> str:
@@ -635,14 +744,53 @@ def build_tiles(t: int, level: dict, valid: str, run: str, lead: int = 0) -> Non
     ahead = f' +{lead}h' if lead else ''
     print(f"  {len(corners)} tiles at {dx:g} x {dy:g} deg, {level['label']}{ahead}")
 
+    # **Stop at the first confirmed failure**, and this is what keeps the
+    # retry from costing more than it buys. A confirmed failure has already
+    # had its four spaced attempts, so it is not transient — and since any
+    # failure fails the whole run below, grinding the remaining tiles only
+    # to fail anyway is pure waiting. Measured on the arithmetic: 159 tiles
+    # at two depths, 31 s of backoff each, four workers, is **41 minutes**
+    # to reach a conclusion that is already known. The hourly build would
+    # have overlapped itself.
+    #
+    # Note the step probe does not cover this case. It catches a server that
+    # is *down*; this is the one HYCOM actually does — up, answering
+    # metadata, and failing a fraction of reads.
+    stop = threading.Event()
+
+    def one(corner: tuple[float, float]) -> tuple[str | None, str]:
+        if stop.is_set():
+            return None, 'skipped'
+        got = build_tile(t, level, valid, run, *corner, lead=lead)
+        if got[1] == 'failed':
+            stop.set()
+        return got
+
     # The worker count is per depth, not shared across them: the levels are
     # built one after another, so the request rate this puts on a public
     # research server is the same as it was with one depth. Only the wall
     # clock doubles.
     with ThreadPoolExecutor(max_workers=TILES['workers']) as pool:
-        keys = list(pool.map(lambda c: build_tile(t, level, valid, run, *c, lead=lead), corners))
+        results = list(pool.map(one, corners))
 
-    available = sorted(k for k in keys if k)
+    failed = [k for k, outcome in zip(corners, results) if outcome[1] == 'failed']
+    if failed:
+        # **A short index is worse than no index**, and this is the only
+        # place that can tell the difference. Every tile in `available` is
+        # real, so publishing anyway would produce a set the map reads
+        # happily while silently falling back to the coarse grid over
+        # whatever is missing — the failure this project keeps meeting, a
+        # render that is wrong and says nothing. Raising instead lands in
+        # main's fallback, which keeps the previous complete set and prints
+        # how stale it is.
+        skipped = sum(1 for _, outcome in results if outcome == 'skipped')
+        raise RuntimeError(
+            f"{len(failed)} of {len(corners)} tiles failed at {level['label']}"
+            f"{ahead} after {len(BACKOFF)} tries each"
+            + (f' ({skipped} not attempted)' if skipped else '')
+        )
+
+    available = sorted(k for k, _ in results if k)
     index = tile_dir / 'index.json'
     index.write_text(json.dumps({
         'size': TILES['size'], 'west': TILES['west'],
@@ -656,7 +804,11 @@ def build_tiles(t: int, level: dict, valid: str, run: str, lead: int = 0) -> Non
     }, separators=(',', ':')) + '\n')
 
     total = sum((tile_dir / f'{k}.json').stat().st_size for k in available)
-    print(f'  wrote {len(available)} tiles ({len(corners) - len(available)} all land), '
+    # "all land" is now a counted outcome rather than everything that is not
+    # a tile — subtracting from the total was what let a failure read as
+    # coastline in the first place.
+    empty = sum(1 for _, outcome in results if outcome == 'empty')
+    print(f'  wrote {len(available)} tiles ({empty} all land), '
           f'{total / 1024 / 1024:.1f} MB')
 
 

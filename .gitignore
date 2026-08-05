@@ -26,3 +26,5 @@ node_modules/
 public/map/
 !public/map/.gitkeep
 
+# Python bytecode from running the pipelines locally.
+__pycache__/
