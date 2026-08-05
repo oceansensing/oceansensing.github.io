@@ -2905,6 +2905,46 @@ Both were found the hard way; do not re-derive them.
 - **A cache-busting query string does not force a fresh response** from GitHub
   Pages — it answers `x-cache: HIT` regardless.
 
+## What keeps going wrong here
+
+Four shapes, each paid for more than once. They are listed together because
+recognising the shape is faster than rediscovering the instance.
+
+**A label written once, describing a value that arrives later or varies.**
+The readout guessed `°C` from the data and called ice concentration a
+temperature. The particle picker named colours the search only approximates,
+so "Blue" drew violet. The depth row said "Seafloor" over Alaska, 947 m above
+sea level. Every one computed the right number and said the wrong thing about
+it — so every one passed a check asserting the number, and a check asserting
+the *word* existed. Ask what the label is derived from; if it is a constant
+and the thing it names is not, it is already wrong.
+
+**Chrome that is right in the state a check reaches and wrong in the state a
+reader arrives in.** `overlayadd` fires only from the layers control, so a
+saved view restored programmatically left the legend describing a map that
+no longer existed — and the reader's first click repaired it, which is why it
+read as "it fixes itself when I touch it". The harness builds a map once and
+never arrives at it twice.
+
+**A fix that unmasks a second bug the first was hiding.** Correcting the
+`.ocean-map` selectors switched the stylesheet on, and switching it on
+defeated the `hidden` attribute, because a class that sets `display` beats
+`[hidden]` at equal specificity. The browser check that passed before the CSS
+fix proved nothing about after it. **Re-verify after a fix, not before it.**
+
+**A check that cannot fail.** A restore assertion derived its expected value
+from the measurement it was checking. A label check ran `every()` over an
+empty list. A mutation planted in one package was masked by the sandbox copy,
+because `builtCss` concatenates all of `dist`. Every one of these was green
+and worthless. **Mutation-test, and confirm the mutation actually reached
+what you think it did** — if a check passes with the feature deleted, it was
+never testing the feature.
+
+The through-line: `npm run verify` proves the module's *logic*. It does not
+prove the thing renders, that a word is true, or that a reader arriving cold
+sees what a reader mid-session sees. Those need a browser, and on a phone for
+anything touching a UA-styled control.
+
 ## Verifying work
 
 Browser preview is often unavailable. When it is, verify by inspecting built

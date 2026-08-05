@@ -35,6 +35,25 @@ Above the map, an active-storm status line that updates without a reload;
 beside that, a server-synchronised UTC clock. The page refreshes itself when
 a new build lands, keeping your basemap, layers and position.
 
+**Sea ice** is on both maps: concentration from an observed analysis (OISST)
+and from the Navy forecast, plus Navy ice thickness, at the model's native
+0.08° through a tile tier. Concentration draws in its own pane *over*
+temperature — it paints nothing below 15%, so the water at the pack's edge
+shows through — while the two ice quantities stay exclusive with each other.
+
+**The reader controls the velocity fields.** Particle colour is chosen at
+runtime against whatever is behind the particles, and the picker offers
+swatches painted in the colour that will actually be drawn, only for choices
+that clear the contrast bars. A speed slider per field scales its calibrated
+drift from a quarter to four times; direction, relative speeds and the m/s in
+the readout are untouched.
+
+**Chrome follows the layers.** Legend keys, both particle controls, each
+field's colour-scale set and every fact in the status line appear only while
+something they describe is on. The data credit sits below the map rather than
+floating over it, and the lat/lon grid is labelled with spacing that follows
+the zoom.
+
 The same map now carries two pages. `/visualization/` is the general-purpose
 one — bathymetry, surface flow and a shoreline over the whole ocean, with
 everything else a switch away — and it replaced News in the navigation. The
@@ -95,6 +114,31 @@ contrast, the rendered map, two maps on a page, and the clock.
   port, which is why it is last. And the platform layers assume this fleet;
   making them pluggable is blocked on a second use defining what it needs
   rather than on effort.
+
+### Two gaps in `test:map`, both known and both unclosed
+
+Recorded because a gate nobody knows the limits of is worse than one with
+them written down.
+
+- **The chrome-on-arrival check does not exercise the restore path.**
+  `test:map` now asserts that every legend key agrees with its layer *before
+  anything is touched* — the invariant that broke twice in one session. It
+  passes, and mutation-testing shows it would also pass with the fix removed:
+  `SEEDED_VIEW` has no `known` list, so `restoreView` treats its `overlays`
+  list as the whole known set, wants every entry, and only ever adds. Nothing
+  changes after the first sync, so there is no disagreement to catch. Making
+  it bite needs a seed that turns a platform layer *off*, which needs a
+  `known` list — and the absence of one is deliberate, being what tests the
+  pre-`known` older-view fallback. One map per run cannot seed both. The fix
+  is a second map instance in the harness, or a second harness.
+
+- **An uncaught error during map setup does not fail anything.** A
+  temporal-dead-zone error shipped this session — a block reading `overlays`
+  from above its declaration — and `astro check` cannot see a runtime
+  ordering fault while `test:map` treats an unhandled rejection during init
+  as nothing at all. The browser console was the only place it appeared. A
+  handler that fails the run on any uncaught error would have caught it, and
+  would be a few lines.
 
 ### The exclusivity checkbox desync
 

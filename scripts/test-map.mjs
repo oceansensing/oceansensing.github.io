@@ -33,6 +33,14 @@ const dom = new JSDOM(
   '<div id="asset-map" data-ocean-map-canvas data-map-storage-key="asset-map-view"></div>' +
   '<figcaption>' +
   '<p class="om-credit" data-map-credit></p>' +
+  /* The platform keys, as the component renders them: each names the layer
+     it stands for so the module can hide it while that layer is off. Without
+     them here the arrival check has nothing to compare and passes vacuously,
+     which is why it also asserts it found some. */
+  '<span class="om-key storm" data-layer-key="Hurricanes">Hurricane</span>' +
+  '<span class="om-key usv" data-layer-key="NOAA USVs">NOAA USV</span>' +
+  '<span class="om-key glider" data-layer-key="Ocean gliders">Ocean glider</span>' +
+  '<span class="om-key argo" data-layer-key="Argo floats">Argo float</span>' +
   '<span class="key sst" data-sst-key hidden></span>' +
   // A bare container, as the component's markup is, seeded with text the
   // module must replace: a key that merely happened to say "current" because
@@ -1296,6 +1304,53 @@ const salinity = await (async () => {
 /* The restored particle rate, captured **before** the Reset check below —
    Reset puts both fields back to 1x, so measuring after it would test
    nothing and would have looked like the restore failing. */
+/* ---- chrome must be right *on arrival*, not merely after a toggle ------
+
+   Captured before this file touches anything, which is the whole point.
+   Twice in one session a piece of chrome was correct in every state a check
+   reached and wrong in the state a reader actually arrives in: the layer
+   events fire only from the layers *control*, so `restoreView` moving layers
+   programmatically left the legend describing a map that no longer existed,
+   and the reader's first interaction silently repaired it.
+
+   Stated as an invariant — every key agrees with its own layer's checkbox —
+   rather than as an expectation about which layers are on, so it holds
+   whatever the seeded view sets and needs no editing when a preset changes.
+
+   **It does not currently exercise the restore path, and that is worth
+   knowing before trusting it.** Mutation-tested by deleting the post-restore
+   `syncChrome()` and it still passed: `SEEDED_VIEW` carries no `known` list,
+   so `restoreView` falls back to treating its `overlays` list as the whole
+   known set, every entry is therefore wanted, and it only ever *adds*. The
+   platform layers are already on from the preset, so nothing changes after
+   the first sync and there is no disagreement to catch.
+
+   Making it bite needs a seed that switches a platform layer off, which
+   means a `known` list — and the absence of one is itself deliberate, it is
+   what tests the pre-`known` older-view fallback a few checks below. One map
+   per run cannot seed both. Recorded in PLAN.md rather than papered over:
+   what this check guards today is that the invariant is not broken by some
+   *other* change, not that the restore bug cannot come back. */
+const chromeOnArrival = (() => {
+  const scope = host.closest('[data-ocean-map]');
+  const switches = new Map(
+    [...scope.querySelectorAll('.leaflet-control-layers-overlays label')].map((l) => [
+      l.textContent.trim(),
+      l.querySelector('input')?.checked === true,
+    ])
+  );
+  const keys = [...scope.querySelectorAll('[data-layer-key]')];
+  const disagreeing = keys.filter((key) => {
+    const name = key.dataset.layerKey;
+    if (!switches.has(name)) return false;      // a layer this preset never registered
+    return key.hidden === switches.get(name);   // hidden while on, or shown while off
+  });
+  return {
+    named: keys.filter((k) => switches.has(k.dataset.layerKey)).length,
+    disagreeing: disagreeing.map((k) => k.dataset.layerKey),
+  };
+})();
+
 const restoredSpeed = (() => {
   const scope = host.closest('[data-ocean-map]');
   let drift = null;
@@ -2864,6 +2919,11 @@ const checks = [
      the property that actually matters: the whole point of the key is that
      two sets of drifting lines can be told apart. */
   /* ---- the particle colour picker ---------------------------------- */
+  /* ---- chrome on arrival ---------------------------------------------- */
+  ['every legend key is named after a real layer', chromeOnArrival.named > 0],
+  ['and agrees with its layer before anything is touched',
+    chromeOnArrival.disagreeing.length === 0],
+
   /* ---- particle speed ---------------------------------------------- */
   ['a speed slider is offered per animated field', speed.sliders === 2],
   ['and each says which field it drives', speed.labelled],
