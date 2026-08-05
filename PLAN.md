@@ -249,13 +249,18 @@ whatever the resampler needs), and it lives in `eccofs-data-repo` so the
 blast radius is one repository. `h5py` reads S3 directly through its `ros3`
 driver. Every other pipeline stays standard-library only.
 
-**One thing to re-check before committing to it:** the newest data on the
-bucket was **2026-08-01, uploaded 2026-08-05** — about four days behind the
-clock. If that is the archive lagging rather than the model, it is fine; if
-it is the model, this layer is a four-day-old analysis and should be
-labelled as one. The attribution machinery already says how far from now a
-field is valid, so it will show either way — but it changes what the layer
-is *for*.
+**The four-day lag is systematic, and it decides what this layer is.**
+Checked against the upload timestamps rather than assumed: data for
+2026-06-08 landed 06-12, 06-09 landed 06-13, 06-10 landed 06-14, and
+2026-08-01 landed 08-05. **Four days, consistently, across two months.**
+
+So this is not a nowcast and must not be labelled as one. It is a 3 km
+*recent analysis* — which is still worth having, and is arguably the more
+honest thing for an assimilating model to publish, but it is a different
+proposition from the ESPC layers beside it. The attribution machinery
+already prints how far from now a field is valid, so a reader would see it;
+what matters is going in knowing, rather than discovering it after the
+resampler is written.
 
 **What it buys** is worth the work: 3 km over the lab's own waters against
 ESPC's 1/12°, roughly 27 times the resolution by area, with data
@@ -368,11 +373,36 @@ a vector still maps to the screen scaled by one local factor, and
 
 **What does not, worst first:**
 
-- **Basemaps.** GEBCO, Esri and OSM tiles are Web Mercator and cannot be
-  reprojected client side. GEBCO's WMS can serve EPSG:3413/3031 directly, so
-  that one survives; OSM cannot, and `coastline.json` would need rebuilding
-  or reprojecting. **This decides whether the mode is usable at all**, so it
-  is the thing to establish first — before any map code is written.
+- **Basemaps. Probed 2026-08-05, and the answer is yes — but not the way
+  this entry used to claim.** It said GEBCO's WMS serves EPSG:3413/3031.
+  **It does not**: `wms.gebco.net` advertises exactly `EPSG:3395`,
+  `EPSG:3857` and `EPSG:4326`. No polar projection at all. That was the one
+  thing this whole idea was said to hinge on, and it was wrong.
+
+  What does work, in order of what it costs:
+
+  - **The vector layers reproject for free.** `coastline.json` and the
+    isobaths are lat/lon geometry drawn through Leaflet's CRS, so a polar
+    CRS draws them correctly with no new data and no rebuild. The repo
+    already ships a vector basemap, which is very likely the right
+    basemap for an ice map anyway.
+  - **IBCAO for the Arctic bathymetry, IBCSO for the Southern Ocean**, and
+    the natural shape is *contours, not tiles*: neither is served as polar
+    tiles by anything found so far, but both are published as grids, and
+    `fetch-bathymetry.py` already contours a local GEBCO grid by hand into
+    the isobath layer. The same treatment gives polar isobaths at the
+    resolution those products exist for — and being vector, it sidesteps
+    the reprojection problem entirely rather than working around it.
+  - **NASA GIBS serves real EPSG:3413 tiles** if a raster is wanted: 895
+    layers, including `BlueMarble_ShadedRelief`, and — worth noting on its
+    own — polar-native sea ice concentration at **12 km** against the
+    25 km analysis this map draws today.
+  - **NCEI has `arctic_ps` and `antarctic` folders in EPSG:3995**, but
+    reference lines and graticules only, no bathymetry raster.
+
+  So this is no longer the blocking question. What it becomes is a
+  *choice*: vector-only (cheapest, and honest for ice), or vector plus a
+  GIBS raster.
 - **Particle direction.** Conformality preserves the scale factor and *not*
   the rotation: north is only up along one meridian. Every velocity needs
   rotating by the grid convergence angle before it is advected. Get it wrong
