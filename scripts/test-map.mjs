@@ -1653,20 +1653,48 @@ const regionJump = await (async () => {
   };
 })();
 
+/* Interests union rather than replace, so two of them at once is the case
+   worth checking — and unchecking one must leave the other whole, including
+   any layer they share. */
 const interestApply = await (async () => {
-  const want = INTERESTS.find((i) => i.label === 'The fleet');
+  const ice = INTERESTS.find((i) => i.label === 'Sea ice');
+  const fleet = INTERESTS.find((i) => i.label === 'The fleet');
+  const entry = (label) => menuItems('interests').find((i) => i.textContent === label);
+  const checked = (label) => entry(label)?.getAttribute('aria-checked') === 'true';
   const before = host._map.getCenter();
+
+  // Same reason as the loop above: press must mean "turn on".
+  for (const name of layersOn()) {
+    [...host.querySelectorAll('.leaflet-control-layers-overlays label')]
+      .find((l) => l.textContent.trim() === name)?.querySelector('input')?.click();
+  }
+  await new Promise((r) => setTimeout(r, 400));
+
   press(menuButton('interests'));
-  press(menuItems('interests').find((i) => i.textContent === 'The fleet'));
-  await new Promise((r) => setTimeout(r, 800));
-  const on = layersOn();
+  press(entry('Sea ice'));
+  await new Promise((r) => setTimeout(r, 700));
+  press(entry('The fleet'));
+  await new Promise((r) => setTimeout(r, 900));
+  const both = layersOn();
+  const bothChecked = checked('Sea ice') && checked('The fleet');
   const after = host._map.getCenter();
+
+  // Unchecking one must not strip what the other still needs.
+  press(entry('The fleet'));
+  await new Promise((r) => setTimeout(r, 700));
+  const left = layersOn();
+
   return {
-    layersSet: want.layers.every((n) => on.has(n)),
-    /* The half that makes an interest a complete statement rather than an
-       addition — and the half a check that only looked for the named
-       layers would pass without. */
-    othersOff: [...on].every((n) => want.layers.includes(n)),
+    /* The union, which is the whole point: neither list is complete on its
+       own and both have to survive. */
+    union: [...ice.layers, ...fleet.layers].every((n) => both.has(n)),
+    bothChecked,
+    /* `Coastline` is in both lists, so this is the shared-layer case: a
+       naive removal would take it away from the interest still checked. */
+    sharedKept: ice.layers.every((n) => left.has(n)) && checked('Sea ice'),
+    /* And the one being unchecked really does go, bar what is shared. */
+    othersDropped: fleet.layers.filter((n) => !ice.layers.includes(n))
+      .every((n) => !left.has(n)),
     viewUnchanged: Math.abs(after.lng - before.lng) < 0.001 &&
       Math.abs(after.lat - before.lat) < 0.001,
   };
@@ -2074,18 +2102,39 @@ const everyInterestHolds = await (async () => {
      group displaces its partner and doing it the other way round loses
      whichever was restored first. */
   const before = layersOn();
+  const box = (name) => [...host.querySelectorAll('.leaflet-control-layers-overlays label')]
+    .find((l) => l.textContent.trim() === name)?.querySelector('input');
+  /* **From an empty map, not from whatever was showing.** Several interests
+     name layers the page already opens with, so pressing one straight away
+     found it *already* fully on and toggled it off — and the check then
+     read the emptied state and blamed the interest. That is a property of
+     the toggle being honest, not a bug in it: the tick is derived, so an
+     interest whose layers all happen to be on genuinely is on. Clearing
+     first is what makes each press mean "turn this on". */
+  const clear = async () => {
+    for (const name of layersOn()) box(name)?.click();
+    await new Promise((r) => setTimeout(r, 400));
+  };
+  await clear();
+
   const bad = [];
   for (const want of INTERESTS.filter((i) => !i.reset)) {
+    const entry = () => menuItems('interests').find((i) => i.textContent === want.label);
     press(menuButton('interests'));
-    press(menuItems('interests').find((i) => i.textContent === want.label));
+    press(entry());
     await new Promise((r) => setTimeout(r, 500));
     const on = layersOn();
     const missing = (want.layers ?? []).filter((n) => !on.has(n));
     if (missing.length) bad.push(`${want.label} lost ${missing.join(', ')}`);
+    /* Toggled back off before the next one, because interests **union**
+       now — left on, this loop would accumulate every layer in the list
+       and the last few would pass no matter what they named. */
+    if (entry()?.getAttribute('aria-checked') === 'true') {
+      press(entry());
+      await new Promise((r) => setTimeout(r, 300));
+    }
   }
 
-  const box = (name) => [...host.querySelectorAll('.leaflet-control-layers-overlays label')]
-    .find((l) => l.textContent.trim() === name)?.querySelector('input');
   for (const name of layersOn()) if (!before.has(name)) box(name)?.click();
   await new Promise((r) => setTimeout(r, 200));
   for (const name of before) if (!layersOn().has(name)) box(name)?.click();
@@ -2684,12 +2733,16 @@ const checks = [
   ['a region moves the map', regionJump.moved],
   ['and leaves the layers alone', regionJump.layersUnchanged],
   /* And the converse, which is the half that makes them compose. */
-  ['an interest sets the layers it names', interestApply.layersSet],
+  ['two interests at once give the union of their layers', interestApply.union],
+  ['and both read as checked', interestApply.bothChecked],
+  /* Derived state: the tick is read off the map, so unchecking one must
+     leave a layer the other still needs — they share the coastline. */
+  ['unchecking one keeps what another still names', interestApply.sharedKept],
+  ['and drops what only it named', interestApply.othersDropped],
   /* And every one of them keeps what it named — an interest naming both
      halves of an exclusivity pair loses one silently. */
   [`every interest keeps every layer it names${everyInterestHolds.length ? ` — ${everyInterestHolds.join('; ')}` : ''}`,
     everyInterestHolds.length === 0],
-  ['and switches off the ones it does not', interestApply.othersOff],
   ['and leaves the view where it was', interestApply.viewUnchanged],
   /* The global reset. Checked by setting the map as far from default as the
      controls allow — a different basemap, a layer switched on, a pinned

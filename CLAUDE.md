@@ -2240,6 +2240,31 @@ Three things about it are worth keeping:
   getting it wrong is a **plausible-range check on the values**, not a
   string. Measured on the published grids: -66 to 43 °C globally, 4 to 39
   over the Atlantic region.
+- **It is published at the model's own 0.25° globally**, where the wind
+  beside it stays at 1°, and the split is the same one the currents and the
+  scalars already have. Wind carries u *and* v, so the same payload buys
+  half the cells — and it is drawn as *particles*, which interpolate
+  between cells and hide a coarse grid. A scalar is a raster: every cell
+  edge is a visible square. Reported as looking very low resolution, and it
+  was. At 1° a cell is about five screen pixels on a wide map, so they are
+  countable, and a reader jumping to the Philippines or the Chukchi Sea got
+  1° all the way in, because the wind's regional grids only cover the
+  Atlantic and the Arctic. Measured at one decimal: 1° is 316 KB raw and
+  **74 KB gzipped**, 0.5° is 1,261/264, native 0.25° is **5,037/919**. It
+  is paid only by a reader who switches the layer on, and it is well inside
+  what this map already asks on demand — `coastline.json` is 4.2 MB and the
+  deep isobaths 3.0 MB gzipped, both defended on exactly this reasoning.
+  "Use the resolution the product has" is the rule the ice and the Navy SST
+  entries each already have a paragraph about; at 1° this discarded fifteen
+  cells in every sixteen. **It needs no regional grids as a result**: a
+  region exists to serve a box finer, and there is nothing finer than
+  native to promise.
+- **It stripes at the pole, and that is the projection rather than a
+  fault.** A 0.25° lat/lon grid drawn in Mercator keeps every longitude
+  column the same width on screen while the meridians they represent
+  converge, so genuine cell-to-cell variation above about 75°N stretches
+  into vertical bands. It was there at 1° too, four times wider and so less
+  obviously banded.
 - **It is the first scalar on the map that is not the ocean**, so it paints
   over land and hides the basemap entirely while it is on. That is the
   same call the wind makes and for the same reason — an air temperature
@@ -3395,10 +3420,26 @@ neither can surprise you by doing the other's job.
 
 Two controls rather than one menu with headings, because a heading is a
 promise the reader has to read and a separate button is one they cannot
-miss. That matters here specifically: an interest is a *complete* statement
-of which layers are on, so it switches off anything it does not name. That
-is right for a control called Layers and would be indefensible for one
-called Region.
+miss.
+
+**Interests union rather than replace, and they are checkboxes.** Ice over
+air temperature is a pair worth reading and so is wind over circulation, so
+checking a second one adds its layers to what is showing rather than
+sweeping the first away. Unchecking drops that interest's layers *except*
+any another checked interest also names — otherwise turning off Sea ice
+would strip the coastline out from under Circulation, which shares it.
+
+**Whether one is checked is derived, never stored.** An interest is on
+exactly when every layer it names is on. There is therefore no second copy
+of the truth to drift: turn a layer off in the switcher and the interest
+that needed it unchecks itself; check two whose union the exclusivity rules
+cannot satisfy and whichever lost simply reads as off, which beats a tick
+beside a layer that is not drawn. The menu registers in `chromeSyncs` like
+every other piece of chrome, so a restored view and Reset move it too.
+
+Colours are **not** undone on unchecking, deliberately: a colour scale is
+not owned by the interest that set it, and putting one back would overwrite
+whatever the reader has since chosen by hand. Reset is what returns them.
 
 It replaced a fixed `Basin` / `Global` / `Reset` bar, which had two problems
 beyond being short. **"Global" did not mean the globe** — it fitted the
@@ -3421,7 +3462,11 @@ otherwise have shipped:
   *which* one survives depends on the order they were added in. Two of the
   seven interests had this. `test:map` now applies **every** interest and
   requires each to keep every layer it named; checking one would not have
-  found it.
+  found it. That loop starts from an **empty** map and toggles each
+  interest back off after it — several of them name layers the page already
+  opens with, so pressing one straight away found it *already* fully on and
+  toggled it off, and the check then read the emptied state and blamed the
+  interest. That is the derived tick being honest, not a bug in it.
 - **`syncControls` was never registered in `chromeSyncs`**, which is a
   pre-existing bug this surfaced rather than caused. `overlayadd` fires only
   from the layers control, so a layer set programmatically — by

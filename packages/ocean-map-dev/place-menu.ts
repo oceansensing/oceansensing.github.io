@@ -21,8 +21,12 @@ export interface PlaceMenuHandlers {
   /** Fit whatever is reporting — what the old Global button did, and it
       never meant the globe. */
   goFleet(): void;
-  /** Apply an interest's layers and colour scales. */
-  apply(interest: Interest): void;
+  /** Turn an interest on or off. On unions its layers with what is showing;
+      off drops the ones no other checked interest needs. */
+  toggle(interest: Interest): void;
+  /** Whether every layer this interest names is currently on. Derived from
+      the map, never stored — see the note in `index.ts`. */
+  isOn(interest: Interest): boolean;
   /** Everything back to defaults. */
   reset(): void;
 }
@@ -37,6 +41,12 @@ interface MenuSpec<T> {
   run(entry: T): void;
   titleOf(entry: T): string;
   labelOf(entry: T): string;
+  /* Checkable entries are checkboxes that leave the panel open, because
+     the whole point of them is picking more than one. A region is a
+     one-shot jump and closes. */
+  checkable?: boolean;
+  /** For a checkable entry: whether it currently reads as on. */
+  stateOf?(entry: T): boolean;
   /* Which entries are the "undo" ones at the top — Home and All platforms
      in one menu, Reset in the other. A rule is drawn under the last of
      them.
@@ -54,12 +64,15 @@ export function createPlaceMenus(
   regions: Region[],
   interests: Interest[],
   on: PlaceMenuHandlers
-): void {
+): { sync: () => void } {
   /* Only one open at a time, and clicking the map closes both. Tracked here
      rather than per menu, because two open panels would overlap in a 30px
      wide stack and the lower one would be unreachable. */
   const panels: { close: () => void }[] = [];
   const closeAll = () => panels.forEach((p) => p.close());
+  /* Every checkable item's "am I on?" refresh, run together. Collected
+     because the answer can change without this menu being touched at all. */
+  const refreshers: (() => void)[] = [];
 
   const build = <T>(spec: MenuSpec<T>) => {
     const Menu = L.Control.extend({
@@ -95,10 +108,24 @@ export function createPlaceMenus(
           item.setAttribute('role', 'menuitem');
           item.textContent = spec.labelOf(entry);
           item.title = spec.titleOf(entry);
+          if (spec.checkable) {
+            item.setAttribute('role', 'menuitemcheckbox');
+            const refresh = () => {
+              const on = spec.stateOf?.(entry) ?? false;
+              item.setAttribute('aria-checked', String(on));
+              item.classList.toggle('om-place-checked', on);
+            };
+            refreshers.push(refresh);
+            refresh();
+          }
           L.DomEvent.on(item, 'click', (e) => {
             L.DomEvent.stop(e);
-            close();
+            /* A checkbox leaves the panel up — choosing two is the point —
+               where a region is a jump and closing is the confirmation
+               that something happened. */
+            if (!spec.checkable) close();
             spec.run(entry);
+            refreshers.forEach((r) => r());
           });
         });
 
@@ -155,7 +182,12 @@ export function createPlaceMenus(
     labelOf: (i) => i.label,
     titleOf: (i) => i.title,
     isSpecial: (i) => Boolean(i.reset),
-    run: (i) => (i.reset ? on.reset() : on.apply(i)),
+    /* Reset is in this menu but is not an interest — it is a one-shot that
+       clears everything, so it is the one entry here that is not a
+       checkbox and does close the panel. */
+    checkable: true,
+    stateOf: (i) => !i.reset && on.isOn(i),
+    run: (i) => (i.reset ? on.reset() : on.toggle(i)),
   });
 
   /* Escape closes, and it is bound on the document for the same reason the
@@ -167,4 +199,6 @@ export function createPlaceMenus(
 
   // A click on the map is a decision to look at the map.
   map.on('click movestart', closeAll);
+
+  return { sync: () => refreshers.forEach((r) => r()) };
 }

@@ -219,9 +219,10 @@ for (const name of [
   // wind's 90, which is the seam of particles running on above a field that
   // had ended.
   'currents', 'currents-arctic', 'currents-60m', 'currents-arctic-60m', 'wind',
-  // Air temperature rides the wind pipeline's tiers, so it inherits the
-  // same obligation to reach the pole that the wind grid already carries.
-  'air', 'air-arctic',
+  // Air temperature is one global grid at the model's own 0.25 degrees —
+  // no regions, because there is nothing finer to promise over a box — so
+  // it is the one file carrying the obligation to reach the pole.
+  'air',
 ]) {
   const file = read(`${name}.json`);
   // A velocity grid is a two-element array, u then v; both carry the header.

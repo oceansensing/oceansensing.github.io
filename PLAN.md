@@ -18,7 +18,7 @@ The hurricane page carries a live map: NHC forecast tracks and cones with
 10-day observed storm history, NOAA saildrones, ~50 gliders from four national
 data centres (US, UK, Canada, Sweden), ~4,000 Argo floats, animated global
 currents at the surface and 60 m that sharpen to 1/12° as you zoom in,
-ECMWF 10 m wind and 2 m air temperature, sea-surface temperature from both an observed analysis
+ECMWF 10 m wind and 2 m air temperature at the model's own 0.25 degrees, sea-surface temperature from both an observed analysis
 (OISST) and the Navy forecast, Navy sea-surface salinity, isobaths from 20 m
 to 10,000 m with an opacity the reader sets, a detailed coastline, and EEZ
 boundaries. The map fills the window in both axes and the page's text aligns
@@ -33,9 +33,9 @@ reset that puts everything back. Hovering an asset names it; clicking one
 reports its details plus the depth, current, wind, temperature and — when the
 EEZ layer is on — the jurisdiction of the water it is in; right-click or
 long-press does the same anywhere. There is a distance and bearing tool. Two menus under it — `Region` jumps to
-one of a dozen places without touching the layers, `Layers` applies a set of
-layers and colour scales without moving the map, and Reset is the first entry
-of the second.
+one of a dozen places without touching the layers, `Layers` checkboxes sets of layers and
+colour scales without moving the map — several at once give the union — and
+Reset is the first entry of the second.
 Above the map, an active-storm status line that updates without a reload;
 beside that, a server-synchronised UTC clock. The page refreshes itself when
 a new build lands, keeping your basemap, layers and position.
@@ -75,7 +75,7 @@ website, `PORTING-IOS.md` for the iOS app, and `BOUNDARIES.md` for anyone
 adding to it — those separations are what keep the other two possible, and
 they are easy to breach by accident.
 
-`npm run verify` stands at **875 printed `ok` lines** across nine steps:
+`npm run verify` stands at **877 printed `ok` lines** across nine steps:
 build, type-check, docs, the renderer-independent units, the published data
 contract, colour contrast, the rendered map, two maps on a page, and the
 clock. Counted as `npm run verify | grep -c '^ok'`, which is the only figure

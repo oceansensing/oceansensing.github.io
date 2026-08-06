@@ -3750,18 +3750,58 @@ export async function createOceanMap(
      statement rather than an addition. Anything the reader turned on is
      therefore lost, which is exactly what a menu called "Layers" should be
      allowed to do and exactly what the region menu must never do. */
-  const applyInterest = (interest: Interest) => {
-    const wanted = new Set(interest.layers ?? []);
-    for (const [name, layer] of Object.entries(overlays)) {
-      if (wanted.has(name) && !map.hasLayer(layer)) map.addLayer(layer);
-      if (!wanted.has(name) && map.hasLayer(layer)) map.removeLayer(layer);
-    }
-    for (const [key, name] of Object.entries(interest.colours ?? {})) {
-      /* Guarded, because a colormap that does not exist would otherwise
-         leave `stopsFor` falling back to an arbitrary first entry — a
-         silently wrong scale rather than the one asked for. `check:docs`
-         holds the names, so this is the belt to that braces. */
-      if (choices[key] && COLORMAPS[name]) choices[key]!.map = name;
+  /* Interests **union**, they do not replace, and they are checkboxes
+     rather than one-shot actions: ice over hurricanes is a pair worth
+     reading, and so is wind over circulation.
+
+     **Whether one is checked is derived, never stored.** An interest is on
+     exactly when every layer it names is on — so there is no second copy of
+     the truth to drift from the map. Turn a layer off in the switcher and
+     the interest that needed it unchecks itself; check two whose union the
+     exclusivity rules cannot satisfy and whichever lost simply reads as
+     off, which is the honest answer rather than a tick beside a layer that
+     is not drawn. This project has paid for stored chrome state twice, and
+     `chromeSyncs` exists because of it. */
+  const interestOn = (interest: Interest) =>
+    (interest.layers ?? []).length > 0 &&
+    (interest.layers ?? []).every((name) => {
+      const layer = overlays[name];
+      return layer ? map.hasLayer(layer) : false;
+    });
+
+  const toggleInterest = (interest: Interest) => {
+    const mine = new Set(interest.layers ?? []);
+    if (interestOn(interest)) {
+      /* Off: drop this interest's layers, **except any another checked
+         interest also names** — otherwise unchecking "Sea ice" would strip
+         the coastline out from under "Circulation", which shares it. */
+      const keep = new Set(
+        CONFIG.interests
+          .filter((other) => other !== interest && interestOn(other))
+          .flatMap((other) => other.layers ?? [])
+      );
+      for (const name of mine) {
+        const layer = overlays[name];
+        if (layer && !keep.has(name) && map.hasLayer(layer)) map.removeLayer(layer);
+      }
+    } else {
+      // On: union with whatever is already showing. Nothing is taken away.
+      for (const name of mine) {
+        const layer = overlays[name];
+        if (layer && !map.hasLayer(layer)) map.addLayer(layer);
+      }
+      for (const [key, name] of Object.entries(interest.colours ?? {})) {
+        /* Guarded, because a colormap that does not exist would otherwise
+           leave `stopsFor` falling back to an arbitrary first entry — a
+           silently wrong scale rather than the one asked for. `check:docs`
+           holds the names, so this is the belt to that braces.
+
+           Colours are **not** undone on unchecking: a colour scale is not
+           owned by the interest that set it, and putting one back would
+           overwrite whatever the reader has since chosen by hand. Reset is
+           what returns them. */
+        if (choices[key] && COLORMAPS[name]) choices[key]!.map = name;
+      }
     }
     /* An interest names layers by their switcher labels, and Leaflet only
        fires `overlayadd` for its own checkboxes — so the chrome has to be
@@ -3771,13 +3811,20 @@ export async function createOceanMap(
     saveView();
   };
 
-  createPlaceMenus(map, CONFIG.regions, CONFIG.interests, {
+  const menus = createPlaceMenus(map, CONFIG.regions, CONFIG.interests, {
     goTo: (bounds) => map.fitBounds(bounds),
     goHome: () => map.fitBounds(BASIN),
     goFleet: () => fitEverything(),
-    apply: applyInterest,
+    toggle: toggleInterest,
+    isOn: interestOn,
     reset: () => resetEverything(),
   });
+  /* The ticks are a view of the layer state, so they have to be refreshed
+     wherever that state can move without the reader touching this menu —
+     the layer switcher, a restored view, Reset. That is precisely what
+     `chromeSyncs` is, and registering here is what keeps the menu from
+     becoming the second source of truth it is designed not to be. */
+  chromeSyncs.push(menus.sync);
 
   /* Back to how the map arrives for someone who has never touched it:
      default basemap, default layers, default colour scales, automatic

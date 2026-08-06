@@ -693,6 +693,26 @@
     background: var(--bg-subtle, #f4f6f8);
   }
 
+  /* A checked interest. The tick is drawn rather than bulleted so the
+     labels stay left-aligned with the regions in the other menu, and it
+     reads as on without needing colour to say so. */
+  .ocean-map .om-place-item[role='menuitemcheckbox'] {
+    padding-inline-start: 1.5rem;
+    position: relative;
+  }
+
+  .ocean-map .om-place-item.om-place-checked::before {
+    content: '\2713';
+    position: absolute;
+    inset-inline-start: 0.45rem;
+    font-weight: 700;
+  }
+
+  .ocean-map .om-place-item.om-place-checked {
+    background: var(--bg-subtle, #f4f6f8);
+    font-weight: 600;
+  }
+
   /* A rule under the last of the "undo" entries — Home and All platforms in
      one menu, Reset in the other. Marked in the markup rather than by
      position, because the two menus have different numbers of them. */

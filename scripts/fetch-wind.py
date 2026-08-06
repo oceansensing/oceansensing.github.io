@@ -109,6 +109,32 @@ NATIVE = {'nx': 1440, 'ny': 721, 'd': 0.25}
 # interpolate, for a second set of files and a build over them.
 GLOBAL_STRIDE = 4          # 1 degree; 360 x 181, about what currents.json weighs
 
+# **Air temperature is published at the model's own 0.25 degrees globally**,
+# where the wind stays at 1. The two share a fetch and want different
+# answers, which is the same split the currents and the scalars already
+# have: the wind carries u *and* v, so the same payload buys half the cells,
+# and it is drawn as *particles*, which interpolate between cells and hide a
+# coarse grid. A scalar is a raster — every cell edge is a visible square.
+#
+# Reported as looking very low resolution, and it was: 1 degree is about
+# five screen pixels on a wide map, so the cells are plainly countable, and
+# a reader jumping to the Philippines or the Chukchi Sea got 1 degree all
+# the way in because the regional grids below only cover the Atlantic and
+# the Arctic. "Use the resolution the product has" — the same rule the ice
+# and Navy SST entries each have a paragraph about, both written after
+# shipping a field at a stride that threw most of it away. At 1 degree this
+# discarded fifteen cells in every sixteen.
+#
+# Measured, at one decimal: 1 degree is 316 KB raw and 74 KB gzipped, 0.5 is
+# 1,261/264, and native 0.25 is 5,037/919. That is the whole cost, it is
+# paid only by a reader who switches the layer on, and it is well inside
+# what this map already asks on demand — coastline.json is 4.2 MB and the
+# isobaths 3.0 MB gzipped, both defended on exactly this reasoning.
+#
+# **It needs no regional grids as a result**, because a region exists to
+# reach native resolution over a box and this is already native everywhere.
+AIR_STRIDE = 1
+
 REGIONS = [
     {
         'name': 'atlantic',
@@ -420,13 +446,11 @@ def main() -> int:
         # the wind is the older layer and the one a reader is more likely to
         # be looking at.
         air = read_message(run, step, AIR['param']) + AIR['offset']
+        # One grid, at the model's own resolution, everywhere. No `details`:
+        # a region is a promise to serve a box *finer*, and there is nothing
+        # finer than native to promise. See AIR_STRIDE.
         write_scalar(air, MAP_DIR / f'{AIR["name"]}.json', run, valid, step,
-                     GLOBAL_STRIDE, -90.0, 90.0, -180.0, 180.0, True,
-                     extra={'details': region_links(AIR['name'])})
-        for r in REGIONS:
-            write_scalar(air, MAP_DIR / f'{AIR["name"]}-{r["name"]}.json',
-                         run, valid, step, 1, r['south'], r['north'],
-                         r.get('west', -180.0), r.get('east', 180.0), r['wrap'])
+                     AIR_STRIDE, -90.0, 90.0, -180.0, 180.0, True)
     except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:
         print(f'! wind unavailable: {exc}', file=sys.stderr)
         existing = MAP_DIR / GLOBAL_NAME
