@@ -14,6 +14,11 @@ split), people, publications from BibTeX, presentations, news + RSS, data &
 tools, per-person CVs at `/cv/<person-id>/`, and Significant Observations
 (harmful algal blooms, hurricanes).
 
+`/visualization/` opens on sea-surface temperature under the surface flow,
+with the shorelines, borders and grid, over the whole ocean — 232 KB on a
+first load, the isobaths having been measured at 2,916 KB gzipped and left
+one click away in the switcher rather than in the preset.
+
 The hurricane page carries a live map: NHC forecast tracks and cones with
 10-day observed storm history, NOAA saildrones, ~50 gliders from four national
 data centres (US, UK, Canada, Sweden), ~4,000 Argo floats, animated global
@@ -75,7 +80,7 @@ website, `PORTING-IOS.md` for the iOS app, and `BOUNDARIES.md` for anyone
 adding to it — those separations are what keep the other two possible, and
 they are easy to breach by accident.
 
-`npm run verify` stands at **879 printed `ok` lines** across nine steps:
+`npm run verify` stands at **880 printed `ok` lines** across nine steps:
 build, type-check, docs, the renderer-independent units, the published data
 contract, colour contrast, the rendered map, two maps on a page, and the
 clock. Counted as `npm run verify | grep -c '^ok'`, which is the only figure

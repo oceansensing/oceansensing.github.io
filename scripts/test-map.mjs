@@ -2753,6 +2753,17 @@ const checks = [
      the breakpoint value and the declaration rather than on either
      spelling is what keeps this from failing on a build-tool upgrade that
      changes neither the CSS nor the layout. */
+  /* And a colour-scale set fits one line there, by swapping the field's
+     full name for its acronym — the layer switcher's own vocabulary. The
+     alternative was what the row did before: wrap *inside the range*, so
+     "20 -" ended one line and "30" began the next, which reads as two
+     controls rather than one. Both names are in the DOM and CSS picks, so
+     this is decided over the built stylesheet like the rest of the phone
+     layout — and it checks **both** directions, since a swap that only
+     ever showed one of the two would satisfy a one-sided test. */
+  ['the full field name gives way to its acronym on a phone',
+    /\.om-field-name-short\{\s*display:\s*none/.test(builtCss) &&
+      /@media[^{]*47\.999rem[^{]*\{[^@]*?\.om-field-name-long\{\s*display:\s*none\s*\}\s*\.om-field-name-short\{\s*display:\s*inline/.test(builtCss)],
   ['each particle field takes its own row on a phone',
     /@media[^{]*47\.999rem[^{]*\{[^@]*\.om-tints\s*,\s*\.om-particle-speed label\s*\{\s*flex:\s*1 0 100%/.test(builtCss)],
   ['a closed panel is hidden by more than the attribute',

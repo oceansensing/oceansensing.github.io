@@ -1156,6 +1156,19 @@ out as grey squares on a phone while being correct on a desktop, which is the
 whole point of that control gone. It only shows on a real phone: the browser
 pane does not reproduce it.
 
+**A colour-scale set uses the acronym on a phone.** The full name, a
+colormap select, two number inputs and a button do not fit a phone's
+content column, and what wrapping did instead was worse than either: the
+break landed *inside the range*, so "20 –" ended one line and "30" began
+the next, which reads as two controls rather than one. `FieldDescriptor`
+carries a `short` — SST, SSS, SIC, SIT — which is the layer switcher's own
+vocabulary rather than an abbreviation invented for the row, and the colour
+bar directly above still carries the full name. Both are rendered and CSS
+picks between them, so there is no resize listener to keep in step and no
+frame where the DOM and the viewport disagree. The select is the piece that
+gives: left at its natural width it sizes for `cmo.balance` and takes half
+the row.
+
 **On a phone, one field per row.** Both particle controls put Current and
 Wind side by side, which wants about 41rem for the swatches and 30rem for
 the sliders against roughly 21.6rem of phone content column. Reported from
@@ -2616,7 +2629,7 @@ the basemap and layers. Without that a pinned scale would silently revert
 when a new build landed, which is the one thing "fixed until reset" must not
 do. `Auto` hands it back to the view.
 
-The **Reset** control beside Basin/Global puts everything back: basemap,
+**Reset**, the first entry of the Layers menu, puts everything back: basemap,
 layers, colormaps, ranges, the measuring tool, and the basin view. It also
 clears the saved view, because leaving it would mean the next reload restored
 exactly what was just reset.
@@ -2700,8 +2713,13 @@ product where a tile tier actually buys resolution.
 
 | product | native | global | region (zoom ≥ 4) | tiles (zoom ≥ 4) |
 | --- | --- | --- | --- | --- |
-| OISST | 0.25° | 1° | **0.25°, native** | none, by design |
+| OISST | 0.25° | **0.25°, native** | none needed | none, by design |
 | Navy | 0.08° | 0.96° | 0.16°, fallback only | **0.08°, native** |
+
+OISST's global grid *is* its native resolution now, so it publishes no
+regions at all — a region exists to serve a box finer and there is nothing
+finer to promise. It was 1° globally with two native regions, which left a
+reader anywhere outside the Atlantic and the Arctic on 1° at every zoom.
 
 **Navy SST is served at native resolution over the whole globe from zoom 4**,
 not just over two regions. The tile threshold is 4 rather than the 7 the
@@ -2736,6 +2754,26 @@ about three pixels.
 accessible via WMS". GEBCO's WMS loads fine from the same probe, so the
 probe is sound. Shipping grids instead also lets the readout report a
 temperature with no request.
+
+**A native global grid does not fit in one OPeNDAP response**, and finding
+that out is the reason `build` bands its request by latitude as well as
+slabbing it by longitude. OISST at its own 0.25° is 1440 × 661, and the ice
+concentration off that grid failed every time with `IncompleteRead` — three
+attempts, truncating at 10.9, 11.2 and 11.4 MB, so not transient.
+
+**The temperature off the same grid succeeded, and that is the part worth
+keeping.** It is a *byte* limit rather than a cell one: ice writes its fill
+value as the twelve characters `-9.96921E+36` where a sea-surface
+temperature is four, so the same number of cells is three times the
+response. The temperature was therefore already near the limit and getting
+away with it — which would have surfaced later as an intermittent CI failure
+rather than an honest one, on whichever run happened to compress badly.
+
+`CELLS_PER_REQUEST` is 300k, which keeps the worst case near 4 MB. The bands
+start on the stride lattice the way the longitude slabs do — a band resuming
+anywhere else would shift its rows against the ones above and the grid would
+stop being regular — and the split is verified lattice-identical to the
+single-request form. The Navy grids need no split and get none.
 
 Three things about this cost real time, all silent:
 
@@ -3515,8 +3553,11 @@ whatever the reader has since chosen by hand. Reset is what returns them.
 It replaced a fixed `Basin` / `Global` / `Reset` bar, which had two problems
 beyond being short. **"Global" did not mean the globe** — it fitted the
 bounds of whatever was reporting, which is a different thing and was
-mislabelled from the day it was written; it is `All platforms` now. And
-there was nowhere to put an eleventh idea. Reset survives as the first entry
+mislabelled from the day it was written. It became `All platforms` and then
+went altogether: with about four thousand Argo floats spread over every
+ocean, "fit everything reporting" is essentially always the whole world, so
+it duplicated a globe view while its name promised something more specific.
+And there was nowhere to put an eleventh idea. Reset survives as the first entry
 of the Layers menu, which is where it belongs: it is the null interest.
 
 The entries are data in `packages/ocean-map/places.ts` — **no Leaflet and no

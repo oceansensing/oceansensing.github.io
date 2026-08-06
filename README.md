@@ -10,10 +10,13 @@ shuffle and lightbox on observation pages, the asset map, and the UTC clock.
 The map is the one heavyweight: gliders from four national data centres,
 NOAA saildrones, the Argo array, animated currents at two depths,
 sea-surface temperature and salinity, isobaths, a detailed coastline and EEZ
-boundaries, and ECMWF 10 m wind — with the colour scale, its range, the
-isobath opacity and every layer under the reader's control. The model fields are a **forecast**, T+36
-from the newest ESPC run, and the map's attribution says which hour they are
-valid for and how far ahead of now that is.
+boundaries, and ECMWF 10 m wind and 2 m air temperature — with the colour
+scale, its range, the isobath opacity and every layer under the reader's
+control. The ESPC fields show the step nearest the reader's own clock rather
+than a fixed offset from the model run, the currents publishing the two
+steps that span a six-hour window so the tide in that model can be stepped
+through, and the map's attribution says which hour is drawn and how far from
+now it is.
 
 It carries two pages. [`/visualization/`](https://oceansensing.org/visualization/)
 is the general-purpose one and

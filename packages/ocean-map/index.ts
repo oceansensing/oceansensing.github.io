@@ -2131,13 +2131,21 @@ export async function createOceanMap(
       root.className = 'om-field-controls';
       root.dataset.field = field.key;
 
-      /* Named only when more than one set is on screen — with a single
-         field the bar above says which it is, and repeating it is noise.
-         Same rule the legend follows. */
+      /* Both the full name and the acronym, with CSS picking one by
+         width. Rendered rather than swapped in script, so there is no
+         resize listener to keep in step and no moment where the DOM and
+         the viewport disagree — and `hidden` is not involved, so the
+         `[hidden]`-versus-`display` trap this stylesheet has a note about
+         cannot bite here. */
       const name = document.createElement('span');
       name.className = 'om-field-name';
-      name.textContent = field.label;
-      name.hidden = true;
+      const long = document.createElement('span');
+      long.className = 'om-field-name-long';
+      long.textContent = field.label;
+      const short = document.createElement('span');
+      short.className = 'om-field-name-short';
+      short.textContent = field.short ?? field.label;
+      name.append(long, short);
       root.append(name);
 
       const picker = document.createElement('select');

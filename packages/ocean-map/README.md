@@ -48,6 +48,11 @@ ancestor, so **two maps can share a page**.
 | `dataBase` | `data-map-data` | `/map/` |
 | `home` | `data-map-home` | `[[7, -100], [45, -20]]` |
 | `storageKey` | `data-map-storage-key` | `ocean-map:<container id>` |
+| `layers` | `data-map-layers` (JSON array) | whatever the map opens with |
+| `preload` | `data-map-preload` (JSON array) | nothing — a layer builds when first shown |
+| `brand` | `data-map-brand` | none |
+| `regions` | — code only | the list in `places.ts` |
+| `interests` | — code only | the list in `places.ts` |
 
 Options passed in code beat the attribute; the attribute beats the default.
 Attributes exist so a page with no build step can configure the map in markup.

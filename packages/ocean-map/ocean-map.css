@@ -1000,11 +1000,18 @@
   align-items: center;
 }
 
-/* Shown only when two fields are on, so a reader can tell which set edits
-   which. With one field the colour bar above already says. */
+/* Which field a colour-scale set edits. Always shown — see the note in
+   index.ts on why a count-dependent label was the wrong idea. */
 .om-field-name {
   font-size: var(--text-sm, 0.875rem);
   color: var(--text-muted, #5b6672);
+}
+
+/* The full name on a wide screen, the acronym on a narrow one. Both are in
+   the DOM and CSS picks, so there is no resize listener and no frame where
+   the two disagree. */
+.om-field-name-short {
+  display: none;
 }
 
 /* Per-field particle speed sliders. */
@@ -1102,10 +1109,39 @@
     margin-inline-end: 0;
   }
 
-  /* Same overflow, same cause: a field's colour-scale set is a name, a
-     select, two number inputs and a button on one unwrappable line. */
+  /* **A colour-scale set on one line, using the acronym.** The full name,
+     a colormap select, two number inputs and a button do not fit a phone's
+     content column — and wrapping put the break *inside the range*, so
+     "20 -" ended one line and "30" began the next, which reads as two
+     controls rather than one. The layer switcher already calls these SST,
+     SSS, SIC and SIT, so the short form is the map's own vocabulary, and
+     the colour bar directly above still carries the full name.
+
+     The select is the piece that has to give: left at its natural width it
+     is wide enough for `cmo.balance` and takes half the row. It shrinks to
+     fit and truncates, which is acceptable for a control whose current
+     value is a word the reader just chose. */
+  .om-field-name-long {
+    display: none;
+  }
+
+  .om-field-name-short {
+    display: inline;
+  }
+
   .om-field-controls {
     flex-wrap: wrap;
+    gap: 0.2rem;
+  }
+
+  .om-field-controls select {
+    min-inline-size: 0;
+    flex: 1 1 4.5rem;
+    max-inline-size: 8rem;
+  }
+
+  .om-field-controls input {
+    width: 3.4em;
   }
 }
 

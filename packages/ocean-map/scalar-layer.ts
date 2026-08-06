@@ -38,6 +38,17 @@ export interface FieldDescriptor {
   /** The colour bar rounds outward to this. */
   step: number;
   label: string;
+  /** The acronym, for the colour-scale control on a narrow screen.
+      "Sea surface temp" plus a colormap select plus two number inputs plus
+      a button does not fit a phone's content column on one line, and what
+      it does instead is worse than either: the row wraps between the two
+      halves of the range, so "20 -" ends one line and "30" starts the
+      next. These are the names the layer switcher already uses, so the
+      short form is the map's own vocabulary rather than an abbreviation
+      invented for the occasion. Both are rendered and CSS picks; the long
+      name is never lost, because the colour bar directly above still
+      carries it. */
+  short?: string;
   /** Bounds the *automatic* range, where the extremes are not ocean — see
       the salinity note in FIELDS. A pinned range ignores it. */
   autoClamp?: [number, number];
@@ -89,7 +100,7 @@ export const below = (field: FieldDescriptor | undefined, v: number) =>
 export const FIELDS: Record<string, FieldDescriptor> = {
   // "Sea surface" alone stopped being unambiguous the moment a second
   // surface field existed.
-  sst: { key: 'sst', unit: '°C', step: 1, label: 'Sea surface temp' },
+  sst: { key: 'sst', unit: '°C', step: 1, label: 'Sea surface temp', short: 'SST' },
   /* Salinity gets a half-unit step where temperature gets a whole one.
      Both round outward to bound the water in view, but open ocean spans
      maybe 34–37 psu against 10 °C or more of temperature — rounding
@@ -105,7 +116,8 @@ export const FIELDS: Record<string, FieldDescriptor> = {
      bottom stop, which is the honest thing for it to do on a scale
      labelled in psu. A range the reader pins by hand is untouched — this
      bounds what "Auto" chooses, not what they are allowed to ask for. */
-  sss: { key: 'sss', unit: 'psu', step: 0.5, label: 'Salinity', autoClamp: [29, 39] },
+  sss: { key: 'sss', unit: 'psu', step: 0.5, label: 'Salinity', short: 'SSS',
+         autoClamp: [29, 39] },
   /* Sea ice concentration, as a fraction. The range is pinned by
      `autoClamp` to the whole of it rather than bounded to the view: a
      per-view range is right for temperature, where a basin spans ten of
@@ -115,7 +127,7 @@ export const FIELDS: Record<string, FieldDescriptor> = {
      colour mean a different concentration in every view. Ice is read as
      "how packed", not "how packed relative to here". */
   sic: {
-    key: 'sic', unit: '%', step: 0.05, label: 'Ice concentration',
+    key: 'sic', unit: '%', step: 0.05, label: 'Ice concentration', short: 'SIC',
     autoClamp: [0.15, 1], drawAbove: 0.15, percent: true, pane: 'ice',
   },
   /* Thickness in metres. Unlike concentration this is *not* pinned to a
@@ -125,7 +137,7 @@ export const FIELDS: Record<string, FieldDescriptor> = {
      the way salinity does. The floor is 0.1 m — thinner than that is
      nominal ice the concentration field already shows better. */
   sit: {
-    key: 'sit', unit: 'm', step: 0.25, label: 'Ice thickness',
+    key: 'sit', unit: 'm', step: 0.25, label: 'Ice thickness', short: 'SIT',
     autoClamp: [0, 8], drawAbove: 0.1, pane: 'ice',
   },
   /* 2 m air temperature, and it is the first scalar here that is **not the
@@ -143,7 +155,7 @@ export const FIELDS: Record<string, FieldDescriptor> = {
      sea-surface temperature. A whole-degree step is right for both, but
      the automatic range is left unclamped — every value in it is real air,
      unlike salinity's estuaries. */
-  air: { key: 'air', unit: '°C', step: 1, label: 'Air temp at 2 m' },
+  air: { key: 'air', unit: '°C', step: 1, label: 'Air temp at 2 m', short: 'Air 2m' },
 };
 
 /* What the reader has chosen for a field, read fresh on every paint.

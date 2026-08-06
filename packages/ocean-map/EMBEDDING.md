@@ -49,6 +49,10 @@ the attribute over the default.
 | `home` | `data-map-home` | `[[7, -100], [45, -20]]` |
 | `storageKey` | `data-map-storage-key` | `ocean-map:<container id>` |
 | `layers` | `data-map-layers` (JSON array) | whatever the map opens with |
+| `preload` | `data-map-preload` (JSON array) | nothing — a layer builds when first shown |
+| `brand` | `data-map-brand` | none |
+| `regions` | — code only | the list in `places.ts` |
+| `interests` | — code only | the list in `places.ts` |
 
 ```js
 import { createOceanMap } from '@c4po/ocean-map';
@@ -58,6 +62,17 @@ createOceanMap(document.querySelector('#map'), {
   home: [[50, -30], [65, 10]],     // the Norwegian Sea, say
 });
 ```
+
+`regions` and `interests` are the two menus in the control stack, and they
+are the options a second deployment is most likely to want its own version
+of — a site whose readers work in the Baltic has no use for a jump to the
+Chukchi Sea. Both are plain data with no Leaflet and no DOM in them (see
+`places.ts`), and the split between them is load-bearing: a region moves the
+view and touches nothing else, an interest sets layers and colour scales and
+moves nothing, so the two compose. An interest names overlays by their
+switcher labels and colormaps by their palette keys, and a name that does
+not exist fails silently — this repository's `check:docs` validates both
+against their sources, and a fork should do the same.
 
 `layers` names overlays as the switcher shows them, and is how one engine
 serves several pages: this site's general-purpose map and its hurricane map
