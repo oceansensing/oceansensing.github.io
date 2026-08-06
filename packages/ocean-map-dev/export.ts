@@ -47,6 +47,11 @@ export interface ExportRequest {
   /** Painted behind the band. Comes from the stylesheet, never a literal. */
   bandFill: string;
   bandInk: string;
+  /* The figure's scale bar. Here rather than in this module because a colour
+     written into code is invisible to the contrast gate — BOUNDARIES S5 —
+     and this one is judged against the water it sits on. */
+  ruleInk: string;
+  ruleHalo: string;
 }
 
 /* Panes holding chrome rather than map. `mapPane` is the transform wrapper
@@ -264,15 +269,89 @@ export async function drawFigure(
   for (const el of host.querySelectorAll<HTMLElement>(
     '.map-grid-label > span, .leaflet-control-scale-line, .om-brand'
   )) {
-    const text = (el.textContent ?? '').trim();
-    if (!text) continue;
+    const raw = (el.textContent ?? '').trim();
+    if (!raw) continue;
     const box = boxOf(el);
     const style = window.getComputedStyle(el);
     const pad = parseFloat(style.paddingLeft) || 0;
+    const indent = parseFloat(style.textIndent) || 0;
+    const isScale = el.classList.contains('leaflet-control-scale-line');
 
-    /* The brand sits on a translucent plate so it reads over any water, and
-       the plate is as much a part of it as the words. Skipped when there is
-       nothing to draw — most of this chrome has no background at all. */
+    ctx.save();
+    /* **Three text properties that CSS applies and `fillText` does not**, and
+       between them they are why the brand came out short of its own plate:
+       the mark is uppercased, small-capped and letter-spaced by the
+       stylesheet, and drawing `textContent` in the plain face rendered it
+       ~20% narrower than the box drawn behind it. Dead space to the right of
+       the words, reported as the mark being too large.
+
+       Applied generally rather than as a brand special case: any redrawn
+       chrome can carry them, and the failure is silent every time. */
+    let text = raw;
+    if (style.textTransform === 'uppercase') text = text.toUpperCase();
+    else if (style.textTransform === 'lowercase') text = text.toLowerCase();
+    else if (style.textTransform === 'capitalize') {
+      text = text.replace(/\b\p{L}/gu, (c) => c.toUpperCase());
+    }
+    ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    const canSpace = 'letterSpacing' in ctx;
+    if (canSpace) (ctx as { letterSpacing: string }).letterSpacing = style.letterSpacing;
+    if ('fontVariantCaps' in ctx) {
+      (ctx as { fontVariantCaps: string }).fontVariantCaps = style.fontVariantCaps;
+    }
+
+    if (isScale) {
+      /* A cartographic scale bar rather than the interface's: a hairline
+         with a tick at each end and the distance set above it. Leaflet
+         draws a three-sided box with the number inside, which is a control
+         — legible on a screen, and in a figure it reads as a stray
+         rectangle with text trapped in it.
+
+         Black, as asked, with a light halo. Every thin line on this map
+         carries one for the same reason: the scale bar sits bottom-left
+         over whatever water happens to be there, and over the dark Chukchi
+         a bare black rule is invisible. The ink is still black; the casing
+         is what makes it survive. */
+      const y = box.y + box.h;
+      const tick = 5;
+      ctx.lineCap = 'butt';
+      ctx.lineJoin = 'miter';
+      const rule = () => {
+        ctx.beginPath();
+        ctx.moveTo(box.x, y - tick);
+        ctx.lineTo(box.x, y);
+        ctx.lineTo(box.x + box.w, y);
+        ctx.lineTo(box.x + box.w, y - tick);
+        ctx.stroke();
+      };
+      ctx.strokeStyle = request.ruleHalo;
+      ctx.lineWidth = 3;
+      rule();
+      ctx.strokeStyle = request.ruleInk;
+      ctx.lineWidth = 1;
+      rule();
+
+      /* Lighter and a shade smaller than the interface's label, centred over
+         the bar — it is a caption for the rule, not a button. */
+      const size = Math.max(9, parseFloat(style.fontSize) * 0.92);
+      ctx.font = `300 ${size}px ${style.fontFamily}`;
+      if (canSpace) (ctx as { letterSpacing: string }).letterSpacing = '0px';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      const at = box.x + box.w / 2;
+      ctx.strokeStyle = request.ruleHalo;
+      ctx.lineWidth = 3;
+      ctx.lineJoin = 'round';
+      ctx.strokeText(text, at, y - tick - 3);
+      ctx.fillStyle = request.ruleInk;
+      ctx.fillText(text, at, y - tick - 3);
+      ctx.restore();
+      continue;
+    }
+
+    /* The plate behind the brand. It is as much a part of the mark as the
+       words, and with the text now measuring what the DOM measures it fits
+       rather than floating in it. */
     const plate = style.backgroundColor;
     if (plate && plate !== 'transparent' && !/rgba\(0, 0, 0, 0\)/.test(plate)) {
       ctx.fillStyle = plate;
@@ -285,7 +364,6 @@ export async function drawFigure(
       ctx.strokeRect(box.x, box.y, box.w, box.h);
     }
 
-    ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
     /* A `text-shadow` halo is what makes a grid label legible over pale
        shelf water, and canvas has no such thing — so it is redrawn as a
        stroke behind the fill, in the halo's own colour. Without it the
@@ -295,28 +373,42 @@ export async function drawFigure(
     const halo = /^none$/.test(style.textShadow)
       ? null
       : style.textShadow.match(/#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)/)?.[0];
-    const baseline = box.y + box.h / 2;
-    const isScale = el.classList.contains('leaflet-control-scale-line');
-    /* A scale bar is a labelled box: the number alone says nothing without
-       the length it refers to, so its rule is drawn as well. */
-    if (isScale) {
-      ctx.strokeStyle = style.borderBottomColor || style.color;
-      ctx.lineWidth = Math.max(1, parseFloat(style.borderBottomWidth) || 1);
-      ctx.beginPath();
-      ctx.moveTo(box.x, box.y);
-      ctx.lineTo(box.x, box.y + box.h);
-      ctx.lineTo(box.x + box.w, box.y + box.h);
-      ctx.lineTo(box.x + box.w, box.y);
-      ctx.stroke();
-    }
+
+    /* **Kept inside the figure, measured on the glyphs.** A graticule label
+       rides the edge of the *viewport*, and the longitude ones sit flush on
+       it — measured, their boxes bottom out 0.6 px past the map — so the
+       clip took their descenders and they read as cut off against the band.
+
+       Clamped by the text's own ink rather than by its line box, because the
+       two are not the same: a line box carries leading the glyphs do not
+       fill, so clamping by half the box leaves a label technically inside
+       and visibly touching. `AIR` is the margin that turns flush into
+       legible; without it the fix is arithmetically right and looks
+       unchanged. */
+    const AIR = 3;
+    const metrics = ctx.measureText(text);
+    const up = metrics.actualBoundingBoxAscent || box.h / 2;
+    const down = metrics.actualBoundingBoxDescent || box.h / 2;
+    const baseline = Math.min(
+      Math.max(box.y + box.h / 2, up + AIR),
+      mapH - down - AIR
+    );
+    const width = metrics.width;
+    const left = Math.min(
+      Math.max(box.x + pad + indent, AIR),
+      Math.max(AIR, mapW - width - AIR)
+    );
+
+    ctx.textAlign = 'left';
     if (halo) {
       ctx.strokeStyle = halo;
       ctx.lineWidth = 3;
       ctx.lineJoin = 'round';
-      ctx.strokeText(text, box.x + pad, baseline);
+      ctx.strokeText(text, left, baseline);
     }
     ctx.fillStyle = style.color;
-    ctx.fillText(text, box.x + pad, baseline);
+    ctx.fillText(text, left, baseline);
+    ctx.restore();
   }
   ctx.restore();
   ctx.restore(); // the clip and the scale

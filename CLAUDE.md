@@ -3850,13 +3850,43 @@ a colour no gate had ever seen.
 
 The HTML case is redrawn from the live element's own **text and position**,
 never recomputed. Recomputing would be a second source of truth for the
-wording, which is the thing most likely to drift. Two details in it are not
-optional: a graticule label is a `divIcon` of size 0×0 with the text in an
-absolutely-positioned span that a transform lifts clear, so measuring the
-outer div puts every label a line-height out; and `text-shadow` has no canvas
-equivalent, so the halo is redrawn as a stroke behind the fill — without it
-the labels vanish over exactly the pale shelf water this map is most used to
-look at, which is the third time that lesson has been paid for here.
+wording, which is the thing most likely to drift. Four details in it are not
+optional, and each was reported before it was fixed:
+
+- A graticule label is a `divIcon` of size 0×0 with the text in an
+  absolutely-positioned span that a transform lifts clear, so measuring the
+  outer div puts every label a line-height out.
+- `text-shadow` has no canvas equivalent, so the halo is redrawn as a stroke
+  behind the fill — without it the labels vanish over exactly the pale shelf
+  water this map is most used to look at.
+- **`fillText` applies neither `text-transform`, `letter-spacing` nor
+  `font-variant-caps`**, and the brand mark uses all three. Drawing
+  `textContent` in the plain face rendered it about 20% narrower than the
+  plate drawn behind it — reported as the mark being too large, which is what
+  dead space to the right of a name looks like. Applied generally rather than
+  as a brand special case: any redrawn chrome can carry them, and the failure
+  is silent every time.
+- **Labels are clamped inside the figure by their own ink**, not by their line
+  box. The longitude labels ride the bottom edge of the *viewport* and measure
+  0.6 px past the map, so the clip took their descenders. A line box carries
+  leading the glyphs do not fill, so clamping by half of it leaves a label
+  technically inside and visibly touching the band; `actualBoundingBoxAscent`
+  and a 3 px margin are what turn flush into legible.
+
+**The scale bar is redrawn as a cartographic one, not the interface's.**
+Leaflet draws a three-sided box with the distance inside it, which is right
+for a control and reads in a figure as a stray rectangle with text trapped in
+it. The figure gets a hairline with a tick at each end and the distance set
+above it, in black — with a light halo, because it sits bottom-left over
+whatever water is there and a bare black rule is invisible over the dark
+Chukchi. The ink is still black; the casing is what makes it survive. This is
+the one place the figure deliberately differs from the live map.
+
+**The mark was also too big on the map, not only in the figure.** Measured at
+its old size the plate ran 181 px — 45% of a phone-width map. A mark says
+whose map this is; it does not compete with the map. Down a step and tracked
+tighter it is about 14% of a desktop map, and the change is in the package
+stylesheet so the live map and the figure agree.
 
 **Pane order is the correctness condition**, read off the live z-indices rather
 than restated. The first prototype iterated in DOM order, which is *nearly*
@@ -3874,7 +3904,14 @@ that refuses the data URL without firing either handler would leave the export
 awaiting it forever, with the button stuck on "Saving…". A layer missing from
 the figure is a far better failure than a figure that never arrives.
 
-#### What 2× actually resamples
+#### One button, and what its 2× actually resamples
+
+**One button rather than a size to choose.** Offering both put two buttons in
+a caption row that already carries four controls, for a decision nobody has to
+make: a doubled figure downscales perfectly to anything the screen-size one
+served, and the reverse is not true. It costs bytes — measured, 207 KB against
+368 — and the scale is still the attribute's value, so a host that wants the
+smaller one drops the `"2"`.
 
 Doubling is not an upscale everywhere, and the honest split is worth stating
 because half of it is free and half of it is not:
@@ -3893,8 +3930,9 @@ size rather than the screen's. Rasterising at CSS size and letting `drawImage`
 stretch it throws away the whole point, and produces linework exactly as soft
 as a tile.
 
-`@2x` goes in the filename only when it is one — which also stops a screen
-export and a print export made in the same minute from being the same file.
+`@2x` goes in the filename only when it is one, which says what the file is
+without anyone having to open it — and would stop a screen export and a print
+export made in the same minute from colliding, if a host offered both.
 
 #### The layout is renderer-independent
 

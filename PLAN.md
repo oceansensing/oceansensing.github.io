@@ -29,10 +29,12 @@ to 10,000 m with an opacity the reader sets, a detailed coastline, and EEZ
 boundaries. The map fills the window in both axes and the page's text aligns
 to its edges. The ESPC layers show the step nearest the reader's own clock
 rather than a fixed offset from the model run — the currents publish the
-two steps spanning a six-hour window and a forecast-hour control steps
-between them, which is what makes the tide in that model visible instead of
-sampled once — and the attribution says which hour is drawn and how far
-from now that is. Twenty-five colour
+two steps spanning a six-hour window and the map opens on whichever is
+nearest the reader's own clock, so the field is at worst about 1.5 hours
+from them — and the attribution says which hour is drawn and how far from
+now that is. The buttons that stepped between the two frames are gone: the
+answer was "now" almost every time, and the module still builds them
+wherever a page supplies the hook. Twenty-five colour
 scales, with the range either following the view or pinned by hand, and a
 reset that puts everything back. Hovering an asset names it; clicking one
 reports its details plus the depth, current, wind, temperature and — when the
@@ -45,8 +47,8 @@ The address bar carries the whole view — where you are looking and everything
 you have set — so the URL is a link to exactly what is on screen, with a
 `Copy link` button beside the map for a phone. Opening one restores it and
 outranks whatever view you last left behind; pasting one into a map you
-already have open works too. It also saves itself as a PNG — screen size or
-doubled for print — with the colour bar, the particle keys and the credit line
+already have open works too. One button beside it saves the figure as a PNG,
+doubled for print, with the colour bar, the particle keys and the credit line
 in a band underneath, so a figure that ends up in a talk or a paper carries
 its own provenance.
 Above the map, an active-storm status line that updates without a reload;

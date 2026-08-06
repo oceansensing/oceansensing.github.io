@@ -3606,6 +3606,10 @@ export async function createOceanMap(
             credit: creditNow(),
             bandFill: style.getPropertyValue('--map-figure-paper').trim() || '#ffffff',
             bandInk: style.getPropertyValue('--map-figure-ink').trim() || '#1d232b',
+            ruleInk: style.getPropertyValue('--map-figure-rule').trim() || '#000000',
+            ruleHalo:
+              style.getPropertyValue('--map-figure-rule-halo').trim()
+              || 'rgba(255, 255, 255, 0.85)',
           });
           const centre = map.getCenter().wrap();
           await saveCanvas(

@@ -77,7 +77,7 @@ const dom = new JSDOM(
      host's — the module only supplies behaviour — so without it here the
      whole feature is simply absent and its checks would have nothing to
      fail against. */
-  '<button type="button" data-export-png>Save PNG</button>' +
+  '<button type="button" data-export-png="2">Save PNG</button>' +
   '<span class="om-kmz-controls" data-kmz-controls><input type="file" data-kmz-file />' +
   '<span data-kmz-list hidden></span></span>' +
   '<span data-kmz-note></span>' +
@@ -137,7 +137,7 @@ window.Element.prototype.scrollIntoView = function () {};
 
    requestAnimationFrame is stubbed below, so the particle layer's loop really
    runs here — unlike a headless browser pane, which never paints. */
-const drawn = { moveTo: 0, lineTo: 0, stroke: 0, arc: 0, styles: new Set(), fills: new Set(), segments: [], images: [], drawImages: [], texts: [], encoded: [], gradients: [] };
+const drawn = { moveTo: 0, lineTo: 0, stroke: 0, arc: 0, styles: new Set(), fills: new Set(), segments: [], images: [], drawImages: [], texts: [], encoded: [], gradients: [], textAt: [] };
 const properties = {};
 let penX = 0;
 let penY = 0;
@@ -227,8 +227,12 @@ const recordingContext = new Proxy(
         } else if (key === 'fillText') {
           /* The export redraws what a canvas cannot be handed — the graticule
              labels, the scale bar, and every line of the provenance band —
-             so the text it writes is the only evidence those arrived. */
+             so the text it writes is the only evidence those arrived. The
+             coordinates come too: a label drawn outside the figure is the
+             bug the graticule's own labels shipped with, and negative or
+             NaN placement is the shape it takes. */
           drawn.texts.push(String(args[0]));
+          drawn.textAt.push({ text: String(args[0]), x: args[1], y: args[2] });
         } else if (key === 'measureText') {
           /* jsdom measures nothing. A width proportional to the string is
              enough for the wrapping arithmetic to be exercised rather than
@@ -2366,11 +2370,13 @@ const exported = await (async () => {
      instead of killing the harness on `undefined.length` — a crash during
      setup takes every later check with it and reads as a broken run rather
      than a broken feature. */
-  const nothing = { built: false, saved: null, images: [], texts: [], encoded: [], gradients: [] };
+  const nothing = { built: false, saved: null, images: [], texts: [], encoded: [], gradients: [], textAt: [] };
   if (!button) return nothing;
   drawn.drawImages.length = 0;
   drawn.texts.length = 0;
   drawn.encoded.length = 0;
+  drawn.gradients.length = 0;
+  drawn.textAt.length = 0;
   let saved = null;
   const realCreate = window.URL.createObjectURL;
   window.URL.createObjectURL = () => 'blob:stub';
@@ -2395,6 +2401,7 @@ const exported = await (async () => {
     texts: [...drawn.texts],
     encoded: [...drawn.encoded],
     gradients: drawn.gradients.map((g) => [...g]),
+    textAt: [...drawn.textAt],
   };
 })();
 
@@ -3081,8 +3088,24 @@ const checks = [
      are redrawn — and their absence is silent. */
   ['and the graticule labels are redrawn onto the figure',
     exported.texts.some((t) => /^\d+°[NSEW]$|°[NSEW]/.test(t))],
+  /* Every glyph lands inside the figure. The graticule's longitude labels
+     ride the bottom edge of the viewport and sat 0.6 px past it, so the
+     clip took their descenders and they read as cut off against the band —
+     the exporter clamps them by their own ink now. jsdom hands every
+     element the same bounding box, so this cannot check *placement*; what
+     it does catch is the shape that failure takes, which is a coordinate
+     off the canvas or not a number at all. */
+  ['nothing is drawn outside the figure', (() => {
+    const encoded = exported.encoded[0];
+    if (!encoded || !exported.textAt.length) return false;
+    return exported.textAt.every(
+      (t) => Number.isFinite(t.x) && Number.isFinite(t.y)
+        && t.x >= 0 && t.y >= 0
+        && t.x <= encoded.width && t.y <= encoded.height
+    );
+  })()],
   ['the file is named for the place and the moment',
-    /^c4po-ocean-[\d.]+[NS]-[\d.]+[EW]-z\d+-[\d-]+Z\.png$/.test(exported.saved ?? '')],
+    /^c4po-ocean-[\d.]+[NS]-[\d.]+[EW]-z\d+-[\d-]+Z(@\dx)?\.png$/.test(exported.saved ?? '')],
   /* Pane order decides what covers what, and this has to be read from what
      the exporter *drew*, not from the map's own z-indices — those are
      ascending whatever the exporter does, so the first version of this

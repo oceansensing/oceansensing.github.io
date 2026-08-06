@@ -118,11 +118,20 @@ const {
            temperature, so there can be two, and a single set would have to
            pick one of them. -->
       <span class="om-field-controls-row" data-field-controls hidden></span>
-      <!-- The forecast hour. Built by the module from the frames the data
-           advertises, so the buttons cannot name an hour nobody published. -->
-      <span class="om-forecast-controls" data-forecast-controls hidden>
-        <span class="om-vh">Forecast hour</span>
-      </span>
+      <!-- **No forecast-hour control here**, deliberately. The currents
+           publish two steps spanning a six-hour window, and the buttons let a
+           reader step between them — but the map opens on whichever is
+           nearest their own clock, so the answer is "now" almost every time
+           and the pair of buttons spent a row of a crowded caption saying so.
+
+           The second frame is not wasted by leaving them out: it is what
+           lets the map open within about 1.5 hours of the reader instead of
+           three, which is the half of its value that needs no interface. What
+           is given up is stepping the tide by hand.
+
+           The module still builds the control wherever the hook appears —
+           every hook here is optional, so this is a placement decision rather
+           than a removal, and a page that wants it back adds one span. -->
       <span class="om-bathy-controls" data-bathy-controls hidden>
         <label>
           Isobaths
@@ -154,12 +163,16 @@ const {
            reader never will. It carries the colour bar and the credit line
            with it, which is what makes it worth more than a screenshot.
 
-           Two sizes, because the two have different jobs: the plain one is
-           what is on screen, and the 2x one doubles every dimension so the
-           linework, the labels and the credit are resampled rather than
-           enlarged — which is what a projector or a printed page shows up. -->
-      <button class="om-share" type="button" data-export-png>Save PNG</button>
-      <button class="om-share" type="button" data-export-png="2">Save PNG 2×</button>
+           **One button, at 2x**, rather than a size to choose. Offering both
+           put two buttons in a row that already carries four controls, for a
+           decision nobody has to make: a doubled figure downscales perfectly
+           to anything the screen-size one served, and the reverse is not
+           true. What it costs is bytes — measured, 207 KB against 368 — and
+           what it buys is type and linework that are resampled rather than
+           enlarged, which is the difference a projector shows up. The scale
+           is still the attribute's value, so a host that wants the smaller
+           one drops the "2". -->
+      <button class="om-share" type="button" data-export-png="2">Save PNG</button>
       <span class="om-kmz-controls" data-kmz-controls>
         <label class="om-kmz-add">
           <span>Add KML or KMZ…</span>

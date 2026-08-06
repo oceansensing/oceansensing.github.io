@@ -19,9 +19,9 @@ through, and the map's attribution says which hour is drawn and how far from
 now it is. The address bar carries the whole view as you move, so the URL is
 a link to exactly what is on screen — with a `Copy link` button beside the
 map, since selecting a URL out of a phone's address bar is an awkward
-gesture. The same button row saves the figure as a PNG, at screen size or
-doubled for print, with the colour bar and the credit line baked in — so a
-figure dropped into a talk still says where it came from.
+gesture. Beside it, one button saves the figure as a PNG — doubled for print,
+with the colour bar and the credit line baked in, so a figure dropped into a
+talk still says where it came from.
 
 It carries two pages. [`/visualization/`](https://oceansensing.org/visualization/)
 is the general-purpose one and

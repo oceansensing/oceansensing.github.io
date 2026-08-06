@@ -130,7 +130,7 @@ isobath opacity slider and status line are the host's markup**, found by
 | `[data-forecast-controls]` | the forecast-hour buttons, when the data publishes more than one frame |
 | `[data-layer-key]` | on a legend swatch, naming the layer it stands for, so the module can hide it while that layer is off |
 | `[data-share-link]` | a `<button>` that copies a link reproducing the current view |
-| `[data-export-png]` | a `<button>` that saves the figure. Its value is the scale — omit it for the screen, `"2"` for print |
+| `[data-export-png]` | a `<button>` that saves the figure. Its value is the scale — `"2"` resamples the type and linework for print, omitted gives exactly what is on screen |
 | `[data-point-readout]` | not a hook — the readout is a Leaflet popup and needs no markup |
 | `[data-map-credit]` | where Leaflet's attribution is **moved to** |
 

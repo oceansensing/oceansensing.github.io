@@ -60,6 +60,15 @@
        nothing else. */
     --map-figure-paper: #ffffff;
     --map-figure-ink: #1d232b;
+    /* The scale bar the figure draws — a hairline with a tick at each end
+       and the distance above it, rather than the interface's three-sided
+       box. Black, and the same in both themes: it sits *over the map*, so
+       what it is seen against is the water, not the page. The halo is what
+       makes that survivable — a bare black rule vanishes over the dark
+       Chukchi, which is the fifth time this map has paid for the lesson
+       that a thin line's legibility comes from its casing. */
+    --map-figure-rule: #000000;
+    --map-figure-rule-halo: rgba(255, 255, 255, 0.85);
 
     height: max(24rem, 62svh);
     border: 1px solid var(--border, #d6dbe0);
@@ -1318,12 +1327,17 @@
      reads, and one that wants its own sets `--om-brand-font`. The package
      never depends on a font it cannot see. */
   font-family: var(--om-brand-font, 'Chakra Petch', ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.95rem;
+  /* Measured at 0.95rem with 0.2em tracking the plate ran 181 px wide — 45%
+     of a phone-width map, and the first thing the eye landed on in an
+     exported figure. A mark says whose map this is; it does not compete with
+     the map. Down a step and tracked a little tighter takes it to about a
+     third of that width, which still reads at a glance. */
+  font-size: 0.8rem;
   font-weight: 700;
   font-variant-caps: all-small-caps;
   text-transform: uppercase;
-  letter-spacing: 0.2em;
-  text-indent: 0.2em;
+  letter-spacing: 0.14em;
+  text-indent: 0.14em;
   line-height: 1.25;
   white-space: nowrap;
 
