@@ -1005,6 +1005,12 @@
 .om-field-name {
   font-size: var(--text-sm, 0.875rem);
   color: var(--text-muted, #5b6672);
+  /* The row's own `gap` is sized for the space between a number input and
+     a dash, which is far too tight between a word and the control it
+     names — "SST" sat all but touching the colormap select. This is the
+     one place in the row that wants more than the gap, so it asks for it
+     rather than the gap growing everywhere. */
+  padding-inline-end: 0.4rem;
 }
 
 /* The full name on a wide screen, the acronym on a narrow one. Both are in
@@ -1060,7 +1066,10 @@
 
 .om-speed-name {
   color: var(--map-credit, #4c5865);
-  inline-size: 5.5rem;
+  /* The same width as `.om-tint-name`, and that is the point rather than a
+     coincidence: the two rows sit under each other, so a reader reads down
+     the labels and across to the controls. Change one and change both. */
+  inline-size: 4.6rem;
   padding-inline-end: 0.4rem;
   flex: 0 0 auto;
 }
@@ -1147,10 +1156,13 @@
 
 .om-tint-name {
   /* Wide enough for the longest label in this monospace at this size, plus
-     its own trailing space. It was 4rem, which "Current" overflows — and an
-     overflowing fixed box eats the flex `gap`, so the word ran straight into
-     the first swatch. */
-  inline-size: 5.5rem;
+     its own trailing space, and **no wider** — the surplus shows up as a
+     gap between the word and what it labels, which read as the two being
+     unrelated. It was 4rem, which "Current" overflows by a hair, and then
+     5.5, which left about a centimetre of nothing. An overflowing fixed box
+     eats the flex `gap` and runs the word into the first swatch, so this
+     wants to be just clear of that, not comfortably clear of it. */
+  inline-size: 4.6rem;
   padding-inline-end: 0.4rem;
   flex: 0 0 auto;
   color: var(--map-credit, #4c5865);
