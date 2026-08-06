@@ -111,6 +111,26 @@ function rasterise(
   scale = 1
 ): Promise<HTMLImageElement> {
   const clone = inlineStyles(svg);
+  /* **Drop the element's own transform, or the pane offset is counted
+     twice.** Leaflet positions a renderer's `<svg>` with a CSS transform —
+     `translate3d(-105.756px, -69.1709px, 0)` — and `XMLSerializer` carries
+     that inline style into the clone. Rasterised as a standalone image the
+     transform is applied *again*, to the content this time, while the caller
+     is already placing the image at a box that accounts for it. The contours
+     land about 106px across and 69px down from where they belong.
+
+     Only SVG is affected, which is what made it look like an isobath bug: a
+     `<canvas>` or `<img>` is drawn as a bitmap and its CSS transform is
+     ignored, so every raster layer was always right. An SVG brings its own
+     styling with it, and that is the whole difference.
+
+     The viewBox stays — it is what maps layer coordinates into the image,
+     and it is not the duplicated part. */
+  clone.removeAttribute('transform');
+  /* Removed rather than set to `none`: the point is that the serialised root
+     carries no transform at all, and "none" is still a transform to anything
+     reading the markup — including the check that guards this. */
+  (clone as unknown as HTMLElement).style.removeProperty('transform');
   clone.setAttribute('width', String(Math.round(w * scale)));
   clone.setAttribute('height', String(Math.round(h * scale)));
   const markup = new XMLSerializer().serializeToString(clone);

@@ -3881,6 +3881,35 @@ off the live element and written onto it. Read, never re-derived — the palette
 is gated by `test:contrast`, and a second opinion about a stroke here would be
 a colour no gate had ever seen.
 
+**And the clone must lose the element's own transform**, which is the worst
+bug this feature shipped. Leaflet positions a renderer's `<svg>` with a CSS
+transform — `translate3d(-105.756px, -69.1709px, 0)` — and `XMLSerializer`
+carries that inline style into the clone. Rasterised as a standalone image the
+transform is applied *again*, to the content, while the caller is already
+placing the image at a box that accounts for it. **The pane offset lands
+twice**, about 106 px across and 69 px down, which put Barrow Canyon's
+contours in open water.
+
+It hits SVG alone, and that is what made it read as an isobath bug rather than
+an export bug: a `<canvas>` or an `<img>` is drawn as a bitmap and its CSS
+transform is ignored, so every raster layer was always right. An SVG brings its
+own styling with it, and that is the whole difference.
+
+Measured against the paths' own `getScreenCTM` positions — the only ground
+truth available, since the live map's pixels cannot be read: **14.5% of
+sampled contour points had ink within 3 px, then 100%**. Removed rather than
+set to `none`, because "none" is still a transform to anything reading the
+markup, including the check that guards it.
+
+**A 1 px error hid underneath it**, found first and fixed first: the exporter
+measured every item from the map's *border* box while sizing the canvas to its
+*content* box, and the container carries a 1 px border. That shifted every
+layer by a pixel — invisible on a smooth raster, a doubled line on a hairline.
+Both bugs displaced the same layers, which is why fixing the small one made
+the diff look almost right and left the real one still there. **Two faults in
+one symptom is the trap**: the difference overlay going *mostly* black is not
+the same as going black.
+
 The HTML case is redrawn from the live element's own **text and position**,
 never recomputed. Recomputing would be a second source of truth for the
 wording, which is the thing most likely to drift. Four details in it are not

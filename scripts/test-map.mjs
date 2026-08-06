@@ -141,7 +141,7 @@ window.Element.prototype.scrollIntoView = function () {};
 
    requestAnimationFrame is stubbed below, so the particle layer's loop really
    runs here — unlike a headless browser pane, which never paints. */
-const drawn = { moveTo: 0, lineTo: 0, stroke: 0, arc: 0, styles: new Set(), fills: new Set(), segments: [], images: [], drawImages: [], texts: [], encoded: [], gradients: [], textAt: [] };
+const drawn = { moveTo: 0, lineTo: 0, stroke: 0, arc: 0, styles: new Set(), fills: new Set(), segments: [], images: [], drawImages: [], texts: [], encoded: [], gradients: [], textAt: [], svgSources: [] };
 const properties = {};
 let penX = 0;
 let penY = 0;
@@ -293,6 +293,14 @@ class StubImage {
   }
   set src(value) {
     this._src = value;
+    /* Keep the SVG the exporter hands the rasteriser. It is the only place
+       the serialised markup can be inspected, and it is where the worst bug
+       this feature had lived: the clone kept the element's own CSS
+       transform, which a standalone SVG image applies to its *content* —
+       so the pane offset landed twice and every contour was ~106px out. */
+    if (typeof value === 'string' && value.startsWith('data:image/svg+xml')) {
+      drawn.svgSources.push(decodeURIComponent(value.replace(/^data:[^,]*,/, '')));
+    }
     setTimeout(() => this.onload?.(), 0);
   }
   get src() {
@@ -2389,18 +2397,28 @@ const exported = await (async () => {
     grid.click();
     await new Promise((r) => setTimeout(r, 500));
   }
+  /* **Give the isobath SVG the transform Leaflet gives it in a browser.**
+     jsdom does no layout, so the renderer never positions its `<svg>` and
+     there is no transform for the exporter to strip — which makes the check
+     below pass against code that strips nothing. Mutation testing caught
+     exactly that: the bug was reinstated and every check still went green.
+     Seeded here so the serialisation has something to get wrong. */
+  const bathySvg = host.querySelector('.leaflet-bathy-pane svg');
+  if (bathySvg) bathySvg.style.transform = 'translate3d(-106px, -70px, 0px) scale(1)';
+
   const button = host.closest('[data-ocean-map]')?.querySelector('[data-export-png]');
   /* Empty rather than absent, so a missing button fails the checks below
      instead of killing the harness on `undefined.length` — a crash during
      setup takes every later check with it and reads as a broken run rather
      than a broken feature. */
-  const nothing = { built: false, saved: null, images: [], texts: [], encoded: [], gradients: [], textAt: [] };
+  const nothing = { built: false, saved: null, images: [], texts: [], encoded: [], gradients: [], textAt: [], svgSources: [] };
   if (!button) return nothing;
   drawn.drawImages.length = 0;
   drawn.texts.length = 0;
   drawn.encoded.length = 0;
   drawn.gradients.length = 0;
   drawn.textAt.length = 0;
+  drawn.svgSources.length = 0;
   let saved = null;
   const realCreate = window.URL.createObjectURL;
   window.URL.createObjectURL = () => 'blob:stub';
@@ -2426,6 +2444,7 @@ const exported = await (async () => {
     encoded: [...drawn.encoded],
     gradients: drawn.gradients.map((g) => [...g]),
     textAt: [...drawn.textAt],
+    svgSources: [...drawn.svgSources],
   };
 })();
 
@@ -3150,6 +3169,24 @@ const checks = [
      jsdom hands every element the same rect, so an item's box equals the
      host's and the only thing distinguishing right from wrong is whether the
      border was subtracted at all. That is exactly what this asks. */
+  /* **The serialised SVG must carry no transform of its own**, and this is
+     the worst bug this feature shipped. Leaflet positions a renderer's
+     `<svg>` with a CSS transform; `XMLSerializer` carries that inline style
+     into the clone, and a standalone SVG image applies it to the *content* —
+     while the caller is already placing the image at a box that accounts for
+     it. The pane offset lands twice and every contour is ~106 px out.
+
+     It hits SVG alone, which is what made it read as an isobath bug: a
+     canvas or an img is drawn as a bitmap and its CSS transform is ignored,
+     so every raster layer was always right. Measured before and after
+     against the paths' own `getScreenCTM` positions: 14.5% of sampled points
+     had contour ink within 3 px, then 100%. */
+  ['each rasterised pane is serialised without its own transform',
+    exported.svgSources.length > 0 &&
+      exported.svgSources.every((markup) => {
+        const root = markup.slice(0, markup.indexOf('>') + 1);
+        return !/transform/i.test(root);
+      })],
   ['positions are measured from the content box, not the border box',
     exported.images.length > 0 && exported.images.every((i) => i.x === -1 && i.y === -1)],
   ['it composites panes in z order, not DOM order', (() => {
