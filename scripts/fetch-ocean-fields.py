@@ -1039,8 +1039,56 @@ def step_offsets(count: int) -> list[float]:
     return [k * REFRESH_HOURS / count for k in range(count)]
 
 
-def nearest_steps(product: dict, offsets: list[float]) -> list[tuple[int, str, str, str]]:
+def currents_hours() -> list[datetime]:
+    """The valid times `fetch-currents.py` just published, newest last.
+
+    **The fields follow the currents rather than recomputing the same
+    answer**, and that is a correction to a design that broke a publish.
+
+    Both used to work the offset out independently — the currents took the
+    step at the anchor and the one three hours on, the fields took the
+    later of the two. That holds only while the newest run reaches three
+    hours past the anchor, and for the few hours after a run lands it does
+    not: measured 2026-08-06 03:11, the 08-04 run was ingested only to
+    T+36, so the currents published a single frame at 00Z while the fields
+    went to 03Z off the same run. Same run, different hour — which
+    `test-schema.mjs` correctly calls a code bug, because it is one, and it
+    blocked the publish.
+
+    Reading what the currents published makes the invariant *structural*
+    rather than hoped-for. The workflow already runs them first, so the file
+    is there; if it is not — a first run, or the currents failing — the
+    caller falls back to computing the offset, which is the old behaviour
+    and no worse than it was.
+
+    The last frame rather than the first, for the reason WINDOW records: the
+    map opens each layer on the frame nearest the reader, which across a
+    window is the currents' later one more often than not.
+    """
+    p = MAP_DIR / 'currents.json'
+    if not p.exists():
+        return []
+    try:
+        head = json.loads(p.read_text())[0]['header']
+    except (ValueError, KeyError, IndexError, TypeError, OSError):
+        return []
+    stamps = [f['valid'] for f in head.get('forecast') or []] or (
+        [head['refTime']] if head.get('refTime') else [])
+    out = []
+    for t in stamps:
+        try:
+            out.append(datetime.strptime(t, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc))
+        except ValueError:
+            pass
+    return sorted(out)
+
+
+def nearest_steps(product: dict, offsets: list[float],
+                  want: list[datetime] | None = None) -> list[tuple[int, str, str, str]]:
     """The steps nearest `anchor + each offset`, all from one run.
+
+    `want` overrides the offsets with absolute times — the hours the
+    currents published, so the two pipelines cannot land on different ones.
 
     The mirror of `pick_nearest` in fetch-currents.py, and the two must stay
     in step — see the note on REFRESH_HOURS above. The reasoning is there;
@@ -1051,6 +1099,10 @@ def nearest_steps(product: dict, offsets: list[float]) -> list[tuple[int, str, s
     """
     epoch, hours, runs, now = time_axes(product)
     anchor = math.floor(now / REFRESH_HOURS) * REFRESH_HOURS
+    if want:
+        # Absolute hours for the times the currents actually published, in
+        # this product's own epoch. See `currents_hours`.
+        offsets = [(w - epoch).total_seconds() / 3600 - anchor for w in want]
     n = min(len(hours), len(runs))
     if not n:
         raise RuntimeError('no run axis — cannot anchor a step to a model run')
@@ -1161,7 +1213,8 @@ def forecast_frames(product: dict) -> list[tuple[int, str, str, str]]:
         # Only that offset is asked for, so only the step actually
         # published is probed.
         _frames[name] = (lead_steps(product, leads) if leads is not None
-                         else nearest_steps(product, step_offsets(WINDOW)[-1:]))
+                         else nearest_steps(product, step_offsets(WINDOW)[-1:],
+                                           want=currents_hours()[-1:] or None))
     return _frames[name]
 
 

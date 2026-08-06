@@ -3196,6 +3196,31 @@ unchanged, because the 3-hourly grid is absolute and an older run carries
 the same hours, so only the run stamp moves. The fixed-lead selection
 degraded the other way, a whole day of valid time per run.
 
+**The fields follow the hours the currents published; they do not
+recompute them.** Both used to work the offset out independently — the
+currents taking the step at the anchor and the one three hours on, the
+fields taking the later of the two — and that holds only while the newest
+run reaches three hours past the anchor. For the few hours after a run
+lands it does not: measured 2026-08-06 03:11, the 08-04 run was ingested
+only to T+36, so the currents published a single frame at 00Z while the
+fields went to 03Z off the same run. Same run, different hour, which
+`test:schema` correctly calls a code bug — because it was one — and the
+publish stopped.
+
+`currents_hours()` reads what was actually written, which makes the
+invariant *structural* rather than hoped-for. The workflow already runs the
+currents first, so the file is there; if it is not, the fields fall back to
+computing the offset, which is no worse than the old behaviour.
+
+**A "best" aggregation does not keep an older run's near-present steps**,
+and that matters for any idea of falling back a run to get a fresher hour.
+Measured the same night: the 08-04 run held 37 steps out to 08-09 while the
+08-03 run held 28 out to 08-11 — but *not* the hours around now, which the
+newer run had taken over. So walking back a run does not buy the present;
+it loses it. The note on `pick_nearest` about an older run carrying the
+same hours is true of an absolute step grid and **not** of this
+aggregation.
+
 **The two pipelines must snap identically, and that is checked twice.**
 They select independently — same rule, two copies, because each is a
 standalone standard-library script — and the currents and the Navy fields
