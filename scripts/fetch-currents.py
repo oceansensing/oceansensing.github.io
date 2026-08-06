@@ -118,7 +118,32 @@ TILES = {
     'west': -180.0,
     'south': -80.0,
     'north': MAX_LAT,
-    'minZoom': 7,
+    # 7 was too high, and an enclosed sea is where it showed. Reported from
+    # the Black Sea at a 200 km scale bar — about zoom 5.8 — where the flow
+    # was patchy with straight edges, and full only once zoomed to 50 km.
+    #
+    # Nothing was wrong with the particles. Below this threshold the map
+    # falls back to the coarse grids, and the Black Sea is in no region, so
+    # it was drawn from the **global 0.96 degree** field: roughly 6 x 15
+    # cells for the whole sea, most of them removed by the coastal erosion
+    # that keeps flow off the land. A basin needs cells to have currents in.
+    #
+    # 5 rather than 6 because the reported view sits between them — zoom is
+    # fractional here (zoomSnap is 0), so a threshold of 6 would still have
+    # left that exact complaint unfixed.
+    #
+    # Measured cost, gzipped on the wire, sampling 14 tiles: 97 KB mean,
+    # 138 KB worst. A phone at zoom 5 touches 1-4 tiles (~100-390 KB); a
+    # desktop viewport at worst about 12 (~1.2 MB), on demand, and only for
+    # a reader who has the layer on. That is well inside what this map
+    # already fetches on request — the deep isobaths are 3.0 MB and the
+    # offline coastline 4.2 MB.
+    #
+    # Below 5 it runs away: zoom 4 is ~92 degrees across, so 12-21 tiles,
+    # and a 0.08 degree cell is under two pixels there anyway. Same shape of
+    # argument as the fields' floor of 4, at the resolution a vector tile
+    # costs rather than a scalar one.
+    'minZoom': 5,
     # 0.08 x 0.08 — true 1/12 degree, and isotropic. The model carries 0.04
     # in latitude, but taking it doubles the deployed site to 205 MB for a
     # refinement from 9 km to 4.4 km in one axis only. Change to (1, 1) here

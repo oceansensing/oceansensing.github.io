@@ -1584,7 +1584,7 @@ lets the control repaint its boxes, which it skips while handling a click.
 
 | tier | spacing | used at | fetched |
 | --- | --- | --- | --- |
-| `tiles[-60m]/<south>_<west>.json` | 0.08° (1/12°) | zoom ≥ 7 | on demand, per view |
+| `tiles[-60m]/<south>_<west>.json` | 0.08° (1/12°) | zoom ≥ 5 | on demand, per view |
 | `currents-atlantic[-60m].json`, `currents-arctic[-60m].json` | 0.24°, 0.48°×0.12° | zoom ≥ 5 inside the region | on demand, once |
 | `currents[-60m].json` | 0.96°, global | everywhere else | with the page |
 
@@ -1596,6 +1596,39 @@ because a zoom-7 viewport is ~9° across against a 20° tile and straddles a
 seam often enough that the map kept dropping back to the coarse grid as you
 panned. Tiles share a spacing and a lattice, so joining is a copy into
 offsets, not a resample.
+
+**The tile tier starts at zoom 5, and 7 was too high — an enclosed sea is
+where that showed.** Reported from the Black Sea at a 200 km scale bar, about
+zoom 5.8: patchy flow with straight edges, full only once zoomed to 50 km.
+Nothing was wrong with the particles. Below the threshold the map falls back
+to the coarse grids, and the Black Sea is in no region, so it was drawn from
+the **global 0.96°** field — roughly 6 × 15 cells for the whole sea, most of
+them removed by the coastal erosion that keeps flow off the land. A basin
+needs cells to have currents in.
+
+**A region would have fixed that sea and nothing else**, which is the trap
+this file already names: adding one box per complaint does not converge, and
+the Baltic, the Sea of Japan and the Indonesian seas all fail the same way.
+The threshold is the general lever.
+
+5 rather than 6 because the reported view sits between them — zoom is
+fractional here, `zoomSnap` being 0, so a threshold of 6 would have left that
+exact complaint unfixed. Measured cost, gzipped, over 14 sampled tiles: **97
+KB mean, 138 KB worst**. A phone at zoom 5 touches 1–4 tiles (~100–390 KB), a
+desktop viewport at worst about 12 (~1.2 MB), on demand and only for a reader
+who has the layer on — well inside what this map already fetches on request,
+the deep isobaths being 3.0 MB and the offline coastline 4.2 MB. Below 5 it
+runs away: zoom 4 is ~92° across, 12–21 tiles, and a 0.08° cell is under two
+pixels there anyway.
+
+**Changing it moves the CI cache key**, and forgetting that would make the
+change inert. The threshold is published in the tile index, which the cache
+restores along with the tiles themselves — so a hit on the old key
+republishes an index still advertising the old `minZoom`, and the map goes on
+drawing the coarse grid at exactly the zooms this was meant to fix. Silently,
+and until the next model run. The data repository's key carries `v5` for that
+reason, the same argument its own comment already makes about anything that
+changes what is *served* rather than merely what is stored.
 
 Because regions use containment, **they must overlap rather than merely
 touch**: an Arctic band starting at 60°N above an Atlantic region ending at
