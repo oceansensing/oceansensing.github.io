@@ -1185,6 +1185,22 @@ const currentsOnWithNavy = [/Currents at 0m/, /Currents at 60m/].some(
 const sstLegend = document.querySelector('[data-sst-key]');
 const legendShown = sstLegend && !sstLegend.hidden;
 
+/* **The bar must say which field it is a bar for**, and with exactly one
+   scalar on — which is how the map opens — it used to say only a range.
+   "-2 to 35 °C" beside a rainbow does not tell a reader the map is showing
+   temperature, and the particle key next to it names itself, so the gap
+   read as a bug. It was a rule: the name appeared only once two scalars
+   were up, on the reasoning that one range is unambiguous. Unambiguous
+   between the fields on screen, which is not the question being asked.
+
+   Read here, where exactly one scalar is on — the state the check needs and
+   the state a reader arrives in. */
+const scalarsOnAtKey = [...host.querySelectorAll('.leaflet-control-layers-overlays label')]
+  .filter((l) => l.querySelector('input')?.checked)
+  .filter((l) => /SST|SSS|SIC|SIT|Air temp/.test(l.textContent)).length;
+const soleKeyNamesItsField = scalarsOnAtKey === 1 &&
+  /Sea surface temp|Salinity|Ice |Air temp/.test(sstLegend?.textContent ?? '');
+
 /* The ramp is stretched over the water in view, so the range has to follow
    the view — and the legend has to follow the range, or the numbers on the
    bar describe some other piece of ocean. Two very different views: tropics
@@ -3120,6 +3136,7 @@ const checks = [
     // 21.5 is the synthetic Navy tile; OISST there is real data, ~28.
     /21\.5 °C/.test(navyRead) && !/21\.5 °C/.test(oisstRead)],
   ['the temperature key appears with the layer', legendShown],
+  ['and names its field even when it is the only one on', soleKeyNamesItsField],
   ['no unpainted column at the 0/360 seam', seamGaps === 0],
   ['the range is whole degrees bounding the view',
     wholeDegrees(tropics.range) && wholeDegrees(polar.range)],

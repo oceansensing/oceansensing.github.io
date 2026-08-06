@@ -1196,6 +1196,23 @@ Binding to `layeradd`/`layerremove` instead would catch the programmatic case
 and is the wrong fix: a `LayerGroup` already on the map forwards every child
 add to the map, so four thousand Argo markers would each fire it.
 
+**A colour bar always names its field.** It used to print the name only
+once two scalars were on, on the reasoning that a single range needs no
+disambiguating. That is true *between the fields on screen* and false for
+the question a reader is actually asking: with one field up the legend read
+`-2 to 35 °C` beside a rainbow, and nothing anywhere said the map was
+showing temperature — while the particle key beside it named itself
+happily, which made the omission look like a bug rather than a rule.
+Reported as "sometimes I see the label and sometimes I don't", which is
+precisely what a count-dependent label produces. The colour-scale controls
+had the same rule and lost it for the same reason: a bare `jet` select
+beside two numbers says nothing about what is being coloured.
+
+This is the **label written once, describing a value that arrives later or
+varies** shape from the list at the end of this file, in a form the list did
+not yet cover — a label suppressed by a *count* rather than derived from a
+constant. Ask what makes a label appear, not only what it says.
+
 **Chrome describing a layer is hidden while that layer is off**, and that
 now covers the legend keys, both particle controls, and every fact in the
 status line. A count of something the reader cannot see is worse than no

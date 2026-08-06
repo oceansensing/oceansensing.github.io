@@ -1708,15 +1708,20 @@ export async function createOceanMap(
         const key = document.createElement('span');
         key.className = 'om-key om-key-scalar';
         key.style.setProperty('--sst-ramp', `linear-gradient(to right, ${hexes.join(', ')})`);
-        /* Named as well as numbered once there is more than one: with a
-           single field the range alone is unambiguous, with two "15 to 90 %"
-           beside "0 to 28 °C" needs saying which is which. */
+        /* **Always named, and it took a report to see why.** This used to
+           print the name only when two scalars were on, on the reasoning
+           that a single range is unambiguous. It is unambiguous *between
+           the fields on screen* — which is not the reader's question. With
+           one field up, the legend read "-2 to 35 °C" beside a rainbow and
+           nothing anywhere said the map was showing temperature; the
+           particle key next to it said "Surface current" perfectly happily,
+           which made the omission look like a bug rather than a rule.
+           Reported as "sometimes I see the label and sometimes I don't",
+           which is exactly what a count-dependent label produces. */
         const span = range
           ? `${shown(range[0])} to ${shown(range[1])} ${field?.unit ?? ''}`.trim()
           : '';
-        key.textContent = on.length > 1
-          ? `${field?.label ?? 'field'}${span ? ` ${span}` : ''}`
-          : (span || field?.label || 'ocean field');
+        key.textContent = `${field?.label ?? 'ocean field'}${span ? ` ${span}` : ''}`;
         sstKey.append(key);
       }
     };
@@ -2250,7 +2255,12 @@ export async function createOceanMap(
       box.hidden = showing === 0;
       for (const set of sets) {
         if (set.root.hidden) continue;
-        set.name.hidden = showing < 2;
+        /* Named whatever the count, for the reason the legend key has a
+           note about: which field a colour scale belongs to is not a
+           question that only arises when there are two of them. A bare
+           `jet` select beside two numbers says nothing about what is being
+           coloured. */
+        set.name.hidden = false;
         const choice = choiceFor(set.field);
         set.picker.value = choice.map;
         set.auto.disabled = choice.range === null;
