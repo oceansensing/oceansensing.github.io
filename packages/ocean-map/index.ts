@@ -16,6 +16,8 @@ import { VelocityLayer } from './velocity-layer';
 import { pickRamp, admissible, clearance, NAMED_TINTS, type RampChoice } from './contrast';
 import basemapWater from './data/basemap-ocean.json';
 import { tileKeysFor } from './tiles';
+import { REGIONS, INTERESTS, type Interest, type Region } from './places';
+import { createPlaceMenus } from './place-menu';
 import { readKmz, summarise, type KmzDocument, type KmzFeature, type KmzOverlay } from './kmz';
 import { matrix3d, type Pixel } from './warp';
 import { listOverlays, removeOverlay, saveOverlay } from './store';
@@ -60,6 +62,13 @@ export interface OceanMapOptions {
   home?: Bounds;
   /** sessionStorage key for the reader's saved view. `data-map-storage-key`. */
   storageKey?: string;
+  /** Places the Region menu offers. Defaults to `REGIONS` in `places.ts`.
+      A region moves the view and changes nothing else. */
+  regions?: Region[];
+  /** Sets of layers and colour scales the Layers menu offers. Defaults to
+      `INTERESTS` in `places.ts`. An interest dresses the map and does not
+      move it — the two are kept orthogonal so they compose. */
+  interests?: Interest[];
   /** Which overlays to switch on, by the names the layer switcher shows.
       `data-map-layers`, as a JSON array. Absent means "whatever the map turns
       on by itself", which is what every deployment did before presets existed.
@@ -193,6 +202,11 @@ export async function createOceanMap(
     preload:
       options.preload ?? readJson<string[] | undefined>(host.dataset.mapPreload, undefined),
     brand: options.brand ?? host.dataset.mapBrand ?? '',
+    /* The two menus' contents. Overridable for the same reason `layers` is:
+       a second site's readers care about different water, and the lists are
+       plain data with no Leaflet in them. Defaults live in `places.ts`. */
+    regions: options.regions ?? REGIONS,
+    interests: options.interests ?? INTERESTS,
   };
 
   const BASIN = CONFIG.home;
@@ -2251,6 +2265,15 @@ export async function createOceanMap(
 
     map.on('overlayadd overlayremove moveend zoomend', syncControls);
     for (const entry of ssts) entry.layer.on('rangechange', syncControls);
+    /* And registered like every other chrome sync, which it was not.
+       `overlayadd` fires only from the layers control, so a layer set
+       programmatically — by `restoreView` on arrival, or by an interest
+       from the Layers menu — left this box describing a map that no longer
+       existed. It corrected itself on the reader's next pan, because
+       `moveend` is in the list above, which is exactly the "wrong on
+       arrival, right after you touch it" shape the note on `chromeSyncs`
+       is about. */
+    chromeSyncs.push(syncControls);
     syncControls();
   }
 
@@ -3719,31 +3742,42 @@ export async function createOceanMap(
   container.addEventListener('touchend', () => cancelPress(), { passive: true });
   container.addEventListener('touchcancel', () => cancelPress(), { passive: true });
 
-  // View toggle: the Atlantic basin vs everything currently reporting.
-  const Views = L.Control.extend({
-    options: { position: 'topleft' },
-    onAdd() {
-      const bar = L.DomUtil.create('div', 'leaflet-bar om-view-toggle');
-      for (const [label, title] of [
-        ['Basin', 'Zoom to the Atlantic and Gulf'],
-        ['Global', 'Zoom to every reporting asset'],
-        ['Reset', 'Put everything back to defaults'],
-      ]) {
-        const a = L.DomUtil.create('a', '', bar);
-        a.textContent = label;
-        a.href = '#';
-        a.title = title;
-        L.DomEvent.on(a, 'click', (e) => {
-          L.DomEvent.stop(e);
-          if (label === 'Basin') map.fitBounds(BASIN);
-          else if (label === 'Global') fitEverything();
-          else resetEverything();
-        });
-      }
-      return bar;
-    },
+  /* Apply an interest: the layers it names, and the colour scales it asks
+     for. **It does not move the map**, which is the point of splitting the
+     two menus — see `places.ts`.
+
+     Layers not named are switched *off*, so an interest is a complete
+     statement rather than an addition. Anything the reader turned on is
+     therefore lost, which is exactly what a menu called "Layers" should be
+     allowed to do and exactly what the region menu must never do. */
+  const applyInterest = (interest: Interest) => {
+    const wanted = new Set(interest.layers ?? []);
+    for (const [name, layer] of Object.entries(overlays)) {
+      if (wanted.has(name) && !map.hasLayer(layer)) map.addLayer(layer);
+      if (!wanted.has(name) && map.hasLayer(layer)) map.removeLayer(layer);
+    }
+    for (const [key, name] of Object.entries(interest.colours ?? {})) {
+      /* Guarded, because a colormap that does not exist would otherwise
+         leave `stopsFor` falling back to an arbitrary first entry — a
+         silently wrong scale rather than the one asked for. `check:docs`
+         holds the names, so this is the belt to that braces. */
+      if (choices[key] && COLORMAPS[name]) choices[key]!.map = name;
+    }
+    /* An interest names layers by their switcher labels, and Leaflet only
+       fires `overlayadd` for its own checkboxes — so the chrome has to be
+       told, the same way `restoreView` has to. This is the trap that note
+       is about, met from a third direction. */
+    syncChrome();
+    saveView();
+  };
+
+  createPlaceMenus(map, CONFIG.regions, CONFIG.interests, {
+    goTo: (bounds) => map.fitBounds(bounds),
+    goHome: () => map.fitBounds(BASIN),
+    goFleet: () => fitEverything(),
+    apply: applyInterest,
+    reset: () => resetEverything(),
   });
-  map.addControl(new Views());
 
   /* Back to how the map arrives for someone who has never touched it:
      default basemap, default layers, default colour scales, automatic

@@ -3382,8 +3382,60 @@ it cancels both, which is what a global cancel key should do.
 
 Verified in a browser as well as the harness, because moving where the
 control is added moves where it lands in the top-left stack: it is still
-zoom → 📏 → Basin/Global/Reset, and Norfolk to Halifax still reads
+zoom → 📏 → Region → Layers, and Norfolk to Halifax still reads
 `1367 km · 738 nm · 47°T direct`.
+
+### Going somewhere, and putting something on
+
+Two menu buttons under the ruler, `Region` and `Layers`, and **the split is
+the whole design**: a region moves the view and touches nothing else; an
+interest sets layers and colour scales and moves nothing. They are
+orthogonal, so they compose — pick the Chukchi Sea, then pick Sea ice — and
+neither can surprise you by doing the other's job.
+
+Two controls rather than one menu with headings, because a heading is a
+promise the reader has to read and a separate button is one they cannot
+miss. That matters here specifically: an interest is a *complete* statement
+of which layers are on, so it switches off anything it does not name. That
+is right for a control called Layers and would be indefensible for one
+called Region.
+
+It replaced a fixed `Basin` / `Global` / `Reset` bar, which had two problems
+beyond being short. **"Global" did not mean the globe** — it fitted the
+bounds of whatever was reporting, which is a different thing and was
+mislabelled from the day it was written; it is `All platforms` now. And
+there was nowhere to put an eleventh idea. Reset survives as the first entry
+of the Layers menu, which is where it belongs: it is the null interest.
+
+The entries are data in `packages/ocean-map/places.ts` — **no Leaflet and no
+DOM**, so a native port keeps the whole list — and both are options on
+`createOceanMap`, so a second site's readers can have their own water.
+
+Three things this cost, and all three are the kind of thing that would
+otherwise have shipped:
+
+- **An interest must not name two layers of an exclusivity group.**
+  Concentration and thickness share the ice pane; so do the two current
+  depths. Naming both has the exclusivity handler switch one straight off
+  again, so the entry quietly does something other than what it says — and
+  *which* one survives depends on the order they were added in. Two of the
+  seven interests had this. `test:map` now applies **every** interest and
+  requires each to keep every layer it named; checking one would not have
+  found it.
+- **`syncControls` was never registered in `chromeSyncs`**, which is a
+  pre-existing bug this surfaced rather than caused. `overlayadd` fires only
+  from the layers control, so a layer set programmatically — by
+  `restoreView` on arrival, or now by an interest — left the colour-scale
+  box describing a map that no longer existed. It corrected itself on the
+  reader's next pan, because `moveend` is also in its list, which is exactly
+  the "wrong on arrival, right after you touch it" shape that whole note is
+  about.
+- **A viewport-relative cap is only as good as the viewport.** The panel's
+  `max-block-size` was `min(70svh, 26rem)`; measured in a pane reporting
+  `innerHeight` 0 that resolves to **zero**, and the menu collapsed to its
+  own padding — ten pixels, scrolling, every entry present and none
+  reachable. It carries a `max(12rem, …)` floor now. Whatever the viewport
+  claims, the menu shows something.
 
 **Hovering a point asset names it beside the pointer** — a sticky Leaflet
 tooltip, so it tracks the cursor rather than anchoring to the shape's centre,

@@ -471,6 +471,31 @@ if (overlayBlock) {
       }
     }
   }
+
+  /* And the Layers menu's own presets, which fail the same silent way and
+     from inside the package rather than from a page. An interest names
+     overlays by their switcher labels and colormaps by their palette keys;
+     a typo in either does nothing at all — the entry appears to work and
+     changes nothing, or falls back to an arbitrary scale. */
+  const places = fs.readFileSync('packages/ocean-map/places.ts', 'utf8');
+  const palette = JSON.parse(
+    fs.readFileSync('packages/ocean-map/data/map-palette.json', 'utf8')
+  );
+  const maps = new Set(Object.keys(palette.colormaps ?? {}));
+  for (const [, block] of places.matchAll(/layers:\s*\[([\s\S]*?)\]/g)) {
+    for (const [, name] of block.matchAll(/'([^']+)'/g)) {
+      if (!known.has(name)) {
+        problems.push(`packages/ocean-map/places.ts: an interest names \`${name}\`, which is not a layer the map offers`);
+      }
+    }
+  }
+  for (const [, block] of places.matchAll(/colours:\s*\{([\s\S]*?)\}/g)) {
+    for (const [, name] of block.matchAll(/:\s*'([^']+)'/g)) {
+      if (maps.size && !maps.has(name)) {
+        problems.push(`packages/ocean-map/places.ts: an interest asks for the \`${name}\` colour scale, which the palette does not define`);
+      }
+    }
+  }
 }
 
 /* 5. The two ESPC pipelines must snap to the same refresh window.

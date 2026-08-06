@@ -32,7 +32,10 @@ scales, with the range either following the view or pinned by hand, and a
 reset that puts everything back. Hovering an asset names it; clicking one
 reports its details plus the depth, current, wind, temperature and — when the
 EEZ layer is on — the jurisdiction of the water it is in; right-click or
-long-press does the same anywhere. There is a distance and bearing tool.
+long-press does the same anywhere. There is a distance and bearing tool. Two menus under it — `Region` jumps to
+one of a dozen places without touching the layers, `Layers` applies a set of
+layers and colour scales without moving the map, and Reset is the first entry
+of the second.
 Above the map, an active-storm status line that updates without a reload;
 beside that, a server-synchronised UTC clock. The page refreshes itself when
 a new build lands, keeping your basemap, layers and position.
@@ -72,7 +75,7 @@ website, `PORTING-IOS.md` for the iOS app, and `BOUNDARIES.md` for anyone
 adding to it — those separations are what keep the other two possible, and
 they are easy to breach by accident.
 
-`npm run verify` stands at **866 printed `ok` lines** across nine steps:
+`npm run verify` stands at **875 printed `ok` lines** across nine steps:
 build, type-check, docs, the renderer-independent units, the published data
 contract, colour contrast, the rendered map, two maps on a page, and the
 clock. Counted as `npm run verify | grep -c '^ok'`, which is the only figure

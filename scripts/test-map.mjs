@@ -15,6 +15,7 @@ import path from 'node:path';
    judges a drawn colour by the same test the map and test:contrast apply
    rather than by a third copy of it. */
 import { admissible } from '../packages/ocean-map/contrast.ts';
+import { REGIONS, INTERESTS } from '../packages/ocean-map/places.ts';
 const basemapWater = JSON.parse(
   fs.readFileSync('packages/ocean-map/data/basemap-ocean.json', 'utf8')
 );
@@ -1611,6 +1612,66 @@ const eezLayer = await (async () => {
   return out;
 })();
 
+/* ---- the region and layer menus -------------------------------------
+   Before the Reset check below, which puts everything back and would make
+   any of this read the reset state instead of what it meant to test. */
+const menuButton = (kind) => host.querySelector(`.om-place-${kind} .om-place-button`);
+const menuItems = (kind) => [...host.querySelectorAll(`.om-place-${kind} .om-place-item`)];
+const press = (el) =>
+  el?.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+
+const menuToggles = await (async () => {
+  const button = menuButton('regions');
+  const panel = host.querySelector('.om-place-regions .om-place-panel');
+  const shut = panel?.hidden === true && button?.getAttribute('aria-expanded') === 'false';
+  press(button);
+  const open = panel?.hidden === false && button?.getAttribute('aria-expanded') === 'true';
+  press(button);
+  const shutAgain = panel?.hidden === true && button?.getAttribute('aria-expanded') === 'false';
+  return shut && open && shutAgain;
+})();
+
+const layersOn = () => new Set(
+  [...host.querySelectorAll('.leaflet-control-layers-overlays label')]
+    .filter((l) => l.querySelector('input')?.checked)
+    .map((l) => l.textContent.trim())
+);
+
+const regionJump = await (async () => {
+  const before = { centre: host._map.getCenter(), layers: layersOn() };
+  press(menuButton('regions'));
+  /* A fixed region, not one of the two dynamic entries: `Home` would land
+     on the seeded view and could look like nothing happened. */
+  press(menuItems('regions').find((i) => i.textContent === 'Mediterranean'));
+  await new Promise((r) => setTimeout(r, 600));
+  const after = { centre: host._map.getCenter(), layers: layersOn() };
+  return {
+    moved: Math.abs(after.centre.lng - before.centre.lng) > 5 ||
+      Math.abs(after.centre.lat - before.centre.lat) > 5,
+    layersUnchanged: before.layers.size === after.layers.size &&
+      [...before.layers].every((n) => after.layers.has(n)),
+  };
+})();
+
+const interestApply = await (async () => {
+  const want = INTERESTS.find((i) => i.label === 'The fleet');
+  const before = host._map.getCenter();
+  press(menuButton('interests'));
+  press(menuItems('interests').find((i) => i.textContent === 'The fleet'));
+  await new Promise((r) => setTimeout(r, 800));
+  const on = layersOn();
+  const after = host._map.getCenter();
+  return {
+    layersSet: want.layers.every((n) => on.has(n)),
+    /* The half that makes an interest a complete statement rather than an
+       addition — and the half a check that only looked for the named
+       layers would pass without. */
+    othersOff: [...on].every((n) => want.layers.includes(n)),
+    viewUnchanged: Math.abs(after.lng - before.lng) < 0.001 &&
+      Math.abs(after.lat - before.lat) < 0.001,
+  };
+})();
+
 const globalReset = await (async () => {
   const controls = document.querySelector('[data-field-controls]');
   const picker = controls.querySelector('[data-field-map]');
@@ -1633,7 +1694,14 @@ const globalReset = await (async () => {
   maxIn.dispatchEvent(new window.Event('change', { bubbles: true }));
   await new Promise((r) => setTimeout(r, 500));
 
-  const reset = [...host.querySelectorAll('.om-view-toggle a')].find((a) => a.textContent === 'Reset');
+  /* Reset moved into the Layers menu, so it has to be opened first — which
+     is itself the thing worth exercising: an entry inside a panel that
+     never opens is unreachable, and a check that reached straight for the
+     item would pass against exactly that. */
+  host.querySelector('.om-place-interests .om-place-button')
+    ?.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+  const reset = [...host.querySelectorAll('.om-place-interests .om-place-item')]
+    .find((a) => a.textContent === 'Reset');
   reset?.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
   await new Promise((r) => setTimeout(r, 1200));
 
@@ -1984,6 +2052,47 @@ const bathyLayersAt7 = Object.values(host._map._layers).filter((l) =>
   /map-bathy/.test(l.options?.className ?? '')
 );
 const bathyDeepAsked = bathyFetched.filter((u) => u.includes('bathy-deep')).length;
+
+/* Every interest, not just one. Two of them named both layers of an
+   exclusivity pair — concentration and thickness, and the two current
+   depths — so applying them switched one straight off again and the entry
+   quietly did something other than what it said. Checking one interest
+   would not have found it.
+
+   **Run down here, after the isobath probe has taken its readings.** Three
+   interests name `Isobaths`, so applying them fetches that layer — and the
+   lazy-load check above asserts nothing fetched it before it was switched
+   on, which is a claim about the cumulative fetch log rather than about
+   current state. Putting this loop earlier broke it, which is the "moved
+   the world and did not put it back" trap the note on the forecast probe
+   already describes. */
+const everyInterestHolds = await (async () => {
+  /* An interest is a *complete* statement of which layers are on, so this
+     loop necessarily tears down whatever was showing. Everything below
+     assumes the map it was handed, so the set is snapshotted and put back —
+     off first, then on, because switching one on inside an exclusivity
+     group displaces its partner and doing it the other way round loses
+     whichever was restored first. */
+  const before = layersOn();
+  const bad = [];
+  for (const want of INTERESTS.filter((i) => !i.reset)) {
+    press(menuButton('interests'));
+    press(menuItems('interests').find((i) => i.textContent === want.label));
+    await new Promise((r) => setTimeout(r, 500));
+    const on = layersOn();
+    const missing = (want.layers ?? []).filter((n) => !on.has(n));
+    if (missing.length) bad.push(`${want.label} lost ${missing.join(', ')}`);
+  }
+
+  const box = (name) => [...host.querySelectorAll('.leaflet-control-layers-overlays label')]
+    .find((l) => l.textContent.trim() === name)?.querySelector('input');
+  for (const name of layersOn()) if (!before.has(name)) box(name)?.click();
+  await new Promise((r) => setTimeout(r, 200));
+  for (const name of before) if (!layersOn().has(name)) box(name)?.click();
+  await new Promise((r) => setTimeout(r, 600));
+  return bad;
+})();
+
 const bathyTilesAsked = bathyFetched.filter((u) => /bathy-tiles\/-?\d/.test(u));
 
 /* Which tier drew what, read off the geometry rather than trusted: the deep
@@ -2557,7 +2666,31 @@ const checks = [
   ['borders + markers drawn', host.querySelectorAll('path').length > 200],
   ['layer switcher', host.querySelectorAll('.leaflet-control-layers-selector').length >= 10],
   ['bathymetry is the default base', !!host.querySelector('.leaflet-tile-pane .leaflet-layer')],
-  ['view toggle', host.querySelectorAll('.om-view-toggle a').length === 3],
+  // ---- the region and layer menus
+  ['both menus are in the control stack',
+    host.querySelectorAll('.om-place-menu .om-place-button').length === 2],
+  ['each offers every entry it was given',
+    host.querySelectorAll('.om-place-regions .om-place-item').length === REGIONS.length &&
+      host.querySelectorAll('.om-place-interests .om-place-item').length === INTERESTS.length],
+  /* A panel that will not hide is a failure this project has paid for
+     twice — a class that sets `display` beats `[hidden]` at equal
+     specificity, so author order decides it. Read off the built stylesheet,
+     because jsdom does not cascade. */
+  ['a closed panel is hidden by more than the attribute',
+    /\.om-place-panel\[hidden\]\s*\{[^}]*display:\s*none/.test(builtCss)],
+  ['opening a menu marks it expanded, and closing unmarks it', menuToggles],
+  /* The whole point of two menus rather than one list with headings: a
+     region may move the view and must not touch the layers. */
+  ['a region moves the map', regionJump.moved],
+  ['and leaves the layers alone', regionJump.layersUnchanged],
+  /* And the converse, which is the half that makes them compose. */
+  ['an interest sets the layers it names', interestApply.layersSet],
+  /* And every one of them keeps what it named — an interest naming both
+     halves of an exclusivity pair loses one silently. */
+  [`every interest keeps every layer it names${everyInterestHolds.length ? ` — ${everyInterestHolds.join('; ')}` : ''}`,
+    everyInterestHolds.length === 0],
+  ['and switches off the ones it does not', interestApply.othersOff],
+  ['and leaves the view where it was', interestApply.viewUnchanged],
   /* The global reset. Checked by setting the map as far from default as the
      controls allow — a different basemap, a layer switched on, a pinned
      scale, a non-default colormap — and asserting every one of them comes
