@@ -993,6 +993,34 @@
 }
 
 /* The row holding one colour-scale control set per field on. */
+/* The copy-link button, shaped like the KMZ control beside it. */
+.om-share,
+.om-share-fallback {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-sm, 0.875rem);
+  /* iOS Safari styles a button its own way — see the note on `.om-tint`. */
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0.1rem 0.4rem;
+  color: var(--text, #12181f);
+  background: var(--bg, #ffffff);
+  border: 1px solid var(--border, #d6dbe0);
+  border-radius: var(--radius, 4px);
+}
+
+.om-share {
+  cursor: pointer;
+}
+
+.om-share:hover,
+.om-share:focus-visible {
+  background: var(--bg-subtle, #f4f6f8);
+}
+
+.om-share-fallback {
+  inline-size: min(22rem, 100%);
+}
+
 .om-field-controls-row {
   display: inline-flex;
   flex-wrap: wrap;

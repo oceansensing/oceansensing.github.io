@@ -16,6 +16,7 @@ import { VelocityLayer } from './velocity-layer';
 import { pickRamp, admissible, clearance, NAMED_TINTS, type RampChoice } from './contrast';
 import basemapWater from './data/basemap-ocean.json';
 import { tileKeysFor } from './tiles';
+import { encode as encodeView, decode as decodeView } from './share';
 import { REGIONS, INTERESTS, type Interest, type Region } from './places';
 import { createPlaceMenus } from './place-menu';
 import { readKmz, summarise, type KmzDocument, type KmzFeature, type KmzOverlay } from './kmz';
@@ -3373,62 +3374,185 @@ export async function createOceanMap(
      the basin rather than in someone's week-old view. */
   const VIEW_KEY = CONFIG.storageKey;
 
-  const saveView = () => {
+  /* **One page has one address bar, so one map may own it**, and it is
+     claimed the same way the storm status line is: by the first map to ask,
+     marked so no other takes it.
+
+     Without that, two maps on a page both read the same fragment, so the
+     second opened on the first's shared view instead of its own home — and
+     both then wrote their centre into the same hash, each overwriting the
+     other on every pan. `test:multimap` caught it, which is what that
+     harness is for; it is the singleton assumption this package has already
+     paid to remove twice, arrived at from a third direction.
+
+     A link from a two-map page therefore restores the first map and leaves
+     the second at its own home. That is a real limitation rather than the
+     ideal — the alternative is keying the fragment by storage key, which
+     doubles its length for a case this site does not have — and it is at
+     least explicable rather than silently wrong. */
+  const ownsHash = (() => {
+    const root = document.documentElement;
+    if (root.dataset.oceanMapHash === undefined) {
+      root.dataset.oceanMapHash = host.id || '';
+      return true;
+    }
+    return root.dataset.oceanMapHash === (host.id || '');
+  })();
+
+  /* The view as an object, once — written to storage, encoded into the
+     address bar, and handed to the copy button. Three readers of one
+     definition rather than three definitions. */
+  const viewNow = () => {
+    // Fold the centre back into -180..180 first: with worldCopyJump off it
+    // can wander to 540 after enough panning, and both a stored view and a
+    // shared link are read back much later.
+    const centre = map.getCenter().wrap();
+    return {
+      lat: +centre.lat.toFixed(4),
+      lng: +centre.lng.toFixed(4),
+      zoom: map.getZoom(),
+      base: Object.keys(bases).find((name) => map.hasLayer(bases[name]!)),
+      overlays: Object.keys(overlays).filter((name) => map.hasLayer(overlays[name]!)),
+      fields: choices,
+      bathyOpacity,
+      lead: forecast.lead,
+      tints: particleTint,
+      speeds: particleSpeed,
+    };
+  };
+
+  /** The link that reproduces what is on screen. */
+  const shareUrl = () => {
+    const url = new URL(window.location.href);
+    url.hash = encodeView(viewNow());
+    return url.toString();
+  };
+
+  /* Kept current in the address bar, so the URL *is* the shareable link and
+     there is nothing to press before copying it.
+     
+     `replaceState`, never `pushState`: a pan is not a navigation, and a
+     hundred of them would bury whatever page the reader came from under a
+     hundred back-button steps. */
+  const syncHash = () => {
+    if (!ownsHash) return;
     try {
-      // Fold the centre back into -180..180 first: with worldCopyJump off
-      // it can wander to 540 after enough panning, and a stored view is
-      // read back much later.
-      const centre = map.getCenter().wrap();
-      sessionStorage.setItem(
-        VIEW_KEY,
-        JSON.stringify({
-          lat: +centre.lat.toFixed(4),
-          lng: +centre.lng.toFixed(4),
-          zoom: map.getZoom(),
-          base: Object.keys(bases).find((name) => map.hasLayer(bases[name]!)),
-          overlays: Object.keys(overlays).filter((name) => map.hasLayer(overlays[name]!)),
-          /* Every overlay that existed when this was saved. Without it a
-             layer added later looks identical to one the reader switched
-             off, and restoring would hide it from anyone holding an older
-             view — which is exactly what happened when Argo was added. */
-          known: Object.keys(overlays),
-          /* The colour scale a reader has set is part of their view. The
-             page reloads itself when a new build lands, so without this a
-             pinned range would quietly revert to automatic mid-session —
-             the one thing "fixed until reset" must not do. */
-          fields: choices,
-          /* Same reason as the colour scales: the page reloads itself when
-             a new build lands, and an opacity that silently jumped back to
-             default mid-session would read as the slider not holding. */
-          bathyOpacity,
-          /* The forecast hour, as a **lead** rather than a valid time. A
-             reader who steps to +24h and comes back after the hourly
-             reload wants tomorrow-from-now, not the absolute hour that
-             meant at the time — which by then is a frame nearer the past. */
-          lead: forecast.lead,
-          /* Same reason again: the page reloads itself hourly, and a colour
-             the reader chose deliberately must survive that. Stored as the
-             exemplar they asked for, not the ramp it resolved to — the
-             background may differ by then, and what they asked for is
-             "green", not that particular green. */
-          tints: particleTint,
-          /* Same reasoning as the tints: the page reloads itself hourly and
-             a rate the reader chose has to survive it. */
-          speeds: particleSpeed,
-        })
-      );
+      window.history.replaceState(null, '', shareUrl());
+    } catch {
+      // Some embeddings forbid history writes; the map is unaffected.
+    }
+  };
+
+  const saveView = () => {
+    syncHash();
+    try {
+      sessionStorage.setItem(VIEW_KEY, JSON.stringify({
+        ...viewNow(),
+        /* Every overlay that existed when this was saved. Without it a
+           layer added later looks identical to one the reader switched
+           off, and restoring would hide it from anyone holding an older
+           view — which is exactly what happened when Argo was added.
+
+           Stored but **not** put in the URL: a link is authoritative about
+           layers by construction, so it says the same thing by naming the
+           current set at the point of decoding. See `fromHash`. */
+        known: Object.keys(overlays),
+      }));
     } catch {
       // Private browsing can refuse storage; the map still works.
     }
   };
 
-  const restoreView = () => {
-    let saved;
-    try {
-      saved = JSON.parse(sessionStorage.getItem(VIEW_KEY) ?? 'null');
-    } catch {
-      return false;
+  /* Copy the link. The address bar already carries it, so this is purely
+     an affordance for a phone, where selecting a URL out of the address bar
+     is an awkward gesture.
+
+     The clipboard API needs a secure context and can be refused outright,
+     so a failure falls back to selecting the URL in a text field the reader
+     can copy by hand — which is worse but is not nothing, and is better
+     than a button that silently does nothing. */
+  {
+    const button = find<HTMLButtonElement>('[data-share-link]');
+    if (button) {
+      const say = (text: string) => {
+        button.textContent = text;
+        window.setTimeout(() => { button.textContent = 'Copy link'; }, 2000);
+      };
+      button.addEventListener('click', async () => {
+        const url = shareUrl();
+        try {
+          await navigator.clipboard.writeText(url);
+          say('Copied');
+        } catch {
+          /* Refused, or no secure context. Put it somewhere selectable
+             rather than pretending. */
+          const box = document.createElement('input');
+          box.readOnly = true;
+          box.value = url;
+          box.className = 'om-share-fallback';
+          button.after(box);
+          box.select();
+          say('Copy this');
+          window.setTimeout(() => box.remove(), 15000);
+        }
+      });
     }
+  }
+
+  /* A link pasted into a map that is already open.
+
+     Changing only the fragment is a *same-document* navigation, so the
+     browser fires `hashchange` and nothing else: the map does not restart,
+     never reads the new hash, and `syncHash` then overwrites it with wherever
+     the map already was — so the link is destroyed and pressing Enter again
+     does nothing either. Silently, which is the failure shape this project
+     keeps meeting. It is a real way to arrive: someone with the map open is
+     sent a view by a colleague.
+
+     Reloading is deliberate rather than lazy. Everything a shared view sets
+     is applied across `restoreView` and the startup that follows it —
+     opacity onto the pane, the speed sliders, a tint re-resolve, the chrome
+     sync — so applying a hash in place would mean a second restore path,
+     which is a second thing to keep in step with the first. A reload re-enters
+     the one path that is already gated, and it is what the reader asked for
+     by pressing Enter.
+
+     It cannot loop: `syncHash` writes with `replaceState`, which fires no
+     `hashchange` at all. Only the reader's own navigation gets here. */
+  if (ownsHash) {
+    window.addEventListener('hashchange', () => {
+      if (decodeView(window.location.hash)) window.location.reload();
+      /* Not a view — an in-page anchor, and this page has one: the skip
+         link every layout here carries. Its scroll has already happened by
+         the time this fires, so putting the view back costs the reader
+         nothing and is the difference between the address bar being the
+         shareable thing and being the shareable thing until somebody
+         presses Tab. `replaceState` fires no `hashchange`, so this cannot
+         chase itself. */
+      else syncHash();
+    });
+  }
+
+  const fromHash = () => {
+    if (!ownsHash) return null;
+    try {
+      const view = decodeView(window.location.hash);
+      return view ? { ...view, known: Object.keys(overlays) } : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const fromStorage = () => {
+    try {
+      return JSON.parse(sessionStorage.getItem(VIEW_KEY) ?? 'null');
+    } catch {
+      return null;
+    }
+  };
+
+  const restoreView = () => {
+    const saved = fromHash() ?? fromStorage();
     if (!saved || typeof saved.zoom !== 'number') return false;
 
     const base = saved.base && bases[saved.base];

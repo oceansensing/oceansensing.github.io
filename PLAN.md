@@ -41,6 +41,11 @@ long-press does the same anywhere. There is a distance and bearing tool. Two men
 one of a dozen places without touching the layers, `Layers` checkboxes sets of layers and
 colour scales without moving the map — several at once give the union — and
 Reset is the first entry of the second.
+The address bar carries the whole view — where you are looking and everything
+you have set — so the URL is a link to exactly what is on screen, with a
+`Copy link` button beside the map for a phone. Opening one restores it and
+outranks whatever view you last left behind; pasting one into a map you
+already have open works too.
 Above the map, an active-storm status line that updates without a reload;
 beside that, a server-synchronised UTC clock. The page refreshes itself when
 a new build lands, keeping your basemap, layers and position.

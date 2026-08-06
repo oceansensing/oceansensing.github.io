@@ -16,7 +16,10 @@ control. The ESPC fields show the step nearest the reader's own clock rather
 than a fixed offset from the model run, the currents publishing the two
 steps that span a six-hour window so the tide in that model can be stepped
 through, and the map's attribution says which hour is drawn and how far from
-now it is.
+now it is. The address bar carries the whole view as you move, so the URL is
+a link to exactly what is on screen — with a `Copy link` button beside the
+map, since selecting a URL out of a phone's address bar is an awkward
+gesture.
 
 It carries two pages. [`/visualization/`](https://oceansensing.org/visualization/)
 is the general-purpose one and
@@ -70,7 +73,7 @@ npm run verify   # everything CI checks, in one command
 ```
 
 `npm run verify` builds, type-checks, checks the docs for drift, and runs the
-map, multimap and clock test harnesses — about 790 assertions in all. **CI runs the same command and refuses to deploy
+map, multimap and clock test harnesses — about 900 assertions in all. **CI runs the same command and refuses to deploy
 if it fails**, so running it before you push is the quickest way to find out
 whether a change will publish.
 

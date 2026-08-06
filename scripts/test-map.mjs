@@ -8,7 +8,7 @@
  * client-side logic; this exercises it end to end (Leaflet, coastline,
  * storms, markers, controls) without needing a browser.
  */
-import { JSDOM } from 'jsdom';
+import { JSDOM, VirtualConsole } from 'jsdom';
 import fs from 'node:fs';
 import path from 'node:path';
 /* The map's own admissibility rule and its sampled water, so this harness
@@ -19,6 +19,21 @@ import { REGIONS, INTERESTS } from '../packages/ocean-map/places.ts';
 const basemapWater = JSON.parse(
   fs.readFileSync('packages/ocean-map/data/basemap-ocean.json', 'utf8')
 );
+
+/* A pasted link is applied by reloading, and jsdom navigates nowhere — but it
+   *says* so, as a jsdomError, which is the only handle there is on it:
+   `location.reload` is non-configurable, so it cannot be stubbed. Supplying
+   the console rather than letting jsdom make one is what gives access to that
+   event; everything else is forwarded exactly as the default does, so an
+   error the harness relies on printing still prints. */
+let navigations = 0;
+const virtualConsole = new VirtualConsole();
+virtualConsole.on('jsdomError', (e) => {
+  if (/navigation/i.test(e.message)) navigations += 1;
+  else console.error(e);
+});
+for (const level of ['log', 'info', 'warn', 'error', 'dir', 'trace', 'debug'])
+  virtualConsole.on(level, (...args) => console[level](...args));
 
 const dom = new JSDOM(
   /* Mirrors the component's own markup, figure and all. The wrapper is not
@@ -67,7 +82,7 @@ const dom = new JSDOM(
     // content: if the client does not rebuild it, the assertions below will
     // still see "STALE".
     '</body>',
-  { pretendToBeVisual: true, url: 'http://localhost/' }
+  { pretendToBeVisual: true, url: 'http://localhost/', virtualConsole }
 );
 const { window } = dom;
 globalThis.window = window;
@@ -530,12 +545,53 @@ const SEEDED_VIEW = {
      displacement below the sub-pixel floor another check measures. Seeding
      *faster* exercises the same construction path without starving it. */
   speeds: { current: 2, wind: 1 },
+  /* Deliberately not the link's, so which of the two won is unambiguous —
+     see the note on SHARED_LINK. */
+  bathyOpacity: 0.9,
   /* No `known` list, exactly as every view saved before that field existed.
      Argo is missing from `overlays` for the same reason — it did not exist
      either — and must therefore keep its default rather than be treated as
      a layer the reader turned off. */
 };
 window.sessionStorage.setItem('asset-map-view', JSON.stringify(SEEDED_VIEW));
+
+/* A shared link, set before the module runs, and **deliberately naming a
+   different place and a different basemap from the stored view above.**
+   That is the whole check: someone opening a link wants what was shared,
+   not where they left their own map, and the two have to disagree for the
+   assertion to mean anything. Nothing else in this file depends on the
+   seeded centre, and the checks that care re-read it from the live map. */
+/* **It names the same place, basemap and layers as the stored view, and
+   differs only in the isobath opacity.** That is a deliberate restraint
+   rather than a weak test.
+
+   One map per run can be arrived at once, and everything below this line
+   was written against the layers, basemap and centre the seeded view sets
+   up — a link that moved any of them would break a dozen unrelated checks
+   for reasons none of their names would hint at. The opacity is the one
+   piece of a view nothing else here reads, so it is the one piece free to
+   disagree; the seeded view sets 0.9 and the link 0.42, so whichever wins
+   is unambiguous.
+
+   **What this therefore does not cover**: that a link is *authoritative*
+   about layers — that anything it does not name ends up off, where a
+   stored view would leave an unknown layer alone. That needs a map arrived
+   at twice, which is the same limitation the chrome-on-arrival note below
+   records. The encoding half of it is covered in `test:units`. */
+const SHARED_LINK = {
+  ...SEEDED_VIEW,
+  /* Argo has to be named, and *that* is the authoritative-layers semantic
+     showing itself. The seeded view omits Argo deliberately — it predates
+     the layer — so a stored view leaves it at its default, which is on. A
+     link is decoded with the full overlay list as its `known` set, so
+     anything it does not name is off, and Argo silently went off and took
+     five unrelated checks with it. Naming it here restores the same end
+     state by the other route, which is the point. */
+  overlays: [...SEEDED_VIEW.overlays, 'Argo floats'],
+  bathyOpacity: 0.42,
+};
+const { encode } = await import('../packages/ocean-map/share.ts');
+window.location.hash = encode(SHARED_LINK);
 
 const KMZ_FIXTURE =
   'UEsDBBQAAAAIAJqtAl2FC8lSbgIAACMGAAAHAAAAZG9jLmttbI1U204bMRB9z1dYW4knss6lJLQ4RqQIVAnaqMAHuMnsrhWvHXkdwv59x95LLiTQSLHH9pyZ4zOzZtdvuSKvYAtp9CTqx72IgJ6bhdTpJHp5vuteRte8w5bohZ66mESZc6vvlG42m9isQKeyiDU4ih50EA8izm7NfJ2DdgjTIgf+tLavUJKVEprRsNNhT65UQORiEilIEfMgNYQ9zuZGGcuTpIe/JGG0WrONXLiMDxmtDEa3kA4hbGZUuRdgnHh4r9cGSKRSvM9omJlZO4UBOJ43JqM7QWgdumL6KFYNWTSR70xIDLmEkmtjc6EY9TYrvPOLVfwLejLaLjG0BwSiLTKTaabw796BjcvAvofXpJAB8rozagG4FwR9gLRotPU5lJhDLuxye0z69TlbQDG3cuWw4PxMuau/Z6m7+vF8620aFsTLEY4s9ev+gBROeAAm2YVjLsy2d2kkt0O8cqgqZbGlfHGMxeYSDgreHV/EF+fDEQ490h1/jXvnwzEOfjHwJ2N/4gu4xTR1r6LR7U2P3fupYk1umrvPjMS+PEniMFXtvpuF0Vr4gwrcWBAflWBq3hoSJ5vEt1/ayoptCXZq1nohbPmzqL4RYf8ckXGE/L2A7XRJwmY9jY5J2ESih3mq7FLr/83e6BdKuG+Og3lxYKLDh4wOc3s9aSPOZzWf4sfTKP24Vk7eg8nB2bK+2NEWwMZ7R6ly/KyDPZJ0R99OqNw26j6VUy31C9zG2CUil0FxHDMLCfdvboGPLryJfKUgNjalSr5CjK8uo8El5EN/uhujw+6t1/E3vvBKlLVE80xY12hE9z2QTft+M/+o839QSwMEFAAAAAgAmq0CXVrM13MNAAAAMAAAAA4AAABmaWxlcy9pY29uLnBuZ+sM8HPn5ZLiYiASAABQSwECFAMUAAAACACarQJdhQvJUm4CAAAjBgAABwAAAAAAAAAAAAAAgAEAAAAAZG9jLmttbFBLAQIUAxQAAAAIAJqtAl1azNdzDQAAADAAAAAOAAAAAAAAAAAAAACAAZMCAABmaWxlcy9pY29uLnBuZ1BLBQYAAAAAAgACAHEAAADMAgAAAAA=';
@@ -1627,6 +1683,50 @@ const eezLayer = await (async () => {
   await new Promise((r) => setTimeout(r, 300));
   return out;
 })();
+
+/* ---- the shared link -------------------------------------------------
+   Read early, before anything below moves the map or its layers. */
+const linkWon = (() => {
+  const at = Number(host._map.getPane('bathy')?.style.opacity || '1');
+  return {
+    beatsStorage: Math.abs(at - SHARED_LINK.bathyOpacity) < 0.02,
+    notStorage: Math.abs(at - SEEDED_VIEW.bathyOpacity) > 0.02,
+    hashTracks: false,
+    pastedApplies: false,
+    junkIgnored: false,
+    junkReplaced: false,
+  };
+})();
+{
+  // Move the map, then check the address bar moved with it.
+  const before = window.location.hash;
+  host._map.setView([-33.9, 18.4], 5, { animate: false });
+  await new Promise((r) => setTimeout(r, 500));
+  linkWon.hashTracks = window.location.hash !== before &&
+    /v=5\//.test(decodeURIComponent(window.location.hash));
+  /* A link pasted into an already-open map. Changing only the fragment is a
+     same-document navigation, so without the listener nothing happens at all
+     — and `syncHash` then overwrites the pasted link with wherever the map
+     already was, so pressing Enter a second time does nothing either.
+
+     Counted as a navigation rather than a stubbed `reload`, which jsdom will
+     not allow. Junk is checked too: it must *not* reload, or a stray `#top`
+     from an in-page anchor would throw the reader's map away. */
+  const wentNowhere = navigations;
+  window.location.hash = '#nothing-to-do-with-a-view';
+  await new Promise((r) => setTimeout(r, 100));
+  linkWon.junkIgnored = navigations === wentNowhere;
+  /* …and the view is put back, because the address bar is what people copy
+     and this page's own skip link is a fragment. */
+  linkWon.junkReplaced = /v=\d/.test(decodeURIComponent(window.location.hash));
+  window.location.hash = encode({ ...SHARED_LINK, zoom: 4 });
+  await new Promise((r) => setTimeout(r, 100));
+  linkWon.pastedApplies = navigations === wentNowhere + 1;
+
+  // Put it back; everything below assumes the view it was handed.
+  host._map.setView([SHARED_LINK.lat, SHARED_LINK.lng], SHARED_LINK.zoom, { animate: false });
+  await new Promise((r) => setTimeout(r, 500));
+}
 
 /* ---- the region and layer menus -------------------------------------
    Before the Reset check below, which puts everything back and would make
@@ -2731,6 +2831,24 @@ const checks = [
   ['borders + markers drawn', host.querySelectorAll('path').length > 200],
   ['layer switcher', host.querySelectorAll('.leaflet-control-layers-selector').length >= 10],
   ['bathymetry is the default base', !!host.querySelector('.leaflet-tile-pane .leaflet-layer')],
+  // ---- a shared link
+  /* A link outranks whatever the reader was last looking at — the one thing
+     this feature must not get backwards, since it would silently land
+     people wherever they had left their own map. Both values are asserted,
+     so a link that was simply ignored fails the first and a stored view
+     that was ignored fails the second. */
+  ['a shared link beats the reader\'s own stored view', linkWon.beatsStorage],
+  ['and it really is the link\'s value, not the stored one', linkWon.notStorage],
+  /* The address bar is the shareable thing, so it has to keep up with the
+     map rather than holding whatever it opened with. */
+  ['the address bar follows the map', linkWon.hashTracks],
+  /* Pasted into a map that is already open, which is a same-document
+     navigation: without a hashchange listener the link does nothing at all,
+     and the map then overwrites it. */
+  ['a link pasted into an open map is applied', linkWon.pastedApplies],
+  ['and a fragment that is not a view is left alone', linkWon.junkIgnored],
+  ['but the shareable view is put back over it', linkWon.junkReplaced],
+
   // ---- the region and layer menus
   ['both menus are in the control stack',
     host.querySelectorAll('.om-place-menu .om-place-button').length === 2],

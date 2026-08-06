@@ -3724,6 +3724,90 @@ moment Argo was added. Unknown layers keep their default.
 
 `npm run test:map` seeds a saved view and asserts the map comes back to it.
 
+### A link to the view you are looking at
+
+The address bar carries the whole view as a URL fragment, kept current as the
+map moves, so the URL *is* the shareable thing and there is nothing to press
+before copying it. `packages/ocean-map/share.ts` is the codec — no Leaflet and
+no DOM, so `test:units` exercises the round trip with no build and no jsdom,
+and a native port that wants to open a shared link keeps the parsing.
+
+**It encodes the object `saveView` already writes, rather than re-modelling
+it.** That function had worked out what "the view" is — centre, zoom, basemap,
+overlays, each field's colour scale and pinned range, the particle tints and
+speeds, the isobath opacity, the forecast hour — and a second definition would
+drift from the first the day a tenth thing joined the list. `viewNow()` is the
+one definition; storage, the address bar and the copy button are three readers
+of it.
+
+**A fragment, not a query.** It never reaches the server, so it cannot split a
+CDN cache entry or turn one page into a thousand cached URLs; it can be
+rewritten with no navigation; and on a static host there is no server to
+interpret a query anyway. Written with `replaceState`, never `pushState` — a
+pan is not a navigation, and a hundred of them would bury whatever page the
+reader came from under a hundred back-button steps.
+
+**A link outranks the reader's own stored view**, which is the one thing this
+must not get backwards: `restoreView` takes `fromHash() ?? fromStorage()`. The
+hash is decoded with the *current* overlay list as its `known` set, so a link
+is authoritative about layers by construction — anything it does not name is
+off. That is why the stored view carries a `known` list and the link does not.
+
+**Precision follows the zoom.** Web Mercator puts `256 · 2^zoom / 360` pixels
+in a degree, so one decimal past that lands inside a pixel — the most a reader
+could tell apart. Measured: 2 decimals at the globe, 4 at zoom 10. A first
+pass used one decimal per two zoom levels and gave **6** at zoom 10, two
+digits describing sub-millimetre positions of a map whose finest data is 3 km.
+A real link measures 213 characters.
+
+**Pasting a link into a map that is already open needed its own handling, and
+without it the feature is half a feature.** Changing only the fragment is a
+*same-document* navigation: the browser fires `hashchange` and nothing else,
+so the map never restarts, never reads the new hash — and `syncHash` then
+overwrites it with wherever the map already was, destroying the link so that
+pressing Enter a second time does nothing either. Silently. It is an ordinary
+way to arrive: someone with the map open is sent a view by a colleague.
+
+It **reloads**, deliberately rather than lazily. Everything a shared view sets
+is applied across `restoreView` *and the startup that follows it* — opacity
+onto the pane, the speed sliders, a tint re-resolve, the chrome sync — so
+applying a hash in place would mean a second restore path to keep in step with
+the first. A reload re-enters the one path that is already gated, and it is
+what the reader asked for by pressing Enter. It cannot loop, because
+`replaceState` fires no `hashchange` at all.
+
+**A fragment that is not a view is not reloaded — and the view is put back over
+it.** This page has a skip link, so `#skip-to-content` is reachable by pressing
+Tab, and without that second half the address bar quietly stops being a
+shareable link until the reader next moves the map. The anchor's scroll has
+already happened by the time `hashchange` fires, so restoring the view costs
+nothing.
+
+**Two maps on a page cannot share one fragment**, so the first to ask claims it
+(`data-ocean-map-hash` on the root element) and the second leaves it alone —
+otherwise both open on the first's shared view and then overwrite each other's
+centre on every pan. `test:multimap` caught exactly that; it is the singleton
+assumption this package has now paid to remove three times. A link from a
+two-map page therefore restores the first map and leaves the second at its own
+home: a real limitation, but an explicable one, where keying the fragment by
+storage key would double its length for a case this site does not have.
+
+**The `Copy link` button is an affordance for a phone**, where selecting a URL
+out of the address bar is an awkward gesture. The clipboard API needs a secure
+context and can be refused outright, so a failure falls back to putting the
+URL in a selectable read-only field rather than a button that silently does
+nothing. Only the fallback is verifiable in the browser pane — the clipboard
+needs `document.hasFocus()`, and a hidden pane never has it.
+
+Everything arriving in a hash has been through a chat client, an email, and
+whatever truncated it on the way, so `decode` **drops what it cannot read
+rather than refusing the link**: a mangled colour scale still lands you in the
+right ocean. Only the centre and zoom are required, and an impossible latitude
+refuses the whole thing. `test:units` covers the round trip and the hostile
+inputs; `test:map` seeds a link that differs from the stored view in exactly
+one value, so a link that was merely ignored fails one check and a stored view
+that was ignored fails the other.
+
 ### Known upstream quirks
 
 Both were found the hard way; do not re-derive them.

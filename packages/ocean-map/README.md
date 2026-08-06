@@ -43,6 +43,13 @@ mountOceanMaps();
 scopes its legend, controls and status line to the nearest `[data-ocean-map]`
 ancestor, so **two maps can share a page**.
 
+The whole view — centre, zoom, basemap, overlays, colour scales, pinned
+ranges, particle tints and speeds, isobath opacity, forecast hour — is kept in
+the URL fragment as the map moves, so the address bar *is* a link to what is
+on screen. Opening one restores it, and it outranks the reader's own stored
+view. With several maps on a page the first to start claims the fragment and
+the rest keep their own homes.
+
 | option | attribute | default |
 | --- | --- | --- |
 | `dataBase` | `data-map-data` | `/map/` |
@@ -109,7 +116,14 @@ packages/ocean-map/
   geo.ts  ramp.ts  tiles.ts   no Leaflet, no DOM — see below
   particles.ts        u/v sampling and particle advection — no Leaflet, no DOM
   velocity-layer.ts   the Leaflet canvas layer around it; runs on 1.9 and 2.0
+  scalar-layer.ts     the field raster, FIELDS, and what a paintable quantity is
+  graticule.ts        the lat/lon grid and its edge-pinned labels
+  measure.ts          the distance-and-bearing tool
   palette.ts          map-palette.json, typed
+  contrast.ts         picks a particle ramp against whatever is behind it
+  places.ts           the region and interest presets — no Leaflet, no DOM
+  place-menu.ts       the two menus in the control stack that apply them
+  share.ts            the view as a URL fragment — no Leaflet, no DOM
   storm-status.ts     shared with the host's build-time status line
   kmz.ts              KMZ/KML decode — no Leaflet, no DOM, parser injected
   warp.ts             the projective transform behind gx:LatLonQuad overlays
@@ -117,8 +131,8 @@ packages/ocean-map/
   data/               the palette, and the sampled basemap water it is gated against
 ```
 
-`geo.ts`, `ramp.ts`, `tiles.ts`, `schema.ts`, `warp.ts`, `kmz.ts` and
-`particles.ts` import
+`geo.ts`, `ramp.ts`, `tiles.ts`, `schema.ts`, `warp.ts`, `kmz.ts`,
+`places.ts`, `share.ts` and `particles.ts` import
 neither Leaflet nor the DOM and typecheck standalone. That is deliberate and worth preserving: they
 are what a native port keeps, reimplementing only the drawing. Keep new logic
 that does not touch `L.` out of the Leaflet path.

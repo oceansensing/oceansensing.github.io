@@ -32,6 +32,7 @@ import {
   wrapLongitude,
 } from '../packages/ocean-map/geo.ts';
 import { rampColour, rampStops } from '../packages/ocean-map/ramp.ts';
+import { encode as encodeView, decode as decodeView } from '../packages/ocean-map/share.ts';
 import { ParticleField, sampleVector, speedIndex } from '../packages/ocean-map/particles.ts';
 import { tileKeysFor } from '../packages/ocean-map/tiles.ts';
 import { apply, matrix3d, unitSquareTo } from '../packages/ocean-map/warp.ts';
@@ -564,6 +565,80 @@ const auto = pickRamp(BACKDROPS[0], [], null);
 const forced = pickRamp(BACKDROPS[0], [], '#1030d0');   // blue over navy water
 check('auto clears the background by more than a forced hue does',
   auto.clearance > forced.clearance, true);
+
+/* ---- the shareable view ---------------------------------------------
+
+   A link is the one input here that arrives from outside — through a chat
+   client, an email, and whatever truncated it on the way — so the codec is
+   checked both for carrying a full view intact and for surviving nonsense.
+*/
+{
+  const full = {
+    lat: 38.2517, lng: -72.5, zoom: 6.6,
+    base: 'Bathymetry (GEBCO)',
+    overlays: ['SST (ESPC)', 'Currents at 0m (ESPC)', 'Country & state borders'],
+    fields: { sst: { map: 'jet', range: [-2, 35] }, sic: { map: 'cmo.ice', range: null } },
+    tints: { current: '#8a2be2', wind: null },
+    speeds: { current: 2, wind: 1 },
+    bathyOpacity: 0.55,
+    lead: 39,
+  };
+  const back = decodeView('#' + encodeView(full));
+
+  /* Within a pixel, not to the digit: the centre is deliberately rounded to
+     the precision the zoom can show, so asserting the exact input back
+     would be asserting against the feature. A pixel at zoom 6.6 is about
+     0.0145 degrees; the check allows a tenth of that. */
+  const degPerPixel = 360 / (256 * 2 ** full.zoom);
+  check('a shared view lands within a pixel of its centre',
+    Math.abs(back.lat - full.lat) < degPerPixel / 10 &&
+      Math.abs(back.lng - full.lng) < degPerPixel / 10, true);
+  check('and its zoom', back.zoom, 6.6);
+  check('and its basemap', back.base, 'Bathymetry (GEBCO)');
+  /* Layer names carry spaces, parentheses and an ampersand — "Country &
+     state borders" is the one that would break a naive separator or an
+     unescaped fragment. */
+  check('and every layer name, ampersand and all',
+    back.overlays.join('|'), full.overlays.join('|'));
+  check('and a pinned colour range', JSON.stringify(back.fields.sst), JSON.stringify(full.fields.sst));
+  /* An automatic range is not the same as a pinned one and must not come
+     back as a pair of numbers. */
+  check('and an automatic range stays automatic', back.fields.sic.range, null);
+  check('and a chosen particle colour', back.tints.current, '#8a2be2');
+  check('and a particle speed', back.speeds.current, 2);
+  check('and the isobath opacity', back.bathyOpacity, 0.55);
+  check('and the forecast hour', back.lead, 39);
+
+  /* A view with everything switched off is a real view someone might send,
+     and is not the same as a link that says nothing about layers. */
+  const bare = decodeView('#' + encodeView({ lat: 0, lng: 0, zoom: 3, overlays: [] }));
+  check('an empty layer list survives as empty', bare.overlays.length, 0);
+  check('and is distinct from a link that omits layers',
+    decodeView('#v=3/0/0').overlays, undefined);
+
+  /* The centre and zoom are the only part a link cannot do without. */
+  check('a link with no centre is refused', decodeView('#b=Esri%20Ocean'), null);
+  check('a link with nothing in it is refused', decodeView(''), null);
+  check('a truncated centre is refused', decodeView('#v=6.6/38.25'), null);
+  check('an impossible latitude is refused', decodeView('#v=3/91/0'), null);
+  /* Junk in one field must not cost the reader the whole link — landing in
+     the right ocean with a default colour scale beats a blank map. */
+  const mangled = decodeView('#v=4/10/-30&c=sst:&s=current:abc&o=nonsense');
+  check('junk in one field still lands the view', `${mangled.lat},${mangled.zoom}`, '10,4');
+  check('and drops only the field it could not read', mangled.speeds.current, undefined);
+
+  /* Precision follows the zoom: a globe view quoting six decimals of
+     longitude is spending characters on a nanometre of ocean. */
+  const decimals = (hash) => {
+    const lat = decodeURIComponent(hash).split('v=')[1].split('/')[1];
+    return (lat.split('.')[1] ?? '').length;
+  };
+  const coarse = encodeView({ lat: 38.251739, lng: -72.499812, zoom: 2 });
+  const fine = encodeView({ lat: 38.251739, lng: -72.499812, zoom: 10 });
+  check('a globe view rounds its centre to the pixel', decimals(coarse), 2);
+  check('and a close view keeps more of it', decimals(fine), 4);
+  check('and neither spends digits below a pixel', decimals(fine) < 7, true);
+}
 
 console.log(
   failures
