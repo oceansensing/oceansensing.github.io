@@ -4031,6 +4031,24 @@ Both were found the hard way; do not re-derive them.
   is why `UtcClock` uses `Date` alone. Covered by `test:clock`.
 - **A cache-busting query string does not force a fresh response** from GitHub
   Pages — it answers `x-cache: HIT` regardless.
+- **A red deploy run does not mean the site did not publish.**
+  `actions/deploy-pages` polls for ten minutes and then aborts; when Pages is
+  merely slow the deployment finishes afterwards and the site goes live while
+  the run stays red. Measured 2026-08-06: five consecutive failed runs —
+  "Timeout reached, aborting!" and "Deployment cancelled" alternating — and
+  the site was serving the newest bundle throughout. `gh api
+  repos/OWNER/REPO/pages/deployments/<full sha>` reports the truth
+  (`succeed`, `deployment_in_progress`), and `curl`ing the live page for the
+  hashed bundle name settles it in one line. Check both before believing a
+  red run, and before pushing anything to "fix" it.
+- **A deployment really can wedge, and then it does block.** The same day,
+  the data repository sat at `deployment_in_progress` for over two hours;
+  Pages runs one deployment at a time, so every later one was cancelled or
+  timed out. `POST .../pages/deployments/<sha>/cancel` clears it (204, and
+  the status field lags — do not read the lag as a failure). The live site is
+  unaffected either way: what serves is the last *completed* deployment.
+  Cancelling is not unpublishing — that is `DELETE .../pages`, and it takes
+  the site down.
 
 ## What keeps going wrong here
 
