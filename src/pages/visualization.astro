@@ -29,23 +29,27 @@ const description =
     </div>
 
     <!-- The preset: what a reader who has never been here sees. Sea-surface
-         temperature under the surface flow, over the seafloor, with the
-         shorelines, the borders and the grid for reference — the whole ocean
-         at once, which is the picture this page exists to show.
+         temperature under the surface flow, with the shorelines, the borders
+         and the grid for reference — the whole ocean at once, which is the
+         picture this page exists to show.
 
-         **The isobaths are the expensive one and it is worth knowing by how
-         much.** Measured against the live host: SST 47 KB gzipped, the
-         currents 117, the borders 68 — and the deep isobath tier 2,916. So this
-         preset is 3.07 MB on a first load and 95% of it is the contours,
-         which at globe zoom are faint lines under a saturated colour scale.
-         Dropping Isobaths takes the first load to about 160 KB and changes
-         very little on screen; it is in because it was asked for, not
-         because the arithmetic favours it.
+         **The isobaths are deliberately not in it, on the arithmetic.**
+         Measured against the live host: SST 47 KB gzipped, the currents 117,
+         the borders 68 — and the deep isobath tier 2,916. Including them put
+         a first load at 3.07 MB with 95% of it in contours that, at globe
+         zoom, are faint lines under a saturated colour scale. Without them it
+         is 232 KB and the picture is very nearly the same. They are one click
+         away in the layer switcher, which is where a 3 MB layer belongs.
+
+         Every layer a preset names is *shown*, and a shown layer fetches —
+         the lazy rule that keeps unused layers free does not apply to the
+         ones the page asks for. So this list is a bandwidth decision as much
+         as a visual one.
 
          A comment cannot go between the attributes below. A JSX one there
          swallows the rest of the element — nine errors, none of them
          pointing at the comment — which CLAUDE.md already records from the
-         last time. -->
+         last time, and which happened again anyway. -->
     <AssetMap
       storageKey="visualization-map-view"
       label="Interactive map of the global ocean"
@@ -53,7 +57,6 @@ const description =
       layers={[
         'SST (ESPC)',
         'Currents at 0m (ESPC)',
-        'Isobaths',
         'Coastline',
         'Country & state borders',
         'Lat/lon grid',

@@ -242,18 +242,24 @@ The remaining seams, in order of what they unlock:
   **preset** — the `layers` option, a list of overlay names as the switcher
   shows them, plus `home` bounds — passed as props to `AssetMap.astro` by each
   page. The generic map opens on sea-surface temperature under the surface flow,
-  over the seafloor, with the shorelines, borders and grid, across the whole
-  ocean; the hurricane map opens on the fleet, SST, isobaths and the
-  graticule over the Atlantic.
+  with the shorelines, borders and grid, across the whole ocean; the
+  hurricane map opens on the fleet, SST, isobaths and the graticule over the
+  Atlantic.
 
-  **A preset is a bandwidth decision as much as a visual one**, and this one
-  is the case in point. Measured against the live host, its layers cost 47 KB
-  gzipped for the SST, 117 for the currents and 68 for the borders — and
-  **2,916 for the deep isobath tier**. So the generic page is 3.07 MB on a first
-  load and 95% of that is the isobaths, which at globe zoom are faint lines
-  under a saturated colour scale. Every layer named in a preset is *shown*,
-  and a shown layer fetches; the lazy-loading rule that keeps unused layers
-  free does not apply to the ones the page asks for. Neither knows anything the other does not.
+  **A preset is a bandwidth decision as much as a visual one**, and the
+  generic page is the case in point. Every layer named in a preset is
+  *shown*, and a shown layer fetches — the lazy-loading rule that keeps
+  unused layers free does not apply to the ones the page asks for. Measured
+  against the live host: SST 47 KB gzipped, the currents 117, the borders 68
+  — and **2,916 for the deep isobath tier**.
+
+  So the isobaths were in this preset briefly and came straight back out.
+  With them a first load was **3.07 MB with 95% of it in contours** that, at
+  globe zoom, are faint lines under a saturated colour scale; without them
+  it is **232 KB** and the picture is very nearly the same. They are one
+  click away in the switcher, which is where a 3 MB layer belongs. The
+  hurricane page keeps them because it opens on the Atlantic at a zoom where
+  the shelf break is the point. Neither knows anything the other does not.
 
   `DEFAULT_OVERLAYS` is still *captured* rather than restated — the preset is
   applied first, then the defaults are read off the map, so Reset returns to
