@@ -193,10 +193,31 @@ export async function drawFigure(
   ctx.save();
   ctx.scale(scale, scale);
 
+  /* **Measured from the content box, not the border box**, and the two are
+     not the same: the map carries a 1px border, so `getBoundingClientRect`
+     starts 1px outside where `clientWidth`/`clientHeight` — which size the
+     canvas above — start. Without the inset every layer lands one pixel
+     right and one down.
+
+     That is invisible on the tiles and the scalar raster, which are smooth,
+     and unmissable on anything drawn as a hairline: a 1px contour shifted by
+     1px is a *doubled* contour. Reported as the isobaths being offset in the
+     PNG, and it was every layer equally — the isobaths were just the only
+     ones thin enough to show it. */
   const origin = host.getBoundingClientRect();
+  const hostStyle = window.getComputedStyle(host);
+  const inset = {
+    x: parseFloat(hostStyle.borderLeftWidth) || 0,
+    y: parseFloat(hostStyle.borderTopWidth) || 0,
+  };
   const boxOf = (el: Element) => {
     const r = el.getBoundingClientRect();
-    return { x: r.left - origin.left, y: r.top - origin.top, w: r.width, h: r.height };
+    return {
+      x: r.left - origin.left - inset.x,
+      y: r.top - origin.top - inset.y,
+      w: r.width,
+      h: r.height,
+    };
   };
 
   /* The map is clipped to its own rect. Leaflet keeps tiles and canvases

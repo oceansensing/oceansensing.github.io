@@ -49,6 +49,10 @@ const dom = new JSDOM(
     /* `data-map-brand` mirrors AssetMap.astro: the branding string is the
      host's, so the harness has to supply one the way a page does. */
   '<div id="asset-map" data-ocean-map-canvas data-map-storage-key="asset-map-view"' +
+  /* A border, as the real stylesheet gives it. jsdom applies no external
+     CSS, so without it inline the exporter\'s content-box inset has
+     nothing to subtract and the check below cannot fail. */
+  ' style="border-width:1px;border-style:solid"' +
   ' data-map-brand="C4PO Ocean Viewer"></div>' +
   '<figcaption>' +
   '<p class="om-credit" data-map-credit></p>' +
@@ -177,6 +181,12 @@ const recordingContext = new Proxy(
           drawn.drawImages.push({
             what: typeof src?.tagName === 'string' ? src.tagName.toLowerCase() : typeof src,
             className: typeof src?.className === 'string' ? src.className : '',
+            /* Where it landed. The exporter measures every item against the
+               host's *content* box while sizing the canvas to it too, and
+               getting that wrong by the width of a border shifts the whole
+               composite — invisible on a smooth raster, a doubled line on a
+               1px contour. */
+            x: args[1], y: args[2],
             filter: properties.filter ?? 'none',
             alpha: properties.globalAlpha ?? 1,
             blend: properties.globalCompositeOperation ?? 'source-over',
@@ -3130,6 +3140,18 @@ const checks = [
      the pair that tells the two orders apart: Leaflet appends panes in
      creation order, which puts `user` *before* `currents` in the DOM and
      after it by z. */
+  /* **Measured from the content box, not the border box.** The map carries a
+     1px border, so `getBoundingClientRect` starts a pixel outside where
+     `clientWidth`/`clientHeight` — which size the canvas — start. Without the
+     inset every layer lands one pixel right and down: invisible on the tiles
+     and the scalar raster, and a *doubled* line on a 1px isobath, which is
+     how it was reported.
+
+     jsdom hands every element the same rect, so an item's box equals the
+     host's and the only thing distinguishing right from wrong is whether the
+     border was subtracted at all. That is exactly what this asks. */
+  ['positions are measured from the content box, not the border box',
+    exported.images.length > 0 && exported.images.every((i) => i.x === -1 && i.y === -1)],
   ['it composites panes in z order, not DOM order', (() => {
     const at = (re) => exported.images.findIndex((i) => re.test(i.className));
     const currents = at(/om-velocity/);

@@ -3921,6 +3921,20 @@ whose map this is; it does not compete with the map. Down a step and tracked
 tighter it is about 14% of a desktop map, and the change is in the package
 stylesheet so the live map and the figure agree.
 
+**Everything is measured from the map's content box, not its border box**, and
+getting that wrong is what the exporter shipped with. The container carries a
+1px border, so `getBoundingClientRect` starts a pixel outside where
+`clientWidth`/`clientHeight` — which size the output canvas — start, and every
+layer landed one pixel right and down.
+
+That is invisible on the tiles and the scalar raster, which are smooth, and
+unmissable on anything drawn as a hairline: **a 1px contour shifted by 1px is
+a doubled contour**. Reported as the isobaths being offset in the PNG, and it
+was every layer equally — the isobaths were only the first thin enough to show
+it. Found by overlaying the export on the live map with `mix-blend-mode:
+difference`, which is the fastest way to ask "is this the same picture": what
+matches goes black, and before the fix the whole map ghosted.
+
 **Pane order is the correctness condition**, read off the live z-indices rather
 than restated. The first prototype iterated in DOM order, which is *nearly*
 right and is not: Leaflet appends panes in creation order, so `user` (z 280)
