@@ -29,9 +29,10 @@ export interface Region {
   label: string;
   /** Absent means "computed" — see `dynamic`. */
   bounds?: PlaceBounds;
-  /** A view the map works out at runtime rather than a fixed box.
-      `home` is the page's own preset; `fleet` fits whatever is reporting. */
-  dynamic?: 'home' | 'fleet';
+  /** A view the map works out at runtime rather than a fixed box, as
+      against a box written down here. Only the page's own preset needs
+      one. */
+  dynamic?: 'home';
   title: string;
 }
 
@@ -53,8 +54,12 @@ export interface Interest {
    feature reads as broken. */
 export const REGIONS: Region[] = [
   { label: 'Home', dynamic: 'home', title: "Back to this page's own view" },
-  { label: 'All platforms', dynamic: 'fleet',
-    title: 'Fit everything currently reporting' },
+
+  /* There was an `All platforms` here, inherited from the mislabelled
+     `Global` button, which fitted the bounds of everything reporting. It is
+     gone: with about four thousand Argo floats spread over every ocean, the
+     answer is essentially always the whole world, so it duplicated a globe
+     view while its name promised something more specific. */
 
   // The lab's own water, north to south.
   { label: 'Chukchi Sea', bounds: [[65, -180], [76, -155]],

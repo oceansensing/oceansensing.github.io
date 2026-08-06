@@ -698,6 +698,24 @@ one**, and both exist because the step is chosen by valid time now:
   3-hourly, so selecting "the next two consecutive steps" put the ice an
   hour past the anchor and everything else three.
 
+  **A different *run* is a note, not a failure**, and that qualifier was
+  learned by taking the publish down for four hours. The aggregations are
+  separate datasets on one server and a new model run does not land in all
+  of them at once — measured 2026-08-06, `uv3z` had the 08-04 run while the
+  ice still only had 08-03. Treating that as fatal blocked four consecutive
+  hourly publishes, so the storms, the platforms and the wind all went
+  stale to avoid a duplicated credit line about the ice. It resolves itself
+  within the hour, and it is precisely what the run stamp is published for.
+  Hours are not comparable across runs either, so that half of the check is
+  skipped rather than piling on a second, derived failure.
+
+  The teeth stay where they belong: same run, different hour is this
+  repository's own two selections disagreeing, and no amount of waiting
+  fixes that. **A gate that blocks a deploy for something upstream and
+  transient is the wrong trade** — the rule everywhere else here is that an
+  outage degrades to stale rather than blocking, and this check had quietly
+  broken it.
+
 **It runs twice in CI, and that is not redundancy.** `npm run verify` runs
 *before* the data-refresh steps, so inside `verify` it only ever sees the
 committed snapshot. A second invocation after the refresh is the only place

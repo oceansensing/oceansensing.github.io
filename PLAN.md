@@ -177,8 +177,10 @@ rebuilt, as intended by the new keys, and both saved.
 
 - `check:docs` — both pipelines' `REFRESH_HOURS` and window widths must
   agree, before anything is asked of HYCOM.
-- `test:schema` — every ESPC hour on the map must be one the currents
-  publish, from one run; and a grid and its tiles must be the same hour.
+- `test:schema` — every ESPC hour must be one the currents publish *from
+  the same run*; and a grid and its tiles must be the same hour. A run
+  mismatch is a note: the aggregations ingest a new run minutes apart, and
+  failing on that once blocked four hourly publishes.
 - `test:map` — a stepped hour must reach the layer and its credit.
 
 ### If HYCOM starts refusing

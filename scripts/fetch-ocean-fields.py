@@ -233,12 +233,19 @@ PRODUCTS = [
         # Its own grid: 1/4 degree, longitude 0-360 like the Navy model's.
         'lat0': -89.875, 'dlat': 0.25, 'nlat': 720,
         'lon0': 0.125, 'dlon': 0.25, 'nlon': 1440,
-        # 1 degree globally, and **native 1/4 degree in a region**. There is
-        # no tile tier here and that is the point: tiles exist to reach a
-        # product's native resolution, and for OISST the region already is
-        # it. Tiling below native would only interpolate, at the cost of a
-        # second set of files and a daily build over them.
-        'strides': {'global': (4, 4), 'region': (1, 1)},
+        # **Native 1/4 degree everywhere**, so neither a region nor a tile
+        # tier can add anything: both exist to reach a product's native
+        # resolution over a box, and this is already at it over the globe.
+        #
+        # It was 1 degree globally with two native regions, which meant a
+        # reader anywhere outside the Atlantic and the Arctic got 1 degree
+        # at every zoom — the same defect the air temperature had, and it
+        # became conspicuous once the Region menu started sending people to
+        # the Philippines and the Chukchi Sea. Measured: the coarse pair
+        # cost 41 KB gzipped and native costs about half a megabyte, paid
+        # only by a reader who switches the layer on.
+        'strides': {'global': (1, 1)},
+        'regions': [],
         'tiles': False,
     },
     {
@@ -332,12 +339,12 @@ PRODUCTS = [
         'unit': 'fraction',
         'lat0': -89.875, 'dlat': 0.25, 'nlat': 720,
         'lon0': 0.125, 'dlon': 0.25, 'nlon': 1440,
-        'regions': ['arctic', 'antarctic'],
-        # Native in a region, as OISST is, so no tile tier could add
-        # anything — see the note on the temperature entry. 0.25 deg is the
-        # ceiling for this product: it is what passive microwave resolves,
-        # and the forecast beside it is the finer of the two by design.
-        'strides': {'global': (4, 4), 'region': (1, 1)},
+        # Native everywhere, like the temperature off the same dataset —
+        # see the note there. 0.25 deg is the ceiling for this product: it
+        # is what passive microwave resolves, and the forecast beside it is
+        # the finer of the two by design.
+        'regions': [],
+        'strides': {'global': (1, 1)},
         'tiles': False,
     },
     {
@@ -661,6 +668,47 @@ def slabs_for(product: dict, west: float, east: float, stride_lon: int,
     return [(x0, nlon - 1), (x0 + taken * stride_lon - nlon, x1)]
 
 
+# How many cells to ask for in one request.
+#
+# **Measured, after a native global grid stopped fitting in one.** OISST at
+# its own 0.25 degrees is 1440 x 661, and the ice concentration off that
+# grid failed every time with `IncompleteRead` at about 11 MB — three
+# attempts, three truncations at 10.9, 11.2 and 11.4 MB, so not transient.
+#
+# The temperature off the *same* grid succeeded, which is the part worth
+# knowing: it is a byte limit rather than a cell one, and ice writes its
+# fill value as the twelve characters `-9.96921E+36` where a sea-surface
+# temperature is four. Same number of cells, three times the response. So
+# the temperature was already near whatever the limit is and got away with
+# it — which would have shown up later as an intermittent CI failure rather
+# than an honest one.
+#
+# 300k cells keeps the worst case (13 characters a cell) near 4 MB. The
+# Navy regional grids are split by this too even though they worked, since
+# a limit nobody is near is not a limit anybody has tested.
+CELLS_PER_REQUEST = 300_000
+
+
+def bands_for(y0: int, y1: int, stride_lat: int, width: int) -> list[tuple[int, int]]:
+    """Latitude ranges to ask for, so no one response is too large.
+
+    Each band starts on the stride lattice `y0` established — the same care
+    `slabs_for` takes across longitude, and for the same reason: a band that
+    resumed anywhere else would shift its rows against the ones above it and
+    the grid would stop being regular.
+    """
+    rows_total = (y1 - y0) // stride_lat + 1
+    per = max(1, CELLS_PER_REQUEST // max(1, width))
+    if rows_total <= per:
+        return [(y0, y1)]
+    out = []
+    for start in range(0, rows_total, per):
+        a = y0 + start * stride_lat
+        b = min(y1, y0 + (start + per - 1) * stride_lat)
+        out.append((a, b))
+    return out
+
+
 def build(product: dict, when: str, valid: str, out: pathlib.Path,
           south: float, north: float, west: float, east: float,
           stride: tuple[int, int], wrap: bool, extra: dict | None = None,
@@ -681,8 +729,15 @@ def build(product: dict, when: str, valid: str, out: pathlib.Path,
         y1 = min(y0 + (span // stride_lat + 1) * stride_lat, product['nlat'] - 1)
     slabs = slabs_for(product, west, east, stride_lon, wrap)
 
-    parts = [fetch(product, when, y0, y1, a, b, stride_lat, stride_lon) for a, b in slabs]
-    grid = parts[0] if len(parts) == 1 else [w + e for w, e in zip(*parts)]
+    # Longitude slabs across, latitude bands down. The slabs are joined
+    # row by row and the bands stacked, so a grid too large for one response
+    # still comes back as one regular lattice.
+    width = sum((b - a) // stride_lon + 1 for a, b in slabs)
+    grid: list[list[float | None]] = []
+    for ya, yb in bands_for(y0, y1, stride_lat, width):
+        parts = [fetch(product, when, ya, yb, a, b, stride_lat, stride_lon)
+                 for a, b in slabs]
+        grid += parts[0] if len(parts) == 1 else [w + e for w, e in zip(*parts)]
 
     ny, nx = len(grid), len(grid[0])
     dx, dy = product['dlon'] * stride_lon, product['dlat'] * stride_lat

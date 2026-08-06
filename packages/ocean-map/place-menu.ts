@@ -18,9 +18,6 @@ export interface PlaceMenuHandlers {
   goTo(bounds: [[number, number], [number, number]]): void;
   /** The page's own view — what the old Basin button did. */
   goHome(): void;
-  /** Fit whatever is reporting — what the old Global button did, and it
-      never meant the globe. */
-  goFleet(): void;
   /** Turn an interest on or off. On unions its layers with what is showing;
       off drops the ones no other checked interest needs. */
   toggle(interest: Interest): void;
@@ -169,7 +166,6 @@ export function createPlaceMenus(
     isSpecial: (r) => Boolean(r.dynamic),
     run: (r) => {
       if (r.dynamic === 'home') on.goHome();
-      else if (r.dynamic === 'fleet') on.goFleet();
       else if (r.bounds) on.goTo(r.bounds);
     },
   });

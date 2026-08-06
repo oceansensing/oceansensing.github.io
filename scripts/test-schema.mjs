@@ -36,6 +36,13 @@ const fail = (file, msg) => {
   console.log(`FAIL  ${file}: ${msg}`);
 };
 
+/* Said out loud, but not fatal. For the things that are genuinely wrong and
+   genuinely not this repository's doing — an upstream that has published
+   half a new model run. Blocking a publish for one of those makes the whole
+   map stale to avoid a cosmetic blemish, which is the wrong trade and is
+   exactly the trade that was accidentally made. */
+const note = (file, msg) => console.log(`note  ${file}: ${msg}`);
+
 const read = (rel) => {
   const p = path.join(MAP, rel);
   if (!fs.existsSync(p)) return null;
@@ -213,7 +220,9 @@ for (const name of ['currents', 'currents-60m', 'wind']) {
 const POLAR_BOUND = 85.0;
 for (const name of [
   'sst-oisst', 'sst-navy', 'sss-navy', 'sic-oisst', 'sic-navy', 'sit-navy',
-  'sic-oisst-arctic', 'sic-navy-arctic', 'sit-navy-arctic', 'sst-navy-arctic', 'sss-navy-arctic',
+  // OISST and the wind publish one native global grid each now, with no
+  // regions — so their global file is the only one carrying the obligation.
+  'sic-navy-arctic', 'sit-navy-arctic', 'sst-navy-arctic', 'sss-navy-arctic',
   // The currents are a separate pipeline that had the identical defect, and
   // nothing was checking them either — measured at 84.16 and 84.92 against
   // wind's 90, which is the seam of particles running on above a field that
@@ -368,15 +377,36 @@ for (const file of fs.existsSync(MAP)
       (base[3]?.map((f) => f.valid) ?? [base[1]]).filter(Boolean)
     );
     for (const [name, itsTime, itsRun] of espc) {
+      /* **A different run is a note, not a failure**, and getting that wrong
+         took the whole publish down for four hours.
+         
+         The aggregations are separate datasets on one server and a new model
+         run does not land in all of them at the same instant: measured
+         2026-08-06, `uv3z` had the 08-04 run while the ice still only had
+         08-03. That is upstream timing, it resolves itself within the hour,
+         and it is precisely what the run stamp is published for — the map
+         shows two credit lines and says why. Failing here instead blocked
+         the storms, the platforms and the wind as well, to avoid a
+         duplicated line about the ice.
+         
+         Hours are not comparable across runs either, so the check below is
+         skipped rather than piling a second, derived failure on top. */
+      if (itsRun !== base[2]) {
+        note(`${name}.json`, `is from the ${itsRun} run where ${base[0]}.json ` +
+          `is from ${base[2]} — one model, two runs, so the map will credit ` +
+          'ESPC twice until the newer run reaches both aggregations');
+        continue;
+      }
+      /* Same run, different hour, though, is this repository's own doing:
+         two selections that agree on which run to read and disagree on
+         which step. That is the bug this check was written for — the ESPC
+         ice aggregation being hourly where uv3z and ts3z are 3-hourly —
+         and it is not something waiting will fix. */
       if (!hours.has(itsTime)) {
         fail(`${name}.json`, `is valid ${itsTime}, which is not one of the ` +
-          `hours ${base[0]}.json publishes (${[...hours].join(', ')}) — one ` +
-          'model, three hours, so the map carries an ESPC credit no layer ' +
-          'can be stepped into agreement with');
-      }
-      if (itsRun !== base[2]) {
-        fail(`${name}.json`, `is from the ${itsRun} run but ${base[0]}.json ` +
-          `is from ${base[2]} — one model, two runs`);
+          `hours ${base[0]}.json publishes (${[...hours].join(', ')}) from the ` +
+          'same run — one model, three hours, so the map carries an ESPC ' +
+          'credit no layer can be stepped into agreement with');
       }
     }
   }

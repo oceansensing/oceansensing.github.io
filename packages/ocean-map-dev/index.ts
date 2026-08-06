@@ -3814,7 +3814,6 @@ export async function createOceanMap(
   const menus = createPlaceMenus(map, CONFIG.regions, CONFIG.interests, {
     goTo: (bounds) => map.fitBounds(bounds),
     goHome: () => map.fitBounds(BASIN),
-    goFleet: () => fitEverything(),
     toggle: toggleInterest,
     isOn: interestOn,
     reset: () => resetEverything(),
@@ -3879,10 +3878,6 @@ export async function createOceanMap(
     map.fitBounds(BASIN);
   };
 
-  let allBounds: L.LatLngBounds | null = null;
-  const fitEverything = () => {
-    if (allBounds && allBounds.isValid()) map.fitBounds(allBounds.pad(0.1));
-  };
 
   // ---- coastline (the offline basemap) and borders (overlay) ----
   const flip = (line: number[][]) => line.map(([x, y]) => [y, x] as [number, number]);
@@ -4218,7 +4213,6 @@ export async function createOceanMap(
   // ---- storms and assets ----
   try {
     const data = await (await fetch(`${DATA}ocean-assets.json`)).json();
-    const pts: [number, number][] = [];
     // Where each storm sits, for the zoom buttons in the status line above.
     const stormAt = new Map<string, [number, number]>();
 
@@ -4265,7 +4259,6 @@ export async function createOceanMap(
         );
       }
       if (typeof s.lat === 'number' && typeof s.lon === 'number') {
-        pts.push([s.lat, s.lon]);
         stormAt.set(s.id, [s.lat, s.lon]);
         const stormPopup =
           `<strong>${s.name}</strong> (${s.classification ?? ''})<br>` +
@@ -4333,7 +4326,6 @@ export async function createOceanMap(
       const isUsv = a.kind === 'usv';
       const layer = isUsv ? usvs : gliders;
       const tint = isUsv ? USV : GLIDER;
-      pts.push([a.lat, a.lon]);
 
       // Where it has been over the active window, then where it is now.
       // The track is drawn twice: a dark casing underneath so the line
@@ -4386,7 +4378,6 @@ export async function createOceanMap(
       );
     }
 
-    if (pts.length) allBounds = L.latLngBounds(pts);
 
     const n = (data.assets ?? []).length;
     const s = (data.storms ?? []).length;
