@@ -377,8 +377,22 @@ const FRAME_LEADS = [0, 12, 24];
    to now" wanders onto lead 12, the step-back landed on a frame with no
    tiles, and five unrelated checks failed for a reason nothing in their
    own text hinted at. */
+/* **One clock for the whole suite**, captured here rather than read on each
+   call. The stamps are relative to "now" on purpose — see above — but `now`
+   has to be the same instant every time it is asked for, and it was not:
+   `Date.now()` per call means a run that crosses an hour boundary stamps the
+   same lead two different ways.
+
+   That failed a scheduled build against code the browser had just been shown
+   to be correct. The run started at 11:58:31 and reached the forecast checks
+   at 12:02: the frames were built with lead 12 at 23:00Z and the check then
+   recomputed it as 00:00Z, so "the stepped hour reaches the layer" compared
+   the right answer against a different question. Once an hour, at random,
+   and it blocks the deploy — the worst kind of flake, because the obvious
+   reading is that the feature broke. */
+const SUITE_NOW = Date.now();
 const frameStamp = (lead) => {
-  const at = new Date(Date.now() + lead * 3600e3);
+  const at = new Date(SUITE_NOW + lead * 3600e3);
   at.setUTCMinutes(0, 0, 0);
   return at.toISOString().replace('.000', '');
 };
