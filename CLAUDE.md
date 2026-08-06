@@ -1122,6 +1122,26 @@ out as grey squares on a phone while being correct on a desktop, which is the
 whole point of that control gone. It only shows on a real phone: the browser
 pane does not reproduce it.
 
+**On a phone, one field per row.** Both particle controls put Current and
+Wind side by side, which wants about 41rem for the swatches and 30rem for
+the sliders against roughly 21.6rem of phone content column. Reported from
+a phone, where the wind's swatches ran past the right edge of the map and
+the whole page scrolled sideways — the caption is ordinary page content, so
+it has no scroller of its own to contain an overflowing row.
+
+**Stacked rather than shrunk**, and that is the point: the fixed widths on
+the name and the readout are what stop one field's label shoving the other's
+slider along the row when a number grows a digit, and that reasoning does
+not stop applying on a small screen. Each field takes its own line below the
+map's own 48rem breakpoint, and the fixed footprints then line the two up
+under each other. The colour-scale sets wrap for the same reason.
+
+`test:map` decides it over the **built** stylesheet, because jsdom does no
+layout and cannot see a row running off the side — and the check has to
+survive minification, which rewrites `(max-width: 47.999rem)` to
+`(width<=47.999rem)`. It anchors on the breakpoint value and the
+declaration rather than on either spelling.
+
 **A fixed box that its own text overflows eats the flex `gap`.** The speed
 readout was `inline-size: 3.5rem` and "1.19×" filled it exactly, so the number
 touched the next field's name. Fixed widths are right here — they are what

@@ -2725,6 +2725,20 @@ const checks = [
      twice — a class that sets `display` beats `[hidden]` at equal
      specificity, so author order decides it. Read off the built stylesheet,
      because jsdom does not cascade. */
+  /* Phone layout, decided over the built stylesheet because jsdom does no
+     layout and cannot measure a row running off the side. Reported from a
+     phone: Current and Wind sat on one line in both particle controls —
+     about 41rem of swatches against 21.6rem of content column — so the
+     wind's ran past the map and the whole page scrolled sideways. Each
+     field takes its own row below the map's own breakpoint. */
+  /* Matched against the *built* stylesheet, so it has to survive
+     minification: the minifier rewrites `(max-width: 47.999rem)` to
+     `(width<=47.999rem)` and strips the space after the comma. Anchoring on
+     the breakpoint value and the declaration rather than on either
+     spelling is what keeps this from failing on a build-tool upgrade that
+     changes neither the CSS nor the layout. */
+  ['each particle field takes its own row on a phone',
+    /@media[^{]*47\.999rem[^{]*\{[^@]*\.om-tints\s*,\s*\.om-particle-speed label\s*\{\s*flex:\s*1 0 100%/.test(builtCss)],
   ['a closed panel is hidden by more than the attribute',
     /\.om-place-panel\[hidden\]\s*\{[^}]*display:\s*none/.test(builtCss)],
   ['opening a menu marks it expanded, and closing unmarks it', menuToggles],

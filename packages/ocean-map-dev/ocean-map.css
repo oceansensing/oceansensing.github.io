@@ -395,6 +395,12 @@
    affordance, which is why there is no readout beside this. */
 .om-particle-colours {
   display: inline-flex;
+  /* Wrappable, so the two fields can break between themselves rather than
+     running off the side. Without this the row was `inline-flex` with no
+     wrap, so Current and Wind were welded into one line about 41rem wide —
+     reported from a phone, where the wind swatches ran past the right edge
+     of the map above them. */
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2xs, 0.25rem);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
@@ -1060,9 +1066,47 @@
    is too close to the water instead of being told so. */
 .om-tints {
   display: inline-flex;
+  /* And the swatches wrap within a field, as the safety net under the
+     stacking below. One group is a 5.5rem name plus eleven 1.1rem swatches
+     at a 0.25rem gap — 20.4rem against about 21.6rem of phone. It fits, and
+     it fits by 1.2rem, which is not a margin to rely on across fonts. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.25rem;
   margin-inline-end: 0.9rem;
+}
+
+/* **Below the map's own breakpoint, one field per row.**
+ *
+ * Both controls put Current and Wind side by side, which needs about 41rem
+ * for the swatches and 30rem for the sliders. A phone has roughly 21.6rem
+ * of content column, so both overflowed it — and because the caption is
+ * ordinary page content rather than something with its own scroller, that
+ * came out as the whole page scrolling sideways.
+ *
+ * Stacking rather than shrinking: the fixed widths on the name and the
+ * readout are what stop one field's label shoving the other's slider along
+ * the row when a number grows a digit, and that reasoning does not stop
+ * applying just because the screen is small. Each field simply gets its own
+ * line, and the fixed footprints then line the two up under each other.
+ */
+@media (max-width: 47.999rem) {
+  .om-tints,
+  .om-particle-speed label {
+    flex: 1 0 100%;
+  }
+
+  /* The gap between fields is vertical now, so the horizontal one would
+     only push the group off its own line. */
+  .om-tints {
+    margin-inline-end: 0;
+  }
+
+  /* Same overflow, same cause: a field's colour-scale set is a name, a
+     select, two number inputs and a button on one unwrappable line. */
+  .om-field-controls {
+    flex-wrap: wrap;
+  }
 }
 
 .om-tint-name {
