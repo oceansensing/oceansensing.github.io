@@ -718,7 +718,17 @@ one**, and both exist because the step is chosen by valid time now:
   learned by taking the publish down for four hours. The aggregations are
   separate datasets on one server and a new model run does not land in all
   of them at once — measured 2026-08-06, `uv3z` had the 08-04 run while the
-  ice still only had 08-03. Treating that as fatal blocked four consecutive
+  ice still only had 08-03.
+
+  **And the ice aggregation runs a whole run behind, not minutes.** Measured
+  the same night, the newest run in each: `uv3z` 08-04 12Z, `ts3z` 08-04
+  12Z, `ice` 08-03 12Z. So **two ESPC credit lines is the ordinary state
+  whenever an ice layer is on beside a current or a temperature** — one line
+  for the 08-04 run and one for the 08-03 — rather than the brief transient
+  an earlier version of this note claimed. It is honest, and it is what the
+  run stamp is for; it is also the first thing a reader asks about, so it is
+  worth knowing that the answer is "the ice model is published later" and
+  not "something is broken". Treating that as fatal blocked four consecutive
   hourly publishes, so the storms, the platforms and the wind all went
   stale to avoid a duplicated credit line about the ice. It resolves itself
   within the hour, and it is precisely what the run stamp is published for.

@@ -383,9 +383,16 @@ for (const file of fs.existsSync(MAP)
          The aggregations are separate datasets on one server and a new model
          run does not land in all of them at the same instant: measured
          2026-08-06, `uv3z` had the 08-04 run while the ice still only had
-         08-03. That is upstream timing, it resolves itself within the hour,
-         and it is precisely what the run stamp is published for — the map
-         shows two credit lines and says why. Failing here instead blocked
+         08-03. That is upstream timing and precisely what the run stamp is
+         published for — the map shows two credit lines and says why.
+
+         **It does not resolve within the hour**, which this note used to
+         claim. Measured 2026-08-06 04:00, the newest run in each
+         aggregation: `uv3z` 08-04 12Z, `ts3z` 08-04 12Z, `ice` **08-03
+         12Z** — a whole run behind, not minutes. So two ESPC credit lines
+         is the ordinary state whenever an ice layer is on beside a current
+         or a temperature, not a brief transient, and a gate that failed on
+         it would fail most of the time. Failing here instead blocked
          the storms, the platforms and the wind as well, to avoid a
          duplicated line about the ice.
          
