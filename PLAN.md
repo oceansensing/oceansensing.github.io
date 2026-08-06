@@ -45,7 +45,10 @@ The address bar carries the whole view — where you are looking and everything
 you have set — so the URL is a link to exactly what is on screen, with a
 `Copy link` button beside the map for a phone. Opening one restores it and
 outranks whatever view you last left behind; pasting one into a map you
-already have open works too.
+already have open works too. It also saves itself as a PNG — screen size or
+doubled for print — with the colour bar, the particle keys and the credit line
+in a band underneath, so a figure that ends up in a talk or a paper carries
+its own provenance.
 Above the map, an active-storm status line that updates without a reload;
 beside that, a server-synchronised UTC clock. The page refreshes itself when
 a new build lands, keeping your basemap, layers and position.
@@ -85,7 +88,7 @@ website, `PORTING-IOS.md` for the iOS app, and `BOUNDARIES.md` for anyone
 adding to it — those separations are what keep the other two possible, and
 they are easy to breach by accident.
 
-`npm run verify` stands at **880 printed `ok` lines** across nine steps:
+`npm run verify` stands at **951 printed `ok` lines** across nine steps:
 build, type-check, docs, the renderer-independent units, the published data
 contract, colour contrast, the rendered map, two maps on a page, and the
 clock. Counted as `npm run verify | grep -c '^ok'`, which is the only figure

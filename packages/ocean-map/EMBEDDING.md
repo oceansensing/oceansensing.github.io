@@ -126,11 +126,20 @@ isobath opacity slider and status line are the host's markup**, found by
 | `[data-kmz-note]` | what the last upload drew and skipped |
 | `[data-flow-key]` | a **bare container** the module fills with one key per animated field that is on. Give it no class of its own or it draws a swatch in front of the ones it holds |
 | `[data-particle-colours]` | where the per-field particle colour pickers are built |
+| `[data-particle-speed]` | where the per-field drift sliders are built |
 | `[data-forecast-controls]` | the forecast-hour buttons, when the data publishes more than one frame |
+| `[data-layer-key]` | on a legend swatch, naming the layer it stands for, so the module can hide it while that layer is off |
+| `[data-share-link]` | a `<button>` that copies a link reproducing the current view |
+| `[data-export-png]` | a `<button>` that saves the figure. Its value is the scale — omit it for the screen, `"2"` for print |
 | `[data-point-readout]` | not a hook — the readout is a Leaflet popup and needs no markup |
 | `[data-map-credit]` | where Leaflet's attribution is **moved to** |
 
 Every one is optional. Omit a hook and that control simply does not appear.
+
+This table has rotted before — `data-share-link` and `data-particle-speed` were
+both live for a while without appearing here. It is worth checking against
+`grep -o 'data-[a-z-]*' ../../src/components/AssetMap.astro | sort -u` when
+adding a control.
 
 **`[data-map-credit]` is the one worth adding deliberately.** Leaflet renders
 attribution as a control, so by default it floats over the bottom edge of the

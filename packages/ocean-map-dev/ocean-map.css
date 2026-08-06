@@ -51,6 +51,15 @@
     --map-coast: brightness(0.55) contrast(1.3);
     --map-coast-halo: rgba(255, 255, 255, 0.6);
     --map-currents-blend: multiply;
+    /* The paper and ink of an exported PNG's provenance band. Here rather
+       than in the exporter because a colour written into a module is
+       invisible to the contrast gate (BOUNDARIES S5) — and because these
+       two have to follow the theme like everything else, which means they
+       need a value in all three blocks. They never sit against the map:
+       the band is below it, so this pair is judged against each other and
+       nothing else. */
+    --map-figure-paper: #ffffff;
+    --map-figure-ink: #1d232b;
 
     height: max(24rem, 62svh);
     border: 1px solid var(--border, #d6dbe0);
@@ -98,6 +107,8 @@
       --map-bathy-halo: rgba(4, 8, 13, 0.7);
       --map-currents-blend: multiply;
       --map-measure-halo: #e8eef5;
+      --map-figure-paper: #10151b;
+      --map-figure-ink: #e8eef5;
     }
   }
 
@@ -123,6 +134,8 @@
     --map-bathy-halo: rgba(4, 8, 13, 0.7);
     --map-currents-blend: multiply;
     --map-measure-halo: #ffffff;
+    --map-figure-paper: #10151b;
+    --map-figure-ink: #e8eef5;
   }
 
   /* The halo follows the *basemap*, not the theme, and below about ΔL 1.5

@@ -35,6 +35,12 @@ import { rampColour, rampStops } from '../packages/ocean-map/ramp.ts';
 import { encode as encodeView, decode as decodeView } from '../packages/ocean-map/share.ts';
 import { ParticleField, sampleVector, speedIndex } from '../packages/ocean-map/particles.ts';
 import { tileKeysFor } from '../packages/ocean-map/tiles.ts';
+import {
+  creditSources,
+  figureName,
+  planFigure,
+  wrapText,
+} from '../packages/ocean-map/figure.ts';
 import { apply, matrix3d, unitSquareTo } from '../packages/ocean-map/warp.ts';
 import { pickRamp, deltaE, hex as hexRgb, NAMED_TINTS } from '../packages/ocean-map/contrast.ts';
 import {
@@ -638,6 +644,115 @@ check('auto clears the background by more than a forced hue does',
   check('a globe view rounds its centre to the pixel', decimals(coarse), 2);
   check('and a close view keeps more of it', decimals(fine), 4);
   check('and neither spends digits below a pixel', decimals(fine) < 7, true);
+}
+
+/* ---- the exported figure's geometry ---------------------------------
+   Laid out with no canvas, so the arithmetic is checkable here rather than
+   only by looking at a PNG. `measure` is injected — 6 px a character at the
+   base size, scaled with the font — which is what lets wrapping be exercised
+   at all: a stub returning 0 would make every line fit and a wrapping check
+   would then pass against code that never wrapped. */
+{
+  const measure = (text, size) => text.length * 6 * (size / 11);
+  // A real credit, with the semicolons and the internal commas that make
+  // splitting on a comma wrong.
+  const CREDIT =
+    'GEBCO Compilation Group; US Navy ESPC-D-V02 — valid 2026-08-06 03Z (+2 h), ' +
+    '2026-08-04 12Z run; ECMWF IFS — valid 2026-08-06 00Z, 2026-08-05 12Z run';
+
+  check('a credit splits into its sources on the semicolon', creditSources(CREDIT).length, 3);
+  /* The one that matters: a source contains commas of its own, so splitting
+     on a comma would report five sources where there are three. */
+  check(
+    'and a source keeps the commas inside it',
+    creditSources(CREDIT)[1],
+    'US Navy ESPC-D-V02 — valid 2026-08-06 03Z (+2 h), 2026-08-04 12Z run'
+  );
+  check('an empty credit yields no sources', creditSources('').length, 0);
+
+  const wrapped = wrapText('one two three four five six', 60, (s) => s.length * 6);
+  check('text wraps to the width it is given', wrapped.length > 1, true);
+  check('and every line fits', wrapped.every((l) => l.length * 6 <= 60), true);
+  check('and no word is lost', wrapped.join(' '), 'one two three four five six');
+  /* A word longer than the line is emitted whole rather than dropped: a
+     credit is provenance, and losing part of a source name is worse than
+     an overhanging one. */
+  check(
+    'a word wider than the line survives',
+    wrapText('short enormouslylongsourcename', 40, (s) => s.length * 6).join(' '),
+    'short enormouslylongsourcename'
+  );
+
+  const keys = [
+    { label: 'SST 18 to 28 °C', ramp: ['#000', '#fff'] },
+    { label: 'Current', ramp: ['#f88'] },
+  ];
+  const plan = planFigure({ mapW: 800, mapH: 500, keys, credit: CREDIT, measure });
+  check('the figure is as wide as the map', plan.width, 800);
+  /* The band is derived from its contents, never assumed. A fixed height
+     clips a six-source credit on a phone and leaves empty paper under a
+     one-source credit on a desktop. */
+  check('and taller than the map, to make room for the band', plan.height > 500, true);
+  check('the map occupies the top of it', `${plan.map.w}x${plan.map.h}`, '800x500');
+  check('the band starts where the map ends', plan.band.y, 500);
+  check('and the band reaches the bottom', plan.band.y + plan.band.h, plan.height);
+  check('every key is placed', plan.keys.length, 2);
+  check('each key keeps its own ramp', plan.keys[1].ramp, ['#f88']);
+  /* Nothing may sit on top of the map itself — the figure's whole claim is
+     that the band is *beside* the picture, not over it. */
+  check(
+    'no key strays onto the map',
+    plan.keys.every((k) => k.swatch.y >= plan.map.h),
+    true
+  );
+  check(
+    'no credit line strays onto the map',
+    plan.credits.every((c) => c.y >= plan.map.h),
+    true
+  );
+  check('and none runs off the bottom', plan.credits.every((c) => c.y <= plan.height), true);
+  /* One source per line where they fit, which at this width they do — a
+     reader scanning a figure for "where did the temperature come from" is
+     looking for a line, not a clause buried in a paragraph. */
+  check('each source gets its own line when it fits', plan.credits.length, 3);
+  check('and the longest source is not truncated to do it',
+    plan.credits[1].text.endsWith('12Z run'), true);
+
+  /* A narrower figure must wrap more, and so must be taller. This is the
+     check that a fixed band height fails. */
+  const narrow = planFigure({ mapW: 360, mapH: 500, keys, credit: CREDIT, measure });
+  check('a narrow figure wraps the credit further', narrow.credits.length > plan.credits.length, true);
+  check('and is therefore taller', narrow.height > plan.height, true);
+
+  /* Print scale multiplies the whole figure — including the band, which
+     would otherwise come out as a hairline under a doubled map. */
+  const big = planFigure({ mapW: 800, mapH: 500, scale: 2, keys, credit: CREDIT, measure });
+  check('2x doubles the width', big.width, 1600);
+  check('and doubles the map', `${big.map.w}x${big.map.h}`, '1600x1000');
+  check('and the band with it', Math.round(big.band.h / plan.band.h), 2);
+  check('and the type with it', big.fonts.credit, plan.fonts.credit * 2);
+
+  /* Nothing to say, nothing to draw: no keys and no credit means no band at
+     all, rather than an empty strip of paper. */
+  const bare = planFigure({ mapW: 400, mapH: 300, measure });
+  check('a figure with nothing to say has no band', bare.band, null);
+  check('and is exactly the map', bare.height, 300);
+
+  const name = figureName({ lat: 38.25, lng: -72.5, zoom: 6.6 }, '2026-08-06T03:14:00Z');
+  check('the filename names the place and the moment', name,
+    'c4po-ocean-38.3N-72.5W-z7-2026-08-06-03-14Z.png');
+  /* Filenames go through shells, ZIPs and mail clients, so the coordinates
+     are plain — no degree signs, no primes, no colons, no spaces. */
+  check('and carries nothing a filesystem would object to', /^[A-Za-z0-9.\-]+$/.test(name), true);
+  /* A print export made in the same minute as a screen one must not be the
+     same file. */
+  check('a print export says so in its name',
+    figureName({ lat: 38.25, lng: -72.5, zoom: 6.6 }, '2026-08-06T03:14:00Z', 2),
+    'c4po-ocean-38.3N-72.5W-z7-2026-08-06-03-14Z@2x.png');
+  check('and a screen export does not', name.includes('@'), false);
+  check('a southern, eastern view is named correctly',
+    figureName({ lat: -33.9, lng: 18.4, zoom: 8 }, '2026-01-02T00:00:00Z'),
+    'c4po-ocean-33.9S-18.4E-z8-2026-01-02-00-00Z.png');
 }
 
 console.log(

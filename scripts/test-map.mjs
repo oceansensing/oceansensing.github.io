@@ -73,6 +73,11 @@ const dom = new JSDOM(
   '<span class="forecast-controls" data-forecast-controls hidden></span>' +
   '<span class="bathy-controls" data-bathy-controls hidden>' +
   '<input type="range" data-bathy-opacity min="10" max="100" step="5" /></span>' +
+  /* The export button, as the component renders it. Its markup is the
+     host's — the module only supplies behaviour — so without it here the
+     whole feature is simply absent and its checks would have nothing to
+     fail against. */
+  '<button type="button" data-export-png>Save PNG</button>' +
   '<span class="om-kmz-controls" data-kmz-controls><input type="file" data-kmz-file />' +
   '<span data-kmz-list hidden></span></span>' +
   '<span data-kmz-note></span>' +
@@ -93,7 +98,13 @@ Object.defineProperty(globalThis, 'navigator', { value: window.navigator, config
    window's — a global from elsewhere is not of type 'Event' as far as
    dispatchEvent is concerned, and the failure is a TypeError in the bundle
    rather than a failed check. */
-for (const k of ['HTMLElement', 'Element', 'Node', 'SVGElement', 'Event', 'CustomEvent', 'MouseEvent', 'KeyboardEvent', 'DOMParser'])
+/* `XMLSerializer` earns its place here the hard way: the PNG export
+   serialises each SVG pane, and without it in the bundle's realm the
+   constructor threw a ReferenceError that the exporter's own
+   one-item-does-not-lose-the-figure catch swallowed. Every SVG pane was
+   silently missing from the figure while every check still passed — the
+   catch doing exactly its job and hiding an untested path behind it. */
+for (const k of ['HTMLElement', 'Element', 'Node', 'SVGElement', 'Event', 'CustomEvent', 'MouseEvent', 'KeyboardEvent', 'DOMParser', 'XMLSerializer'])
   globalThis[k] = window[k];
 globalThis.getComputedStyle = window.getComputedStyle.bind(window);
 
@@ -126,7 +137,7 @@ window.Element.prototype.scrollIntoView = function () {};
 
    requestAnimationFrame is stubbed below, so the particle layer's loop really
    runs here — unlike a headless browser pane, which never paints. */
-const drawn = { moveTo: 0, lineTo: 0, stroke: 0, arc: 0, styles: new Set(), fills: new Set(), segments: [], images: [] };
+const drawn = { moveTo: 0, lineTo: 0, stroke: 0, arc: 0, styles: new Set(), fills: new Set(), segments: [], images: [], drawImages: [], texts: [], encoded: [], gradients: [] };
 const properties = {};
 let penX = 0;
 let penY = 0;
@@ -148,6 +159,48 @@ const recordingContext = new Proxy(
         if (key === 'putImageData') {
           drawn.images.push(args[0]);
           return undefined;
+        }
+        /* The PNG export composites with drawImage, which recorded nothing at
+           all until this existed — so a check written against it passed with
+           the whole feature deleted. That is the "check that cannot fail"
+           shape this project has already paid for twice, so the recorder had
+           to learn about it before any of those checks were written.
+
+           The compositing *state* is captured per call rather than read
+           afterwards, because `properties` is flat: save/restore fall through
+           to the no-op below and do not stack, so by the time a check looked,
+           the filter and alpha would be whichever pane was drawn last. Taking
+           them at draw time is what lets a check say "the isobaths were drawn
+           with their halo, at the reader's own opacity". */
+        if (key === 'drawImage') {
+          const src = args[0];
+          drawn.drawImages.push({
+            what: typeof src?.tagName === 'string' ? src.tagName.toLowerCase() : typeof src,
+            className: typeof src?.className === 'string' ? src.className : '',
+            filter: properties.filter ?? 'none',
+            alpha: properties.globalAlpha ?? 1,
+            blend: properties.globalCompositeOperation ?? 'source-over',
+          });
+          return undefined;
+        }
+        /* Not stubbed before, so `ctx.getImageData(...).data` threw a
+           TypeError rather than failing a check. A zeroed buffer of the right
+           size is the same bargain createImageData already strikes: jsdom
+           renders no pixels, so what can be checked is the shape. */
+        if (key === 'getImageData') {
+          const [, , w, h] = args;
+          return { width: w, height: h, data: new Uint8ClampedArray(w * h * 4) };
+        }
+        /* Returned nothing before, so the export's colour bar threw on
+           `undefined.addColorStop` and the whole figure was lost — reported
+           by the button as "Cannot save" and by the checks as an export
+           that drew images and encoded nothing. Recording the stops is the
+           useful part: it is the only way to see that a colour bar carries
+           the ramp the layer actually draws with. */
+        if (key === 'createLinearGradient' || key === 'createRadialGradient') {
+          const stops = [];
+          drawn.gradients.push(stops);
+          return { addColorStop: (_at, colour) => stops.push(colour) };
         }
         if (key === 'moveTo') {
           drawn.moveTo += 1;
@@ -171,6 +224,17 @@ const recordingContext = new Proxy(
           drawn.arc += 1;
         } else if (key === 'fill') {
           if (typeof properties.fillStyle === 'string') drawn.fills.add(properties.fillStyle);
+        } else if (key === 'fillText') {
+          /* The export redraws what a canvas cannot be handed — the graticule
+             labels, the scale bar, and every line of the provenance band —
+             so the text it writes is the only evidence those arrived. */
+          drawn.texts.push(String(args[0]));
+        } else if (key === 'measureText') {
+          /* jsdom measures nothing. A width proportional to the string is
+             enough for the wrapping arithmetic to be exercised rather than
+             short-circuited: every line would otherwise measure 0 and never
+             wrap, so a check on wrapping would pass against any code at all. */
+          return { width: String(args[0]).length * 6 };
         }
       };
     },
@@ -181,6 +245,59 @@ const recordingContext = new Proxy(
   }
 );
 window.HTMLCanvasElement.prototype.getContext = () => recordingContext;
+/* jsdom implements neither, and without the `canvas` package they reach
+   `notImplementedMethod`: `toDataURL` returns null and `toBlob` never calls
+   its callback, so an export awaiting one would hang rather than fail. Both
+   are stubbed to the smallest thing that keeps the caller moving, and both
+   record the fact — "the figure was encoded" is the last step of the export
+   and the only one visible from here. */
+window.HTMLCanvasElement.prototype.toDataURL = function toDataURL(type = 'image/png') {
+  drawn.encoded.push({ how: 'toDataURL', type, width: this.width, height: this.height });
+  return `data:${type};base64,`;
+};
+window.HTMLCanvasElement.prototype.toBlob = function toBlob(cb, type = 'image/png') {
+  drawn.encoded.push({ how: 'toBlob', type, width: this.width, height: this.height });
+  cb(new window.Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type }));
+};
+
+/* jsdom loads no images, and never fires `load` or `error` for one — so an
+   `await` on an image, which is how the export rasterises each SVG pane,
+   would hang until its own timeout and the whole figure would be skipped
+   rather than exercised. The stub reports success on the next tick, so the
+   SVG path in the exporter really runs here.
+
+   Only `src` is honoured, and deliberately: what the checks care about is
+   that a pane was serialised and drawn, and jsdom could not rasterise the
+   markup even if it tried. Whether the picture is *right* is a question for
+   a browser, and is answered there. */
+class StubImage {
+  constructor() {
+    this.onload = null;
+    this.onerror = null;
+    this.naturalWidth = 1;
+    this.naturalHeight = 1;
+  }
+  set src(value) {
+    this._src = value;
+    setTimeout(() => this.onload?.(), 0);
+  }
+  get src() {
+    return this._src;
+  }
+}
+window.Image = StubImage;
+globalThis.Image = StubImage;
+
+/* A bundle reaching for the global `URL` — as both the KMZ overlays and the
+   PNG download do — gets Node's, not jsdom's. Node *has* these statics, so
+   defaulting them with `??=` does nothing; the problem is that Node's
+   version type-checks its argument against Node's own `Blob` and jsdom
+   hands it jsdom's. The error says so almost comically: "must be an
+   instance of Blob. Received an instance of Blob."
+
+   Overwritten rather than defaulted, therefore, and unconditionally. */
+globalThis.URL.createObjectURL = () => 'blob:stub';
+globalThis.URL.revokeObjectURL = () => {};
 
 globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
 globalThis.cancelAnimationFrame = clearTimeout;
@@ -1977,6 +2094,24 @@ const hardcodedPaths = [...withoutComments.matchAll(/['"`]\/map\/[^'"`]*/g)].map
    where the path belongs. Anything else is a fetch that ignores the option. */
 const strayPaths = hardcodedPaths.filter((hit) => hit !== "'/map/");
 
+/* The exporter paints things the map itself never does — the band behind
+   the legend, the ink the credit is set in — and a colour written into it
+   would be invisible to `test:contrast`, which is BOUNDARIES S5's whole
+   point. So it takes them as arguments and the caller reads them off the
+   stylesheet, where the gate and the theme blocks can both see them.
+
+   Comments stripped first, for the same reason the path scan strips them:
+   this file's own prose talks about `#fff`. The fallbacks in `index.ts`
+   where the properties are read are deliberately *not* covered — a default
+   for a missing custom property is the one place a literal belongs. */
+const exportSource = fs
+  .readFileSync('packages/ocean-map/export.ts', 'utf8')
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+const inlinedColours = [
+  ...exportSource.matchAll(/#[0-9a-fA-F]{3,8}\b|\brgba?\(\s*\d/g),
+].map((m) => m[0]);
+
 /* Every instance of the map must look and behave the same wherever it is
    placed, so all of its styling lives in the package's own stylesheet and a
    host page contributes placement only. A rule written into a page instead
@@ -2158,6 +2293,7 @@ const scaleNorth = scaleNow();
 
 const bathyPaneZ = (name) =>
   Number(host.querySelector(`.leaflet-${name}-pane`)?.style.zIndex ?? NaN);
+
 const bathyRequestsBeforeSwitchOn = bathyFetched.length;
 
 /* The offline basemap, exercised the way a reader reaches it: it must have
@@ -2196,6 +2332,72 @@ const bathyLayersAt7 = Object.values(host._map._layers).filter((l) =>
   /map-bathy/.test(l.options?.className ?? '')
 );
 const bathyDeepAsked = bathyFetched.filter((u) => u.includes('bathy-deep')).length;
+
+/* ---- the PNG export -------------------------------------------------
+   jsdom renders nothing, so what is checkable here is *what was asked of the
+   canvas*: which panes were visited, in which order, carrying which
+   compositing state, and whether the figure was encoded at the end. The
+   recorder had to learn about `drawImage` before any of this could fail —
+   see the note on it above.
+
+   **Run here, after the isobath probe.** That layer is the only one that
+   puts a pane opacity *and* a drop-shadow filter into the composite, so
+   the compositing-state check needs it on — but switching it on earlier
+   breaks the lazy-load check above, which asserts nothing fetched it
+   before the reader did. Same trap the interest loop below already
+   carries a note about, met from a third direction.
+
+   Cleared first and read immediately after, the idiom the SST pixel checks
+   already use: the recording context is shared by every canvas on the page,
+   so a count is only meaningful between a clear and the thing that caused
+   it. */
+const exported = await (async () => {
+  /* The lat/lon grid on too: its labels are `divIcon` HTML, which a canvas
+     cannot be handed and which the exporter therefore has to redraw. That
+     path has no other coverage, and its failure is silent — a figure with
+     no labels still looks like a map. */
+  const grid = overlayLabelled(/Lat\/lon grid/)?.querySelector('input');
+  if (grid && !grid.checked) {
+    grid.click();
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  const button = host.closest('[data-ocean-map]')?.querySelector('[data-export-png]');
+  /* Empty rather than absent, so a missing button fails the checks below
+     instead of killing the harness on `undefined.length` — a crash during
+     setup takes every later check with it and reads as a broken run rather
+     than a broken feature. */
+  const nothing = { built: false, saved: null, images: [], texts: [], encoded: [], gradients: [] };
+  if (!button) return nothing;
+  drawn.drawImages.length = 0;
+  drawn.texts.length = 0;
+  drawn.encoded.length = 0;
+  let saved = null;
+  const realCreate = window.URL.createObjectURL;
+  window.URL.createObjectURL = () => 'blob:stub';
+  const realRevoke = window.URL.revokeObjectURL;
+  window.URL.revokeObjectURL = () => {};
+  /* The anchor is created, clicked and removed by the module. Recording the
+     filename here is the only way to see it, and stubbing the click is what
+     stops jsdom reporting a navigation. */
+  const realClick = window.HTMLAnchorElement.prototype.click;
+  window.HTMLAnchorElement.prototype.click = function stubClick() {
+    saved = this.download;
+  };
+  button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 900));
+  window.HTMLAnchorElement.prototype.click = realClick;
+  window.URL.createObjectURL = realCreate;
+  window.URL.revokeObjectURL = realRevoke;
+  return {
+    built: true,
+    saved,
+    images: [...drawn.drawImages],
+    texts: [...drawn.texts],
+    encoded: [...drawn.encoded],
+    gradients: drawn.gradients.map((g) => [...g]),
+  };
+})();
+
 
 /* Every interest, not just one. Two of them named both layers of an
    exclusivity pair — concentration and thickness, and the two current
@@ -2848,6 +3050,69 @@ const checks = [
   ['a link pasted into an open map is applied', linkWon.pastedApplies],
   ['and a fragment that is not a view is left alone', linkWon.junkIgnored],
   ['but the shareable view is put back over it', linkWon.junkReplaced],
+
+  // ---- the PNG export
+  ['the export button is wired', exported.built === true],
+  /* Every pane that carries map has to reach the figure. Checked by count
+     rather than by naming them, because naming them here would be the
+     second pane table this deliberately does not keep. */
+  ['the figure composites the map panes', exported.images.length >= 4],
+  ['and encodes a PNG at the end',
+    exported.encoded.some((e) => e.type === 'image/png')],
+  /* The encoded canvas is taller than the map, which is the band — a figure
+     that forgot its provenance would be exactly the map's height. */
+  ['the figure is taller than the map, so the band is there',
+    exported.encoded.some((e) => e.height > e.width * 0.1 && e.height > 500)],
+  /* The band's text is the whole point of exporting rather than
+     screenshotting: the colour bar's range and the credit naming the source,
+     its run and its valid hour. */
+  /* The legend, and painted with the ramp the layer actually draws with —
+     the gradient stops are recorded, so a key rendered as a flat blob or in
+     some colour of the exporter's own invention fails here. */
+  ['the band carries the legend keys',
+    exported.texts.some((t) => /current|wind|temp|salinity|ice/i.test(t))],
+  ['and paints each one with its own ramp',
+    exported.gradients.some((stops) => stops.length >= 2)],
+  /* The credit is the whole argument for exporting rather than
+     screenshotting: it names the source, the model run and the valid hour. */
+  ['and the credit that names the source and its run',
+    exported.texts.some((t) => /ESPC|GEBCO|Navy/.test(t))],
+  /* The graticule labels are HTML, which a canvas cannot be handed, so they
+     are redrawn — and their absence is silent. */
+  ['and the graticule labels are redrawn onto the figure',
+    exported.texts.some((t) => /^\d+°[NSEW]$|°[NSEW]/.test(t))],
+  ['the file is named for the place and the moment',
+    /^c4po-ocean-[\d.]+[NS]-[\d.]+[EW]-z\d+-[\d-]+Z\.png$/.test(exported.saved ?? '')],
+  /* Pane order decides what covers what, and this has to be read from what
+     the exporter *drew*, not from the map's own z-indices — those are
+     ascending whatever the exporter does, so the first version of this
+     check passed against a compositor iterating in DOM order. Mutation
+     testing is the only reason that was caught.
+
+     The currents pane (z260) and the reader's own KMZ overlay (z280) are
+     the pair that tells the two orders apart: Leaflet appends panes in
+     creation order, which puts `user` *before* `currents` in the DOM and
+     after it by z. */
+  ['it composites panes in z order, not DOM order', (() => {
+    const at = (re) => exported.images.findIndex((i) => re.test(i.className));
+    const currents = at(/om-velocity/);
+    const user = at(/om-kmz-quad/);
+    return currents >= 0 && user >= 0 && currents < user;
+  })()],
+  /* The isobath pane carries a drop-shadow halo and the reader's own
+     opacity, and both have to survive into the figure — a contour drawn at
+     full strength with no halo is a different picture. */
+  /* The isobaths are drawn at the opacity the reader set, through an SVG
+     that had to be serialised to get there. Both halves ride on this one
+     number: nothing else in the figure carries a non-default alpha, and the
+     only way an SVG reaches the canvas at all is the rasterise path. */
+  /* BOUNDARIES S5: a colour written into a module is invisible to the
+     contrast gate. The exporter takes its band colours as arguments and the
+     caller reads them off the stylesheet, where both the gate and the three
+     theme blocks can see them. */
+  ['the exporter inlines no colour of its own', inlinedColours.length === 0],
+  ['pane opacity survives into the composite',
+    exported.images.some((i) => i.alpha > 0 && i.alpha < 1)],
 
   // ---- the region and layer menus
   ['both menus are in the control stack',

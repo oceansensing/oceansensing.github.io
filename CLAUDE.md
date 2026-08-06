@@ -3808,6 +3808,149 @@ inputs; `test:map` seeds a link that differs from the stored view in exactly
 one value, so a link that was merely ignored fails one check and a stored view
 that was ignored fails the other.
 
+### Saving the figure as a PNG
+
+A link reproduces a live map for anyone who will click one. This is for the
+reader who never will — a slide, a paper, a report — and what earns it over a
+screenshot is that it takes its **provenance** with it: the colour bar and its
+range, a key per animated field, and the credit naming every source with the
+run and valid hour it came from. The brand mark is already positioned over the
+map for exactly this reason; this finishes that thought.
+
+**The usual blocker was measured, not assumed.** Drawing a cross-origin image
+into a canvas taints it, and a tainted canvas refuses `toBlob` outright — so
+one tile fetched without CORS makes the whole figure unexportable, with a
+SecurityError rather than a missing layer to show for it. Checked the way that
+matters, by loading a real tile with `crossOrigin` set and calling
+`toDataURL`: GEBCO, Esri Ocean, OpenStreetMap, EMODnet's shoreline and Marine
+Regions' EEZ lines all send `access-control-allow-origin: *` and all five come
+back clean. `CORS_TILES` is on every raster layer, including the dormant
+Mercator one — a layer switched back on later would otherwise be the one thing
+that taints the export, a long way from where it is set.
+
+**Setting it also removed the need to refetch anything.** The prototype
+reloaded every tile with CORS before compositing, at 1,101 ms sequential
+against 95 ms in parallel; with the attribute on the layers the *live* elements
+draw straight in.
+
+**Four kinds of thing, and a canvas accepts only two.**
+
+| in a pane | how |
+| --- | --- |
+| `<img>` — tiles, shoreline, EEZ | drawn directly |
+| `<canvas>` — scalar raster, particles, Argo | drawn directly |
+| `<svg>` — isobaths, graticule, tracks | serialised, with every computed style inlined |
+| HTML — graticule labels, scale bar, brand | **redrawn** with `fillText` |
+
+The SVG case is the price of the `className`-never-a-colour rule: styling does
+not travel with a serialised clone, so the computed style of every path is read
+off the live element and written onto it. Read, never re-derived — the palette
+is gated by `test:contrast`, and a second opinion about a stroke here would be
+a colour no gate had ever seen.
+
+The HTML case is redrawn from the live element's own **text and position**,
+never recomputed. Recomputing would be a second source of truth for the
+wording, which is the thing most likely to drift. Two details in it are not
+optional: a graticule label is a `divIcon` of size 0×0 with the text in an
+absolutely-positioned span that a transform lifts clear, so measuring the
+outer div puts every label a line-height out; and `text-shadow` has no canvas
+equivalent, so the halo is redrawn as a stroke behind the fill — without it
+the labels vanish over exactly the pale shelf water this map is most used to
+look at, which is the third time that lesson has been paid for here.
+
+**Pane order is the correctness condition**, read off the live z-indices rather
+than restated. The first prototype iterated in DOM order, which is *nearly*
+right and is not: Leaflet appends panes in creation order, so `user` (z 280)
+comes before `currents` (z 260) in the DOM and after it by z.
+
+**`ctx.filter` and `globalCompositeOperation` carry the pane's own
+compositing** — the two drop-shadow halos, the isobath opacity the reader set,
+and the multiply blend the Mercator raster would use. An unsupported
+`ctx.filter` silently stays `none`, which is the right degradation: a contour
+without its halo beats no figure at all.
+
+**`rasterise` has a timeout, and it is not a test accommodation.** A browser
+that refuses the data URL without firing either handler would leave the export
+awaiting it forever, with the button stuck on "Saving…". A layer missing from
+the figure is a far better failure than a figure that never arrives.
+
+#### What 2× actually resamples
+
+Doubling is not an upscale everywhere, and the honest split is worth stating
+because half of it is free and half of it is not:
+
+- **Resampled** — every piece of type (the credit, the colour-bar labels, the
+  graticule labels, the scale bar, the brand) and every SVG vector layer.
+  Measured against the same figure merely enlarged: the band's type is **67%
+  crisper**, and **2.40%** of the map area's pixels differ, which is the
+  linework being redrawn rather than stretched.
+- **Enlarged** — the basemap tiles and the data rasters. The rasters cannot be
+  sharper: SST is a 0.08° grid and that is the resolution the data has. The
+  basemap could be, by requesting zoom+1 tiles, and is the one piece left.
+
+The SVG half only works because the clone is rasterised at the **figure's**
+size rather than the screen's. Rasterising at CSS size and letting `drawImage`
+stretch it throws away the whole point, and produces linework exactly as soft
+as a tile.
+
+`@2x` goes in the filename only when it is one — which also stops a screen
+export and a print export made in the same minute from being the same file.
+
+#### The layout is renderer-independent
+
+`packages/ocean-map/figure.ts` decides the whole geometry — canvas size, the
+map rect, the band, a row per key and per wrapped credit line — and imports
+neither Leaflet nor the DOM, so `test:units` exercises it with no build and no
+jsdom. Text measurement is the one browser capability it needs, so `measure`
+is **injected**, the same escape hatch `kmz.ts` uses for `DOMParser`.
+
+**The band's height is derived from its contents**, never assumed. A fixed
+height is wrong in both directions: it clips a six-source credit on a phone and
+leaves a stripe of empty paper under a one-source credit on a desktop. With
+nothing to say — no keys, no credit — there is no band at all.
+
+Credits split on the **semicolon**, not the comma, for the same reason the
+attribution joins them that way: a single source contains commas of its own.
+
+**Band colours live in the stylesheet, in all three theme blocks**
+(`--map-figure-paper`, `--map-figure-ink`), and the exporter takes them as
+arguments. A colour written into the module would be invisible to the contrast
+gate, which is BOUNDARIES S5's whole point; `test:map` scans `export.ts` and
+fails on any literal in it. Measured 15.8:1 in light and 15.7:1 in dark — the
+pair is judged against each other and nothing else, the band being below the
+map rather than over it.
+
+#### What the harness had to learn first
+
+`test:map`'s recording context handled neither `drawImage` nor `getImageData`,
+and `toDataURL`/`toBlob` were not stubbed at all — so **a `drawImage`-based
+composite was completely invisible to it**, and a check written against it
+would have passed with the whole feature deleted. That is the "check that
+cannot fail" shape this project has already paid for twice, so the recorder
+learned about them before any of those checks were written. It records the
+compositing *state* per call rather than reading it afterwards, because
+`properties` is flat and save/restore do not stack.
+
+Four more gaps surfaced the same way, each silent:
+
+- **`XMLSerializer` was not among the constructors copied into the bundle's
+  realm**, so `rasterise` threw a ReferenceError that the exporter's own
+  one-item-does-not-lose-the-figure catch swallowed. Every SVG pane was missing
+  from the figure while every check still passed.
+- **`createLinearGradient` returned nothing**, so the colour bar threw on
+  `undefined.addColorStop` and the figure was lost. Recording the stops is the
+  useful part: it is the only way to see that a key carries the ramp the layer
+  actually draws with.
+- **Node's `URL.createObjectURL` exists and rejects jsdom's `Blob`** — "must be
+  an instance of Blob. Received an instance of Blob" — so defaulting it with
+  `??=` does nothing and it has to be overwritten.
+- **jsdom never fires `load` on an image**, so `Image` is stubbed to succeed on
+  the next tick and the SVG path really runs.
+
+The pane-order check was **vacuous on its first attempt** and only mutation
+testing found it: it read the live map's z-indices, which are ascending
+whatever the exporter does. It reads the recorded draw order now.
+
 ### Known upstream quirks
 
 Both were found the hard way; do not re-derive them.

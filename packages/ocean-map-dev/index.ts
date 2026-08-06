@@ -17,6 +17,8 @@ import { pickRamp, admissible, clearance, NAMED_TINTS, type RampChoice } from '.
 import basemapWater from './data/basemap-ocean.json';
 import { tileKeysFor } from './tiles';
 import { encode as encodeView, decode as decodeView } from './share';
+import { figureName } from './figure';
+import { drawFigure, saveCanvas } from './export';
 import { REGIONS, INTERESTS, type Interest, type Region } from './places';
 import { createPlaceMenus } from './place-menu';
 import { readKmz, summarise, type KmzDocument, type KmzFeature, type KmzOverlay } from './kmz';
@@ -30,8 +32,28 @@ import type {
   VectorGrid,
 } from './schema';
 
+/* Every raster source is requested with CORS, and the PNG export is the only
+   reason.
+
+   Drawing a cross-origin image into a canvas *taints* it, and a tainted
+   canvas refuses `toBlob`/`toDataURL` outright — so one tile fetched without
+   this makes the whole figure unexportable, with a SecurityError rather than
+   a missing layer to show for it. The attribute has to be on the request:
+   asking afterwards is too late.
+
+   It is safe to ask because every source was checked, and checked the way
+   that matters — not by reading a header, but by loading a real tile with
+   `crossOrigin` set, drawing it, and calling `toDataURL`. GEBCO, Esri Ocean,
+   OpenStreetMap, EMODnet's shoreline and Marine Regions' EEZ lines all send
+   `access-control-allow-origin: *` and all five come back clean.
+
+   The cost if a source ever stops sending it is a layer that fails to load
+   rather than one that loads and cannot be exported — louder, and the right
+   way round. */
+const CORS_TILES = 'anonymous';
+
 /* Everything a second site would have to change, in one place.
-   
+
    This began as a bespoke instrument for one basin and one fleet, with
    eleven hardcoded data paths and an Atlantic bounding box written into the
    body of a 2,600-line script. Reading them off a single object instead is
@@ -150,6 +172,12 @@ export async function createOceanMap(
     host.closest('[data-ocean-map]') ?? host.parentElement ?? host;
   const find = <T extends Element>(selector: string): T | null =>
     root.querySelector<T>(selector);
+  /* Same scoping, and for the same reason: a `document.querySelectorAll`
+     here would hand this map the *other* map's legend keys on a page
+     carrying two, which is the singleton bug this package has already paid
+     to remove. */
+  const findAll = <T extends Element>(selector: string): T[] =>
+    [...root.querySelectorAll<T>(selector)];
 
   /* **Every piece of chrome that follows the layers registers here**, so it
      can be re-run when the layers move without going through the control.
@@ -539,7 +567,11 @@ export async function createOceanMap(
      trade for everybody else. `whenChosen` below is that latch. */
   const bathymetry = L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
-    { attribution: 'Esri — GEBCO, NOAA, National Geographic', maxZoom: 13 }
+    {
+      attribution: 'Esri — GEBCO, NOAA, National Geographic',
+      maxZoom: 13,
+      crossOrigin: CORS_TILES,
+    }
   );
   /* Surface currents from Mercator Ocean's global 1/12° analysis-forecast
      (Copernicus Marine GLOBAL_ANALYSISFORECAST_PHY_001_024), served as
@@ -649,6 +681,10 @@ export async function createOceanMap(
          theme can pick its own. */
       opacity: 0.55,
       maxNativeZoom: 10,
+      /* Dormant while MERCATOR_RASTER is false, and set anyway: a layer
+         switched back on later would otherwise be the one thing that
+         taints the export, which is a long way from this line. */
+      crossOrigin: CORS_TILES,
       attribution: 'Currents: Copernicus Marine — Mercator Ocean',
     }
   );
@@ -2301,7 +2337,9 @@ export async function createOceanMap(
      filled zones: a filled polygon over every coastal ocean would bury the
      field underneath it, and the useful question here is where a line
      falls relative to a glider, not which shade of blue a country's water
-     is. Served as WMS images, so no CORS is involved. */
+     is. Served as WMS images, so nothing here has to read a response — but
+     they are still requested with CORS, because the export draws them into
+     a canvas. See `CORS_TILES`. */
   const eez = L.tileLayer.wms('https://geo.vliz.be/geoserver/MarineRegions/wms?', {
     layers: 'eez_boundaries',
     format: 'image/png',
@@ -2309,6 +2347,7 @@ export async function createOceanMap(
     pane: 'eez',
     className: 'map-eez',
     opacity: 0.85,
+    crossOrigin: CORS_TILES,
     attribution:
       '<a href="https://www.marineregions.org/">Marine Regions</a> (VLIZ) — EEZ boundaries',
   });
@@ -2568,6 +2607,7 @@ export async function createOceanMap(
     pane: 'coast',
     className: 'map-coast',
     opacity: 0.9,
+    crossOrigin: CORS_TILES,
     attribution:
       '<a href="https://emodnet.ec.europa.eu/en/bathymetry">EMODnet Bathymetry</a> — coastline',
   });
@@ -2575,6 +2615,7 @@ export async function createOceanMap(
   const gebco = L.tileLayer.wms('https://wms.gebco.net/mapserv?', {
     layers: 'GEBCO_LATEST',
     format: 'image/png',
+    crossOrigin: CORS_TILES,
     attribution: 'GEBCO Compilation Group',
   });
 
@@ -2592,6 +2633,7 @@ export async function createOceanMap(
     OpenStreetMap: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
       maxZoom: 19,
+      crossOrigin: CORS_TILES,
     }),
     'Coastline only (no tracking)': coastline,
   };
@@ -3494,6 +3536,93 @@ export async function createOceanMap(
           box.select();
           say('Copy this');
           window.setTimeout(() => box.remove(), 15000);
+        }
+      });
+    }
+  }
+
+  /* Save the figure as a PNG.
+
+     A link reproduces a live map for anyone who will click one. This is for
+     the reader who never will — a slide, a paper, a report — and what earns
+     it over a screenshot is that it takes its **provenance** with it: the
+     colour bar and its range, a key per animated field, and the credit line
+     naming every source with the run and valid hour it came from.
+
+     Everything it needs is read off the live chrome rather than rebuilt. The
+     legend keys already carry the ramp the layer actually draws with, as a
+     custom property, precisely so the swatch and the particles cannot
+     disagree; reading that same property here extends the guarantee to the
+     PNG instead of opening a third opinion about the colours. */
+  for (const button of findAll<HTMLButtonElement>('[data-export-png]')) {
+    {
+      /* The attribute carries the scale: bare for the screen, "2" for print.
+         One handler for both, because the only difference between them is a
+         number that `drawFigure` already takes. */
+      const scale = Math.max(1, Math.min(4, Number(button.dataset.exportPng) || 1));
+      const idle = button.textContent ?? 'Save PNG';
+      /* Colours in a gradient, not the gradient. Matches hex and rgb()
+         forms, so `linear-gradient(to right, #123456, #abcdef)` and the
+         `rgb(1, 2, 3)` spelling both work — splitting the string on commas
+         would tear an `rgb()` into three. */
+      const rampOf = (el: Element, prop: string): string[] =>
+        (window.getComputedStyle(el).getPropertyValue(prop).match(
+          /#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)/g
+        ) ?? []);
+
+      const figureKeys = () => {
+        const keys: Array<{ label: string; ramp: string[] }> = [];
+        for (const [selector, prop] of [
+          ['[data-sst-key] .om-key', '--sst-ramp'],
+          ['[data-flow-key] .om-key', '--om-key-ramp'],
+        ] as const) {
+          for (const el of findAll<HTMLElement>(selector)) {
+            const label = (el.textContent ?? '').trim();
+            if (label) keys.push({ label, ramp: rampOf(el, prop) });
+          }
+        }
+        return keys;
+      };
+
+      /* The credit as the reader sees it, semicolons and all. `textContent`
+         because the control's markup carries anchors and an aria-hidden
+         pipe, and a figure wants the words. */
+      const creditNow = () =>
+        (find<HTMLElement>('[data-map-credit]')?.textContent ?? '').trim();
+
+      const say = (text: string, busy = false) => {
+        button.textContent = text;
+        button.disabled = busy;
+        if (!busy) window.setTimeout(() => { button.textContent = idle; }, 2000);
+      };
+
+      button.addEventListener('click', async () => {
+        say('Saving…', true);
+        try {
+          const style = window.getComputedStyle(host);
+          const { canvas } = await drawFigure(host, {
+            scale,
+            keys: figureKeys(),
+            credit: creditNow(),
+            bandFill: style.getPropertyValue('--map-figure-paper').trim() || '#ffffff',
+            bandInk: style.getPropertyValue('--map-figure-ink').trim() || '#1d232b',
+          });
+          const centre = map.getCenter().wrap();
+          await saveCanvas(
+            canvas,
+            figureName(
+              { lat: centre.lat, lng: centre.lng, zoom: map.getZoom() },
+              new Date().toISOString(),
+              scale
+            )
+          );
+          say('Saved');
+        } catch {
+          /* The one failure worth naming rather than swallowing: a tainted
+             canvas means a raster source stopped sending CORS, and the
+             reader can do nothing about it. Saying so beats a button that
+             appears to work and produces no file. */
+          say('Cannot save');
         }
       });
     }

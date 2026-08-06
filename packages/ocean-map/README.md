@@ -50,6 +50,13 @@ on screen. Opening one restores it, and it outranks the reader's own stored
 view. With several maps on a page the first to start claims the fragment and
 the rest keep their own homes.
 
+It also saves itself as a PNG, at screen size or doubled for print, with a
+band underneath carrying the colour bar, the particle keys and the credit —
+so a figure that leaves the site still says what it shows and where it came
+from. Every raster layer is requested with `crossOrigin`, which is what makes
+that possible; a single tile fetched without it taints the canvas and the
+export is refused outright.
+
 | option | attribute | default |
 | --- | --- | --- |
 | `dataBase` | `data-map-data` | `/map/` |
@@ -117,6 +124,8 @@ packages/ocean-map/
   particles.ts        u/v sampling and particle advection — no Leaflet, no DOM
   velocity-layer.ts   the Leaflet canvas layer around it; runs on 1.9 and 2.0
   scalar-layer.ts     the field raster, FIELDS, and what a paintable quantity is
+  export.ts           flattens the live map into a PNG
+  figure.ts           where everything in that PNG goes — no Leaflet, no DOM
   graticule.ts        the lat/lon grid and its edge-pinned labels
   measure.ts          the distance-and-bearing tool
   palette.ts          map-palette.json, typed
@@ -132,7 +141,7 @@ packages/ocean-map/
 ```
 
 `geo.ts`, `ramp.ts`, `tiles.ts`, `schema.ts`, `warp.ts`, `kmz.ts`,
-`places.ts`, `share.ts` and `particles.ts` import
+`places.ts`, `share.ts`, `figure.ts` and `particles.ts` import
 neither Leaflet nor the DOM and typecheck standalone. That is deliberate and worth preserving: they
 are what a native port keeps, reimplementing only the drawing. Keep new logic
 that does not touch `L.` out of the Leaflet path.
