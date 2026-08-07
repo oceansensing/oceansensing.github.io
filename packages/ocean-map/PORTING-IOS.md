@@ -40,9 +40,11 @@ what make this port possible, and the same rules apply to whatever you add.
 | `data/basemap-ocean.json` | sampled water colours the palette is gated against | |
 | `../../scripts/*.py` | the six data pipelines | run unchanged, or read the same output |
 
-`scripts/test-units.mjs` is the specification for all of those — **126
+`scripts/test-units.mjs` is the specification for all of those — **212
 assertions**, each pinning a case a comment claims to handle. Port the tests
-and you will know your Swift matches.
+and you will know your Swift matches. Re-count with
+`node scripts/test-units.mjs | grep -c '^ok'`; this figure was 126 for long
+enough to be worth not trusting on sight.
 
 Two conventions in there are worth reading twice, because getting either
 backwards produces a plausible wrong answer rather than an error:

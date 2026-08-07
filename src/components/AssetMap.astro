@@ -49,6 +49,20 @@ const {
    than a CDN. The default basemap is GEBCO's bathymetry, so a page carrying
    this map does request tiles; readers who would rather not can switch to
    "Coastline only", which is fetched only when they do. */
+
+/* The no-JavaScript fallback's link, built from `dataBase` for the same
+   reason every fetch in the module is: the data is not served from this
+   origin any more. It pointed at `/map/ocean-assets.json` — right while the
+   pipelines wrote into `public/map/`, and a 404 on the live site from the
+   day that directory became gitignored, since CI publishes nothing there.
+   Nothing caught it: `test:map` reads the *module* source for stray `/map/`
+   paths and this is the host's markup, and a fallback almost nobody sees is
+   not something a browser check lands on.
+
+   Normalised the way the module normalises it, so a host passing a base
+   without a trailing slash gets a working link rather than one spliced onto
+   the directory name. */
+const dataHref = dataBase.endsWith('/') ? dataBase : `${dataBase}/`;
 ---
 
 <figure class="map-figure" data-ocean-map>
@@ -70,7 +84,7 @@ const {
     <noscript>
       <p class="om-fallback">
         This map needs JavaScript. The underlying data is
-        available as <a href="/map/ocean-assets.json">ocean-assets.json</a>.
+        available as <a href={`${dataHref}ocean-assets.json`}>ocean-assets.json</a>.
       </p>
     </noscript>
   </div>

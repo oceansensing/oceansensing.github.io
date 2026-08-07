@@ -80,6 +80,20 @@ into the data. Adding a feed to either fails this until the page says where it
 came from, and crediting something the map does *not* show fails too — which
 is what keeps Copernicus off the page while `MERCATOR_RASTER` is false.
 
+**The data half is read from `scripts/fixtures/map/`**, the same committed
+snapshot `test:schema` runs against, and it was not always. It read
+`public/map/` behind an `existsSync` guard — a directory the pipelines write
+locally and which is entirely gitignored, so in CI it holds nothing but
+`.gitkeep` and the guard silently skipped every file. That half of the check
+therefore worked on a developer's machine and was inert everywhere it
+mattered, going on saying `ok` while only the module's own literals were
+being tested. Measured: six of the seven credits came from those files, and
+`NOAA PMEL` appears nowhere in the module, so it was enforced by nothing. A
+named fixture missing now **fails** rather than skipping — they are
+committed, so absence is a bug and not an ordinary state. The wind is the one
+source with no fixture and needs none: it declares `source: 'ECMWF IFS'` in
+the module, which is already read.
+
 Where the page words a name differently — `US IOOS Glider DAC` against
 "US IOOS Glider Data Assembly Center" — the difference is **named** in
 `WORDED_AS` rather than matched loosely. A fuzzy match on "NOAA" would pass
@@ -325,10 +339,20 @@ The remaining seams, in order of what they unlock:
 
   Out so far: `graticule.ts` (the lat/lon grid), `measure.ts` (distance and
   bearing) and `scalar-layer.ts` (the field raster, `FIELDS` and
-  `FieldDescriptor`) — about 500 lines, taking it to ~4,030. Each one was
-  taken alone, with `npm run verify` and a browser check between, because the
-  failure mode of a half-finished move is a tree the next session has to
-  finish rather than a clean start.
+  `FieldDescriptor`) — about 500 lines, taking it to ~4,030 at the time. Each
+  one was taken alone, with `npm run verify` and a browser check between,
+  because the failure mode of a half-finished move is a tree the next session
+  has to finish rather than a clean start.
+
+  **It is 4,671 lines today**, so that ~4,030 is a figure from a session that
+  has been overtaken. The split's gain was more than repaid by what landed
+  after it — the share codec, the PNG export, the place and interest menus,
+  the particle colour pickers and the speed sliders each left a
+  renderer-bound half here — and the file is now past the 4,542 that
+  motivated splitting it at all. That is not an argument that the split
+  failed: it is an argument that the remaining seams are worth more now than
+  when the first was taken, and that the line count is worth re-reading
+  whenever a feature lands rather than only when one moves out.
 
   The rule that has held: **behaviour moves, the reader's state stays.**
   `choices` and `particleTint` are per map, and a module-level copy of either
@@ -342,8 +366,12 @@ The remaining seams, in order of what they unlock:
   reproduces the legend and controls; and
   the fleet is assumed — the legend names hurricanes, USVs, ocean gliders and
   Argo, and the layer switcher matches. Against that, the renderer-independent
-  half has kept growing — `geo`, `ramp`, `tiles`, `schema`, `warp`, `kmz`, now
-  about a fifth of the package by line count.
+  half has kept growing: thirteen files import neither Leaflet nor the DOM —
+  `geo`, `ramp`, `tiles`, `schema`, `warp`, `kmz`, `particles`, `contrast`,
+  `figure`, `places`, `share`, `storm-status` and `palette` — which is 2,260
+  lines of 8,808, **about a quarter of the package**. Measured against
+  `index.ts` alone the share has gone the other way; see BOUNDARIES.md S1,
+  which carries both numbers and the reason they disagree.
 
 Moving the stylesheet turned up **two fetches that ignored `dataBase`** — the
 isobath tiles and the hourly refresh poll. Both are template literals, and the

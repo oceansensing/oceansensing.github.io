@@ -412,15 +412,42 @@ if (mapPages.length) {
     credits.add(m[1]);
   }
 
-  // The sources the pipelines write, which the map credits at runtime.
-  const readJson = (f) => (fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null);
-  const assetsFile = readJson('public/map/ocean-assets.json');
+  /* The sources the pipelines write, which the map credits at runtime.
+
+     Read from the committed fixtures, not from `public/map/`. That is where
+     the pipelines write when run locally and it is entirely gitignored, so
+     in CI it holds nothing but `.gitkeep` — and this half of the check had
+     an `existsSync` guard, so it silently looked at no files at all and went
+     on saying `ok`. It was testing the module's own attribution literals and
+     nothing else: right on a developer's machine, where the pipelines have
+     been run, and inert everywhere it mattered.
+
+     `scripts/fixtures/map/` is the same snapshot `test:schema` runs against,
+     so there is one committed idea of what the pipelines publish rather than
+     two. A named file missing from it is a **failure** now rather than a
+     skip: these are committed, so absence is a bug and not an ordinary
+     state, which is precisely what the guard was giving away.
+
+     No `wind.json` in the list, because the snapshot carries none and none
+     is needed — the wind layer declares `source: 'ECMWF IFS'` in the module,
+     which the loop above already reads. Same for 2 m air temperature, off
+     the same fetch. */
+  const FIXTURES = 'scripts/fixtures/map';
+  const readJson = (name) => {
+    const path = `${FIXTURES}/${name}`;
+    if (!fs.existsSync(path)) {
+      problems.push(`\`${path}\` is missing, so the sources it carries go unchecked`);
+      return null;
+    }
+    return JSON.parse(fs.readFileSync(path, 'utf8'));
+  };
+  const assetsFile = readJson('ocean-assets.json');
   for (const v of Object.values(assetsFile?.sources ?? {})) credits.add(v);
-  const argoFile = readJson('public/map/argo.json');
+  const argoFile = readJson('argo.json');
   if (argoFile?.source) credits.add(argoFile.source);
-  for (const n of ['sst-oisst', 'sst-navy', 'sss-navy', 'wind']) {
+  for (const n of ['sst-oisst', 'sst-navy', 'sss-navy']) {
     // Vector files are a [u, v] pair; scalar files are a single object.
-    const file = readJson(`public/map/${n}.json`);
+    const file = readJson(`${n}.json`);
     const src = (Array.isArray(file) ? file[0] : file)?.header?.source;
     if (src) credits.add(src);
   }

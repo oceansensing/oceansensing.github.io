@@ -91,15 +91,22 @@ website, `PORTING-IOS.md` for the iOS app, and `BOUNDARIES.md` for anyone
 adding to it — those separations are what keep the other two possible, and
 they are easy to breach by accident.
 
-`npm run verify` stands at **951 printed `ok` lines** across nine steps:
-build, type-check, docs, the renderer-independent units, the published data
-contract, colour contrast, the rendered map, two maps on a page, and the
-clock. Counted as `npm run verify | grep -c '^ok'`, which is the only figure
-here anyone can reproduce — note one of those lines covers all 33 published
-files at once, so it undercounts what the contract step actually checks.
+`npm run verify` stands at **1,236 printed `ok` lines** across fourteen
+steps: build, type-check, docs, then eleven test suites — the
+renderer-independent units, TEOS-10 against GSW, the ballast arithmetic, the
+published data contract, colour contrast, the rendered map, two maps on a
+page, each calculator against its built bundle, the built pages' whitespace,
+and the clock. Counted as `npm run verify | grep -c '^ok'`, which is the only
+figure here anyone can reproduce — note one of those lines covers all 34
+published files at once, so it undercounts what the contract step actually
+checks.
 
-Re-count with that command rather than trusting this number; it has gone
-stale twice.
+Re-count with that command rather than trusting this number; it has now gone
+stale three times. The last figure here was 951 across nine steps, from
+before either calculator existed — which is the useful lesson about this
+number rather than the number itself: it goes stale by a *suite* at a time,
+not by an assertion, so a step list that no longer matches `package.json` is
+the tell.
 
 ### Splitting `index.ts`
 
@@ -116,7 +123,16 @@ Done, one at a time with `verify` and a browser check between each:
   one of its callers.
 - `scalar-layer.ts` — the field raster, `FIELDS` and `FieldDescriptor`.
 
-That is ~500 lines out, leaving ~4,030.
+That was ~500 lines out, leaving ~4,030 at the time.
+
+**It is 4,671 today**, which is the number that matters and the one this
+entry kept getting wrong. The split's gain has been more than repaid by what
+landed after it — the share codec, the PNG export, the place and interest
+menus, the particle colour pickers and the speed sliders each left a
+renderer-bound half in `index.ts` — and the file is now past the 4,542 that
+started this. Nothing moved back; the seams below simply have not been taken
+as fast as features arrived. The argument for the next one is stronger than
+when the first was taken, not weaker.
 
 The rule that has held: **behaviour moves, the reader's state stays.**
 `choices` and `particleTint` are per map; a module-level copy would put two

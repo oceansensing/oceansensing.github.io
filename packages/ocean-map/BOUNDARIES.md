@@ -22,15 +22,42 @@ npx tsc --noEmit --ignoreConfig --strict --target es2022 \
   packages/ocean-map/{geo,ramp,tiles,schema,warp,kmz,particles}.ts
 ```
 
+That command proves they *compile* alone and not that they are free of the
+renderer — Leaflet's types resolve from `node_modules` either way, so a file
+importing `L` passes it too. What actually holds the rule is `test:units`,
+which imports them with no Leaflet and no jsdom at all. Re-measure the share
+below with:
+
+```sh
+cd packages/ocean-map && grep -L "from 'leaflet'" *.ts | grep -v store.ts |
+  xargs wc -l | tail -1        # store.ts is Leaflet-free but built on IndexedDB
+```
+
 **Why:** these are what a native port keeps verbatim. Everything that moves
 into them is work an iOS app does not repeat; everything left in `index.ts` is
-work it rewrites. Measured today: **1,275 lines free of the renderer against
-3,576 in `index.ts` and 361 in `velocity-layer.ts`**, so about 24% is
-portable — up from 11% when only the first four files existed, which is the
-direction to keep pushing. The newest
-of them, `particles.ts`, is the advection maths behind the animated fields;
-it arrived by *replacing a dependency*, which is the cheapest way this share
-has ever moved.
+work it rewrites. Measured today: **1,335 lines in these seven against 4,671
+in `index.ts` and 361 in `velocity-layer.ts`**, so about 21% is portable by
+that count.
+
+**That is down from 24%, and the direction is the point of the number.** It
+went 11% → 24% → 21%. Nothing moved back: the seven grew 60 lines while
+`index.ts` grew about 1,100, because the share codec, the PNG export, the
+place and interest menus and the two particle controls each landed a
+renderer-bound half. A share that falls while the package grows is the
+signal this measurement exists to give, so re-measure it when adding a
+feature rather than only when moving one.
+
+Counted across the whole package it reads better, and both numbers are worth
+keeping. Thirteen files now import neither Leaflet nor the DOM — `contrast`,
+`figure`, `places`, `share`, `storm-status` and `palette` on top of the seven
+— which is **2,260 lines of 8,808, about 26%**. `test:units` imports nine of
+them with no Leaflet and no jsdom at all, which is what makes any of this
+checkable rather than argued; `store.ts` is deliberately not in the count,
+being free of Leaflet but built on IndexedDB.
+
+The newest of the seven, `particles.ts`, is the advection maths behind the
+animated fields; it arrived by *replacing a dependency*, which is still the
+cheapest way this share has ever moved.
 
 `kmz.ts` is the pattern to copy when something *seems* to need the DOM: it
 parses XML, which in a browser means `DOMParser`, so the parser is **injected**
@@ -184,6 +211,6 @@ Before adding anything, ask:
     so every instance of the map gets it.
 6. Does it change a measured constant? Then re-measure and rewrite the reason.
 
-`npm run verify` is the gate — a build, a type-check, a docs check and six
-test suites, ~790 assertions. CI runs exactly it, and the deploy will not run
+`npm run verify` is the gate — a build, a type-check, a docs check and eleven
+test suites, 1,236 assertions. CI runs exactly it, and the deploy will not run
 unless it passes.
