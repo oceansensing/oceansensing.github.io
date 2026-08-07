@@ -52,6 +52,14 @@ browser. The physics is
 DOM-free and renderer-independent, checked against the GSW reference
 implementation on every build.
 
+Off the same engine there is a
+[**glider ballast calculator**](https://oceansensing.org/data/glider-ballast/):
+how much lead to add, what the vehicle should then read in the tank, and
+whether its buoyancy engine can cover the water it will fly in. The arithmetic
+is **[`packages/glider-ballast`](packages/glider-ballast/)**. The vehicle
+numbers it ships are stand-ins and the page says so — replace them from your
+own ballast sheet.
+
 ## Editing content
 
 All content lives in Markdown and data files — you never need to touch
@@ -68,6 +76,7 @@ layout code:
 | a dataset          | new entry in `src/data/datasets.yaml`                         |
 | a software tool    | new entry in `src/data/software.yaml`                         |
 | a seawater property | one entry in `packages/teos10/index.ts`'s `build()`, and a check in `scripts/test-teos10.mjs` — the label, unit and precision live with the physics so the screen, the clipboard and the CSV cannot disagree |
+| a glider to the ballast calculator | one entry in `packages/glider-ballast/vehicles.ts`. Set `illustrative: false` **only** with a real ballast sheet in hand — that flag is what turns off the page's caution |
 | a significant observation | new `.md` file in `src/content/observations/` — add `map: assets` for the live asset map, or `surveys:` entries for dated photo panels |
 | a CV item          | new entry in the matching `src/data/cv/<person>/*.yaml` file (grants, advising, service, …) — publications and presentations flow in automatically |
 | a member's CV      | new directory `src/data/cv/<person-id>/` (id matching their file in `src/content/people/`) with any of the section files — their page appears at `/cv/<person-id>/` |
@@ -86,7 +95,8 @@ npm run verify   # everything CI checks, in one command
 ```
 
 `npm run verify` builds, type-checks, checks the docs for drift, and runs the
-map, multimap and clock test harnesses — about 900 assertions in all. **CI runs the same command and refuses to deploy
+map, multimap, calculator and clock test harnesses — over 1,200 assertions in
+all. **CI runs the same command and refuses to deploy
 if it fails**, so running it before you push is the quickest way to find out
 whether a change will publish.
 
@@ -96,6 +106,11 @@ The individual pieces, if you want one on its own:
 npm run check          # type-check
 npm run check:docs     # docs reference real scripts, real paths, the right URL
 npm run test:units     # the map's renderer-independent modules, with no DOM at all
+npm run test:teos10    # the TEOS-10 package against GSW, against calculus, against physics
+npm run test:ballast   # the glider ballast arithmetic, against its own identities
+npm run test:seawater  # seawater calculator, against the built bundle
+npm run test:ballast-page # glider ballast calculator, against the built bundle
+npm run test:prose     # built pages keep the spaces Astro likes to eat
 npm run test:schema    # every published data file against the contract in schema.ts
 npm run test:contrast  # map colours stay visible, and every conceded clash is named
 npm run test:map       # asset map, against the built bundle

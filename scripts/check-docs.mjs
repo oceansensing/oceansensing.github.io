@@ -30,6 +30,7 @@ const DOCS = [
   /* Not a map, but the same argument: it is written to be used somewhere
      else, so its README is the hand-off and nobody reads it week to week. */
   'packages/teos10/README.md',
+  'packages/glider-ballast/README.md',
 ];
 const WORKFLOW = '.github/workflows/deploy.yml';
 

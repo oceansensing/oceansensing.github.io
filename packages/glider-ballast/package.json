@@ -1,0 +1,14 @@
+{
+  "name": "@c4po/glider-ballast",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ballasting an underwater glider against TEOS-10 in-situ density",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./vehicles": "./vehicles.ts"
+  },
+  "dependencies": {
+    "@c4po/teos10": "*"
+  }
+}

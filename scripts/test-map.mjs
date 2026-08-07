@@ -3706,6 +3706,7 @@ const checks = [
          none of the rules below apply to it. Listed here so that stays a
          decision rather than an oversight. */
       teos10: 'not a map; gated by test:teos10',
+      'glider-ballast': 'not a map; gated by test:ballast',
     };
     const found = fs.readdirSync('packages', { withFileTypes: true })
       .filter((e) => e.isDirectory())

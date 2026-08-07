@@ -33,10 +33,23 @@ if (!fs.existsSync(ROOT)) {
   process.exit(1);
 }
 
-/* Elements that carry a word and therefore want a space in front of one.
-   `<sup>` and `<sub>` are left out on purpose: `10<sup>-19</sup>` and
-   `g<sub>P</sub>` are exactly right butted up against their base. */
-const NEEDS_SPACE = /([A-Za-z0-9,;:)])(<(?:a\s|code[\s>]|em[\s>]|strong[\s>]|abbr\s)[^>]*>)/g;
+/* Elements that carry a word and therefore want a space on the side of them
+   the prose continues on. `<sup>` and `<sub>` are left out on purpose:
+   `10<sup>-19</sup>` and `g<sub>P</sub>` are exactly right butted up against
+   their base.
+
+   **Both sides, and the second was found the hard way.** The rule is not
+   "before an opening tag" but "at a line break next to an element boundary":
+   a closing tag that ends a line loses the space in front of the text that
+   follows it too, so `…not vehicle data.</strong>` + newline + `Each volume`
+   renders as "dataEach". The first version of this gate checked only the
+   opening side and passed a page with exactly that on it. */
+const INLINE = 'a|code|em|strong|abbr';
+const NEEDS_SPACE = new RegExp(
+  `(?:([A-Za-z0-9,;:)])(<(?:${INLINE})[\\s>][^>]*>))`
+  + `|(?:(</(?:${INLINE})>)([A-Za-z0-9]))`,
+  'g'
+);
 
 /* Chrome, not prose: a nav item or a list of links is a sequence of elements
    with no sentence around them, and there the absence of a space is the
@@ -66,15 +79,16 @@ for (const page of pages) {
 
 const ok = problems.length === 0;
 console.log(
-  `${ok ? 'ok  ' : 'FAIL'}  ${pages.length} built pages keep the space before every inline element in their prose`
+  `${ok ? 'ok  ' : 'FAIL'}  ${pages.length} built pages keep the spaces around every inline element in their prose`
 );
 for (const p of problems) console.log(`        ${p}`);
 
 if (!ok) {
   console.log(
-    '\n  Astro strips the whitespace before an inline element that starts a'
-    + '\n  line. Move the space onto the same line: `from the <a …>` rather'
-    + '\n  than `from the` + newline + `<a …>`.'
+    '\n  Astro eats the whitespace at a line break next to an element'
+    + '\n  boundary — before an opening tag that starts a line, and after a'
+    + '\n  closing tag that ends one. Keep the space on the same line as the'
+    + '\n  tag: `from the <a …>`, and `</strong> Each` rather than a newline.'
   );
 }
 process.exit(ok ? 0 : 1);

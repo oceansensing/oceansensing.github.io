@@ -1,0 +1,1059 @@
+---
+/**
+ * The glider ballast calculator.
+ *
+ * Markup and styling here; the density comes from `@c4po/teos10` and the
+ * buoyancy arithmetic from `@c4po/glider-ballast`, neither of which imports
+ * the DOM. Same split as the seawater calculator, which this shares its
+ * engine with: the water points go through `evaluate()`, so a conductivity
+ * and a depth are as good as an Absolute Salinity and a pressure.
+ *
+ * Renders its default state at build time, like the seawater page — with
+ * illustrative vehicle numbers, which the panel says loudly.
+ */
+import { evaluate } from '@c4po/teos10';
+import { ballast, VEHICLES } from '@c4po/glider-ballast';
+
+const DEFAULT_VEHICLE = VEHICLES[0];
+
+/* A subtropical profile: warm light surface, a mixed layer, cold dense water
+   at a Slocum's working depth. Round enough to read as an example. */
+const DEFAULT_WATER = [
+  { name: 'Surface', salinity: 35.5, temperature: 24, depth: 0 },
+  { name: 'Mixed layer', salinity: 35.6, temperature: 19, depth: 40 },
+  { name: 'Bottom inflection', salinity: 35.1, temperature: 6, depth: 1000 },
+];
+const DEFAULT_TANK = { salinity: 0.2, temperature: 20 };
+const DEFAULT_NEUTRAL = 1;
+
+const resolve = (salinity: number, temperature: number, depth: number) => {
+  const r = evaluate({
+    salinityKind: 'SP', salinity,
+    temperatureKind: 't', temperature,
+    pressureKind: 'z', pressure: depth,
+  });
+  return { sa: r.sa, t: r.t, p: r.p };
+};
+
+const initial = ballast({
+  hull: DEFAULT_VEHICLE.hull,
+  tank: { name: 'Tank', ...resolve(DEFAULT_TANK.salinity, DEFAULT_TANK.temperature, 0) },
+  water: DEFAULT_WATER.map((w) => ({ name: w.name, ...resolve(w.salinity, w.temperature, w.depth) })),
+  neutralAt: DEFAULT_NEUTRAL,
+});
+
+/* A signed gram figure. Zero gets no sign — "+0 g" reads as a rounding
+   artefact rather than as the exact neutrality it actually is. */
+const g = (v: number) => {
+  if (!Number.isFinite(v)) return '—';
+  const r = Math.round(v);
+  return r === 0 ? '0' : `${r > 0 ? '+' : '−'}${Math.abs(r)}`;
+};
+const n = (v: number, d: number) => (Number.isFinite(v) ? v.toFixed(d) : '—');
+---
+
+<div class="ballast" data-ballast>
+  <form class="panel vehicle" data-inputs autocomplete="off">
+    <h2>The glider</h2>
+
+    <div class="field">
+      <label for="gb-vehicle">Vehicle</label>
+      <select id="gb-vehicle" data-vehicle>
+        {VEHICLES.map((v) => (
+          <option value={v.id} selected={v.id === DEFAULT_VEHICLE.id}>{v.name} — {v.maker}</option>
+        ))}
+        <option value="custom">Custom</option>
+      </select>
+    </div>
+
+    {/* Not dismissible, and not a tooltip. Every number below is a stand-in,
+        and a ballast figure computed from a stand-in compressibility is wrong
+        by an amount nothing on the page can show. */}
+    <p class="caution" data-illustrative>
+      <strong>These are illustrative numbers, not vehicle data.</strong> Each
+      volume is simply the mass over 1025 kg/m³, and the two hull terms
+      are order-of-magnitude. Replace all four from your own ballast sheet or
+      tank test before trusting a gram of this.
+    </p>
+
+    <div class="pair">
+      <div class="field">
+        <label for="gb-mass">Total mass in air</label>
+        <div class="with-unit">
+          <input id="gb-mass" type="number" step="any" inputmode="decimal" data-hull="mass" value={DEFAULT_VEHICLE.hull.mass} />
+          <span class="unit">kg</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="gb-volume">Displaced volume</label>
+        <div class="with-unit">
+          <input id="gb-volume" type="number" step="any" inputmode="decimal" data-hull="volume" value={DEFAULT_VEHICLE.hull.volume.toFixed(3)} />
+          <span class="unit">L</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="gb-kappa">Hull compressibility</label>
+        <div class="with-unit">
+          <input id="gb-kappa" type="number" step="any" inputmode="decimal" data-hull="compressibility" value={DEFAULT_VEHICLE.hull.compressibility} />
+          <span class="unit">/dbar</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="gb-alpha">Hull thermal expansion</label>
+        <div class="with-unit">
+          <input id="gb-alpha" type="number" step="any" inputmode="decimal" data-hull="thermalExpansion" value={DEFAULT_VEHICLE.hull.thermalExpansion} />
+          <span class="unit">/°C</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="gb-tref">Volume measured at</label>
+        <div class="with-unit">
+          <input id="gb-tref" type="number" step="any" inputmode="decimal" data-hull="referenceTemperature" value={DEFAULT_VEHICLE.hull.referenceTemperature} />
+          <span class="unit">°C</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="gb-pump">Buoyancy pump travel</label>
+        <div class="with-unit">
+          <input id="gb-pump" type="number" step="any" inputmode="decimal" data-hull="pumpRange" value={DEFAULT_VEHICLE.hull.pumpRange} />
+          <span class="unit">± cc</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="hint" data-hull-note></p>
+
+    <h2>The ballast tank</h2>
+    <div class="pair">
+      <div class="field">
+        <label for="gb-tank-kind">Salinity</label>
+        <select id="gb-tank-kind" data-kind="tank">
+          <option value="SP" selected>Practical Salinity</option>
+          <option value="C">Conductivity (mS/cm)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="gb-tank-sal">Value</label>
+        <input id="gb-tank-sal" type="number" step="any" inputmode="decimal" data-tank="salinity" value={DEFAULT_TANK.salinity} />
+      </div>
+      <div class="field">
+        <label for="gb-tank-temp">Temperature</label>
+        <div class="with-unit">
+          <input id="gb-tank-temp" type="number" step="any" inputmode="decimal" data-tank="temperature" value={DEFAULT_TANK.temperature} />
+          <span class="unit">°C</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="gb-tank-measured">Measured buoyancy</label>
+        <div class="with-unit">
+          <input id="gb-tank-measured" type="number" step="any" inputmode="decimal" data-tank="measured" placeholder="optional" />
+          <span class="unit">g</span>
+        </div>
+      </div>
+    </div>
+    <p class="hint">
+      Float the glider in the tank and read the scale — positive if it floats.
+      Enter that and the mass above is worked out from it, which is the
+      direction the measurement actually goes. Leave it blank to use the mass
+      as typed.
+    </p>
+
+    <h2>The water it will fly in</h2>
+    <table class="water">
+      <thead>
+        <tr>
+          <th>Ballast for</th><th>Point</th><th>Salinity</th><th>Temp °C</th><th>Depth m</th>
+        </tr>
+      </thead>
+      <tbody>
+        {DEFAULT_WATER.map((w, i) => (
+          <tr>
+            <td>
+              <input
+                type="radio" name="gb-neutral" data-neutral value={String(i)}
+                checked={i === DEFAULT_NEUTRAL}
+                aria-label={`Ballast for the ${w.name.toLowerCase()}`}
+              />
+            </td>
+            <th scope="row">{w.name}</th>
+            <td><input type="number" step="any" inputmode="decimal" data-water={`${i}.salinity`} value={w.salinity} aria-label={`${w.name} salinity`} /></td>
+            <td><input type="number" step="any" inputmode="decimal" data-water={`${i}.temperature`} value={w.temperature} aria-label={`${w.name} temperature`} /></td>
+            <td><input type="number" step="any" inputmode="decimal" data-water={`${i}.depth`} value={w.depth} aria-label={`${w.name} depth`} /></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+
+    <div class="pair">
+      <div class="field">
+        <label for="gb-water-kind">Salinity given as</label>
+        <select id="gb-water-kind" data-kind="water">
+          <option value="SP" selected>Practical Salinity</option>
+          <option value="C">Conductivity (mS/cm)</option>
+        </select>
+      </div>
+      <div class="field position">
+        <label for="gb-lon">Position</label>
+        <input id="gb-lon" type="number" step="any" inputmode="decimal" data-value="lon" placeholder="longitude °E" aria-label="Longitude, degrees east" />
+        <input id="gb-lat" type="number" step="any" inputmode="decimal" data-value="lat" placeholder="latitude °N" aria-label="Latitude, degrees north" />
+      </div>
+    </div>
+    <p class="hint" data-atlas-state>
+      A position applies the Absolute Salinity anomaly and fixes the gravity
+      used to turn depth into pressure. On a 50 L glider the anomaly is worth
+      about a gram — small, and this is a tool that counts grams.
+    </p>
+
+    <div class="actions">
+      <button type="button" data-action="copy">Copy</button>
+      <button type="button" data-action="csv">Download CSV</button>
+      <button type="button" data-action="share">Copy link</button>
+      <button type="button" data-action="reset">Reset</button>
+    </div>
+    <p class="said" data-said role="status" aria-live="polite"></p>
+  </form>
+
+  <div class="panel answer">
+    <h2 class="vh">The answer</h2>
+    <dl class="headline" data-headline>
+      <div data-headline-row="ballastChange">
+        <dt>Ballast change</dt>
+        <dd><b>{g(initial.ballastChange)}</b><span class="unit">g</span></dd>
+      </div>
+      <div data-headline-row="tankBuoyancy">
+        <dt>Then reads in the tank</dt>
+        <dd><b>{g(initial.tankBuoyancy)}</b><span class="unit">g</span></dd>
+      </div>
+      <div data-headline-row="neutralDensity">
+        <dt>Neutral at</dt>
+        <dd><b>{n(initial.neutralDensity, 3)}</b><span class="unit">kg/m³</span></dd>
+      </div>
+      <div data-headline-row="mass">
+        <dt>Ballasted mass</dt>
+        <dd><b>{n(initial.mass, 3)}</b><span class="unit">kg</span></dd>
+      </div>
+    </dl>
+
+    <p class="explain" data-explain>
+      Add or remove that much lead, then check the glider reads the tank
+      figure in the tank water above.
+    </p>
+
+    <table class="readings">
+      <thead>
+        <tr>
+          <th>Point</th><th>Density</th><th>Displaces</th><th>Buoyancy</th><th>Pump to neutral</th>
+        </tr>
+      </thead>
+      <tbody data-readings>
+        {initial.readings.map((r) => (
+          <tr data-reading={r.water.name}>
+            <th scope="row">{r.water.name}</th>
+            <td>{n(r.density, 3)}</td>
+            <td>{n(r.volume, 3)} L</td>
+            <td class={r.buoyancy < 0 ? 'down' : 'up'}>{g(r.buoyancy)} g</td>
+            <td class={r.withinPump ? '' : 'over'}>{g(r.pumpNeeded)} cc</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+
+    <dl class="margins" data-margins>
+      <div>
+        <dt>Can it surface?</dt>
+        <dd><b data-margin="surface">{g(initial.surfaceMargin)}</b><span class="unit">g with the pump fully out</span></dd>
+      </div>
+      <div>
+        <dt>Can it dive?</dt>
+        <dd><b data-margin="dive">{g(initial.diveMargin)}</b><span class="unit">g with the pump fully in</span></dd>
+      </div>
+    </dl>
+
+    <div class="messages" data-messages>
+      {initial.warnings.map((w: string) => <p class="warn">{w}</p>)}
+      {initial.notes.map((note: string) => <p class="note">{note}</p>)}
+    </div>
+  </div>
+</div>
+
+<style>
+  .ballast {
+    display: grid;
+    gap: var(--space-md);
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  @media (min-width: 64rem) {
+    .ballast {
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    }
+  }
+
+  .panel {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-md);
+  }
+
+  .vh {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  h2 {
+    font-size: var(--text-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-sm);
+    padding-block-end: var(--space-2xs);
+    border-block-end: 1px solid var(--border);
+  }
+
+  h2:not(:first-child) {
+    margin-block-start: var(--space-lg);
+  }
+
+  .pair {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: var(--space-xs) var(--space-sm);
+  }
+
+  .field {
+    display: grid;
+    gap: var(--space-2xs);
+    margin-block-end: var(--space-xs);
+    min-inline-size: 0;
+  }
+
+  .field label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
+
+  .with-unit {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4em;
+    min-inline-size: 0;
+  }
+
+  input,
+  select {
+    font: inherit;
+    font-size: var(--text-sm);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.42em 0.6em;
+    appearance: none;
+    /* Same reason as the seawater page: a grid or flex item will not shrink
+       below an input's twenty-character intrinsic width without this, and the
+       box hangs out the side of the panel. */
+    min-inline-size: 0;
+    inline-size: 100%;
+  }
+
+  select {
+    font-family: var(--font-sans);
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+      linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+    background-position: right 1.05em top 55%, right 0.75em top 55%;
+    background-size: 0.33em 0.33em, 0.33em 0.33em;
+    background-repeat: no-repeat;
+    padding-inline-end: 2em;
+  }
+
+  input[type='radio'] {
+    inline-size: auto;
+    min-inline-size: auto;
+    accent-color: var(--accent);
+  }
+
+  input:focus-visible,
+  select:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .caution {
+    font-size: var(--text-sm);
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-inline-start: 3px solid var(--accent);
+    border-radius: var(--radius);
+    padding: var(--space-xs) var(--space-sm);
+    margin-block: var(--space-xs) var(--space-sm);
+  }
+
+  .hint {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-block: var(--space-2xs) var(--space-sm);
+  }
+
+  .unit {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  table {
+    inline-size: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-sm);
+  }
+
+  th,
+  td {
+    text-align: right;
+    padding: 0.3em 0.4em;
+    border-block-end: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  thead th {
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: var(--text-sm);
+  }
+
+  tbody th {
+    text-align: left;
+    font-weight: 500;
+  }
+
+  .water td:not(:first-child) input {
+    text-align: right;
+  }
+
+  .water td:first-child {
+    text-align: center;
+  }
+
+  .readings td {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .readings .over {
+    color: var(--accent-strong);
+    font-weight: 600;
+  }
+
+  .headline {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: var(--space-sm);
+    margin: 0 0 var(--space-sm);
+  }
+
+  .headline dt,
+  .margins dt {
+    font-size: var(--text-sm);
+    line-height: 1.3;
+    min-height: 2.6em;
+    color: var(--text-muted);
+    margin-block-end: 0.15em;
+  }
+
+  .margins dt {
+    min-height: 0;
+  }
+
+  .headline dd,
+  .margins dd {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.35em;
+    flex-wrap: wrap;
+  }
+
+  .headline b {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: var(--text-lg);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  .margins {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: var(--space-sm);
+    margin-block: var(--space-md) 0;
+  }
+
+  .margins b {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
+  .explain {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-block: 0 var(--space-md);
+  }
+
+  .messages {
+    margin-block-start: var(--space-md);
+  }
+
+  .messages p {
+    font-size: var(--text-sm);
+    margin: 0 0 var(--space-2xs);
+    padding-inline-start: var(--space-sm);
+    border-inline-start: 3px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  .messages .warn {
+    border-inline-start-color: var(--accent);
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2xs);
+    margin-block-start: var(--space-md);
+  }
+
+  button {
+    font: inherit;
+    font-size: var(--text-sm);
+    font-family: var(--font-sans);
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.45em 0.8em;
+    cursor: pointer;
+    appearance: none;
+    inline-size: auto;
+  }
+
+  button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .said {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-block-start: var(--space-2xs);
+    min-height: 1.4em;
+  }
+
+  @media (max-width: 48rem) {
+    input,
+    select,
+    button {
+      padding-block: 0.7em;
+    }
+
+    input[type='radio'] {
+      padding-block: 0;
+    }
+  }
+</style>
+
+<script>
+  import { evaluate, loadAtlas, ATLAS_URL, type SalinityAtlas } from '@c4po/teos10';
+  import {
+    ballast, massFromTank, VEHICLES, vehicleById,
+    type Hull, type Report, type Water,
+  } from '@c4po/glider-ballast';
+
+  type Point = { salinity: number; temperature: number; depth: number };
+  type State = {
+    vehicle: string;
+    hull: Hull;
+    tankKind: 'SP' | 'C';
+    tank: { salinity: number; temperature: number; measured: number | null };
+    waterKind: 'SP' | 'C';
+    water: Point[];
+    neutralAt: number;
+    lon: number | null;
+    lat: number | null;
+  };
+
+  const NAMES = ['Surface', 'Mixed layer', 'Bottom inflection'];
+
+  const DEFAULTS = (): State => ({
+    vehicle: VEHICLES[0].id,
+    hull: { ...VEHICLES[0].hull },
+    tankKind: 'SP',
+    tank: { salinity: 0.2, temperature: 20, measured: null },
+    waterKind: 'SP',
+    water: [
+      { salinity: 35.5, temperature: 24, depth: 0 },
+      { salinity: 35.6, temperature: 19, depth: 40 },
+      { salinity: 35.1, temperature: 6, depth: 1000 },
+    ],
+    neutralAt: 1,
+    lon: null,
+    lat: null,
+  });
+
+  const HULL_FIELDS: (keyof Hull)[] = [
+    'mass', 'volume', 'compressibility', 'thermalExpansion',
+    'referenceTemperature', 'pumpRange',
+  ];
+
+  for (const host of document.querySelectorAll<HTMLElement>('[data-ballast]')) start(host);
+
+  function start(host: HTMLElement) {
+    const find = <T extends Element>(sel: string) => host.querySelector<T>(sel);
+    const all = <T extends Element>(sel: string) => [...host.querySelectorAll<T>(sel)];
+
+    const form = find<HTMLFormElement>('[data-inputs]')!;
+    const messages = find<HTMLElement>('[data-messages]')!;
+    const said = find<HTMLElement>('[data-said]')!;
+    const atlasState = find<HTMLElement>('[data-atlas-state]')!;
+    const hullNote = find<HTMLElement>('[data-hull-note]')!;
+
+    let state = DEFAULTS();
+    let atlas: SalinityAtlas | null = null;
+    let atlasWanted = false;
+    let last: Report | null = null;
+    let sticky = false;
+    /* Whether the mass box is currently showing a figure derived from a tank
+       reading rather than one somebody typed. Without this the box cannot be
+       read back safely: clearing the reading would read the derived number
+       out of the box it had just been painted into and call it the typed
+       mass, losing the original for good. */
+    let showingDerived = false;
+
+    // ---- reading and writing the form ------------------------------------
+
+    const num = (el: HTMLInputElement | null): number =>
+      (el && el.value.trim() !== '' ? Number(el.value) : NaN);
+
+    function read(): State {
+      const measured = num(find<HTMLInputElement>('[data-tank="measured"]'));
+      const hull = { ...state.hull };
+      for (const f of HULL_FIELDS) {
+        /* While the box is showing a derived mass, it is not an input — see
+           `showingDerived`. The typed figure is kept in state and displayed
+           over, never read back. */
+        if (f === 'mass' && showingDerived) continue;
+        const v = num(find<HTMLInputElement>(`[data-hull="${f}"]`));
+        if (Number.isFinite(v)) hull[f] = v;
+      }
+      const lon = num(find<HTMLInputElement>('[data-value="lon"]'));
+      const lat = num(find<HTMLInputElement>('[data-value="lat"]'));
+      return {
+        vehicle: find<HTMLSelectElement>('[data-vehicle]')!.value,
+        hull,
+        tankKind: find<HTMLSelectElement>('[data-kind="tank"]')!.value as 'SP' | 'C',
+        tank: {
+          salinity: num(find<HTMLInputElement>('[data-tank="salinity"]')),
+          temperature: num(find<HTMLInputElement>('[data-tank="temperature"]')),
+          measured: Number.isFinite(measured) ? measured : null,
+        },
+        waterKind: find<HTMLSelectElement>('[data-kind="water"]')!.value as 'SP' | 'C',
+        water: state.water.map((_, i) => ({
+          salinity: num(find<HTMLInputElement>(`[data-water="${i}.salinity"]`)),
+          temperature: num(find<HTMLInputElement>(`[data-water="${i}.temperature"]`)),
+          depth: num(find<HTMLInputElement>(`[data-water="${i}.depth"]`)),
+        })),
+        neutralAt: Number(all<HTMLInputElement>('[data-neutral]').find((r) => r.checked)?.value ?? 1),
+        lon: Number.isFinite(lon) ? lon : null,
+        lat: Number.isFinite(lat) ? lat : null,
+      };
+    }
+
+    function write(s: State) {
+      find<HTMLSelectElement>('[data-vehicle]')!.value = s.vehicle;
+      find<HTMLSelectElement>('[data-kind="tank"]')!.value = s.tankKind;
+      find<HTMLSelectElement>('[data-kind="water"]')!.value = s.waterKind;
+      const set = (sel: string, v: number | null) => {
+        const el = find<HTMLInputElement>(sel);
+        if (el) el.value = v === null || !Number.isFinite(v) ? '' : String(v);
+      };
+      for (const f of HULL_FIELDS) set(`[data-hull="${f}"]`, s.hull[f]);
+      set('[data-tank="salinity"]', s.tank.salinity);
+      set('[data-tank="temperature"]', s.tank.temperature);
+      set('[data-tank="measured"]', s.tank.measured);
+      s.water.forEach((w, i) => {
+        set(`[data-water="${i}.salinity"]`, w.salinity);
+        set(`[data-water="${i}.temperature"]`, w.temperature);
+        set(`[data-water="${i}.depth"]`, w.depth);
+      });
+      for (const radio of all<HTMLInputElement>('[data-neutral]')) {
+        radio.checked = Number(radio.value) === s.neutralAt;
+      }
+      set('[data-value="lon"]', s.lon);
+      set('[data-value="lat"]', s.lat);
+    }
+
+    /**
+     * A water point, through the seawater calculator's own resolver.
+     *
+     * This is the reuse the page is built on: `evaluate` turns a conductivity
+     * or a Practical Salinity, an in-situ temperature and a *depth* into the
+     * (SA, t, p) the density needs — applying the anomaly when there is a
+     * position and converting depth with the right gravity for the latitude.
+     * None of that is reimplemented here.
+     */
+    const resolve = (name: string, kind: 'SP' | 'C', p: Point): Water => {
+      const r = evaluate({
+        salinityKind: kind, salinity: p.salinity,
+        temperatureKind: 't', temperature: p.temperature,
+        pressureKind: 'z', pressure: p.depth,
+        lon: state.lon ?? undefined,
+        lat: state.lat ?? undefined,
+        atlas,
+      });
+      return { name, sa: r.sa, t: r.t, p: r.p };
+    };
+
+    // ---- painting --------------------------------------------------------
+
+    /* A signed gram figure. Zero gets no sign — "+0 g" reads as a rounding
+   artefact rather than as the exact neutrality it actually is. */
+const g = (v: number) => {
+  if (!Number.isFinite(v)) return '—';
+  const r = Math.round(v);
+  return r === 0 ? '0' : `${r > 0 ? '+' : '−'}${Math.abs(r)}`;
+};
+    const n = (v: number, d: number) => (Number.isFinite(v) ? v.toFixed(d) : '—');
+
+    function paint() {
+      state = read();
+
+      const tank = resolve('Tank', state.tankKind, { ...state.tank, depth: 0 });
+      const water = state.water.map((w, i) => resolve(NAMES[i], state.waterKind, w));
+
+      /* A tank reading, where there is one, *is* the mass — so it replaces
+         the typed figure rather than sitting beside it. The mass box is left
+         showing what the reading implies, so the two never disagree on
+         screen. */
+      const hull = { ...state.hull };
+      const box = find<HTMLInputElement>('[data-hull="mass"]')!;
+      const implied = state.tank.measured === null
+        ? NaN
+        : massFromTank(hull, tank, state.tank.measured);
+
+      if (Number.isFinite(implied)) {
+        hull.mass = implied;
+        box.value = implied.toFixed(3);
+        /* Read-only while it is derived, so that a box which ignores typing
+           looks like one that is not for typing. The alternative — letting it
+           be edited and then overwriting on the next repaint — is a control
+           that silently discards what you put in it. */
+        box.readOnly = true;
+        showingDerived = true;
+      } else if (showingDerived) {
+        box.value = String(state.hull.mass);
+        box.readOnly = false;
+        showingDerived = false;
+      }
+
+      const report = ballast({ hull, tank, water, neutralAt: state.neutralAt });
+      last = report;
+
+      const put = (key: string, text: string) => {
+        const el = find<HTMLElement>(`[data-headline-row="${key}"] b`);
+        if (el) el.textContent = text;
+      };
+      put('ballastChange', g(report.ballastChange));
+      put('tankBuoyancy', g(report.tankBuoyancy));
+      put('neutralDensity', n(report.neutralDensity, 3));
+      put('mass', n(report.mass, 3));
+
+      find<HTMLElement>('[data-margin="surface"]')!.textContent = g(report.surfaceMargin);
+      find<HTMLElement>('[data-margin="dive"]')!.textContent = g(report.diveMargin);
+
+      const body = find<HTMLElement>('[data-readings]')!;
+      body.replaceChildren();
+      for (const r of report.readings) {
+        const tr = document.createElement('tr');
+        tr.dataset.reading = r.water.name;
+        const cell = (text: string, cls = '', head = false) => {
+          const td = document.createElement(head ? 'th' : 'td');
+          if (head) td.setAttribute('scope', 'row');
+          if (cls) td.className = cls;
+          td.textContent = text;
+          return td;
+        };
+        tr.append(
+          cell(r.water.name, '', true),
+          cell(n(r.density, 3)),
+          cell(`${n(r.volume, 3)} L`),
+          cell(`${g(r.buoyancy)} g`, r.buoyancy < 0 ? 'down' : 'up'),
+          cell(`${g(r.pumpNeeded)} cc`, r.withinPump ? '' : 'over')
+        );
+        body.append(tr);
+      }
+
+      messages.replaceChildren();
+      for (const w of report.warnings) messages.append(line('warn', w));
+      for (const note of report.notes) messages.append(line('note', note));
+
+      const chosen = vehicleById(state.vehicle);
+      find<HTMLElement>('[data-illustrative]')!.hidden = chosen ? !chosen.illustrative : true;
+      hullNote.textContent = chosen && chosen.illustrative
+        ? `Typical working depth for a ${chosen.name} is about ${chosen.typicalDepth} m.`
+        : '';
+
+      remember(state);
+      syncHash();
+      wantAtlas();
+    }
+
+    function line(cls: string, text: string) {
+      const p = document.createElement('p');
+      p.className = cls;
+      p.textContent = text;
+      return p;
+    }
+
+    // ---- the vehicle menu ------------------------------------------------
+
+    function applyVehicle(id: string) {
+      const v = vehicleById(id);
+      if (!v) return;
+      state.hull = { ...v.hull };
+      for (const f of HULL_FIELDS) {
+        const el = find<HTMLInputElement>(`[data-hull="${f}"]`)!;
+        el.value = String(f === 'volume' ? v.hull.volume.toFixed(3) : v.hull[f]);
+      }
+    }
+
+    // ---- the salinity anomaly atlas --------------------------------------
+
+    function wantAtlas() {
+      const positioned = state.lon !== null && state.lat !== null;
+      if (!positioned || atlas || atlasWanted) return;
+      atlasWanted = true;
+      atlasState.textContent = 'Fetching the Absolute Salinity Anomaly atlas…';
+      loadAtlas(ATLAS_URL)
+        .then((a) => {
+          atlas = a;
+          atlasState.textContent = 'Absolute Salinity Anomaly atlas loaded.';
+          paint();
+        })
+        .catch(() => {
+          atlasWanted = false;
+          atlasState.textContent = 'The anomaly atlas could not be fetched, so'
+            + ' Absolute Salinity falls back to Reference Salinity.';
+        });
+    }
+
+    // ---- remembering, and the address bar --------------------------------
+
+    const REMEMBERED = 'glider-ballast-inputs';
+
+    function sanitise(raw: unknown): State | null {
+      if (!raw || typeof raw !== 'object') return null;
+      const from = raw as Record<string, unknown>;
+      const out = DEFAULTS();
+      let any = false;
+      const number = (v: unknown): number | null => {
+        if (v === null || v === undefined || v === '') return null;
+        const x = Number(v);
+        return Number.isFinite(x) ? x : null;
+      };
+      if (typeof from.vehicle === 'string'
+        && (from.vehicle === 'custom' || vehicleById(from.vehicle))) {
+        out.vehicle = from.vehicle;
+        any = true;
+      }
+      if (from.hull && typeof from.hull === 'object') {
+        for (const f of HULL_FIELDS) {
+          const v = number((from.hull as Record<string, unknown>)[f]);
+          if (v !== null) { out.hull[f] = v; any = true; }
+        }
+      }
+      for (const k of ['tankKind', 'waterKind'] as const) {
+        if (from[k] === 'SP' || from[k] === 'C') { out[k] = from[k]; any = true; }
+      }
+      if (from.tank && typeof from.tank === 'object') {
+        const t = from.tank as Record<string, unknown>;
+        const s = number(t.salinity); if (s !== null) { out.tank.salinity = s; any = true; }
+        const c = number(t.temperature); if (c !== null) { out.tank.temperature = c; any = true; }
+        out.tank.measured = number(t.measured);
+      }
+      if (Array.isArray(from.water)) {
+        from.water.slice(0, 3).forEach((w, i) => {
+          if (!w || typeof w !== 'object') return;
+          const p = w as Record<string, unknown>;
+          for (const f of ['salinity', 'temperature', 'depth'] as const) {
+            const v = number(p[f]);
+            if (v !== null) { out.water[i][f] = v; any = true; }
+          }
+        });
+      }
+      const at = number(from.neutralAt);
+      if (at !== null && at >= 0 && at < 3) { out.neutralAt = Math.floor(at); any = true; }
+      out.lon = number(from.lon);
+      out.lat = number(from.lat);
+      return any ? out : null;
+    }
+
+    function remembered(): State | null {
+      try {
+        return sanitise(JSON.parse(localStorage.getItem(REMEMBERED) ?? 'null'));
+      } catch {
+        return null;
+      }
+    }
+
+    function remember(s: State) {
+      try {
+        if (JSON.stringify(s) === JSON.stringify(DEFAULTS())) localStorage.removeItem(REMEMBERED);
+        else localStorage.setItem(REMEMBERED, JSON.stringify(s));
+      } catch { /* private browsing */ }
+    }
+
+    /* The whole state as one compact fragment. A ballast setup is nine
+       vehicle and water numbers together, so unlike the seawater page's
+       field-by-field query there is nothing to gain from naming them
+       individually — and everything to lose in length. */
+    function syncHash() {
+      try {
+        const json = JSON.stringify(state);
+        const bare = JSON.stringify(DEFAULTS());
+        history.replaceState(null, '',
+          json === bare ? window.location.pathname : `#b=${encodeURIComponent(json)}`);
+      } catch { /* nothing worth failing over */ }
+    }
+
+    function fromHash(): State | null {
+      const raw = window.location.hash.replace(/^#/, '');
+      if (!raw.startsWith('b=')) return null;
+      try {
+        return sanitise(JSON.parse(decodeURIComponent(raw.slice(2))));
+      } catch {
+        return null;
+      }
+    }
+
+    // ---- copy, CSV, share ------------------------------------------------
+
+    function say(what: string, keep = false) {
+      said.textContent = what;
+      sticky = keep;
+      if (keep) return;
+      window.setTimeout(() => { if (said.textContent === what) said.textContent = ''; }, 4000);
+    }
+
+    function table(): string[][] {
+      if (!last) return [];
+      const rows: string[][] = [
+        ['Ballast change', last.ballastChange.toFixed(1), 'g'],
+        ['Tank buoyancy after', last.tankBuoyancy.toFixed(1), 'g'],
+        ['Neutral density', last.neutralDensity.toFixed(4), 'kg/m3'],
+        ['Ballasted mass', last.mass.toFixed(4), 'kg'],
+        ['Surface margin', last.surfaceMargin.toFixed(1), 'g'],
+        ['Dive margin', last.diveMargin.toFixed(1), 'g'],
+      ];
+      for (const r of last.readings) {
+        rows.push([`${r.water.name} density`, r.density.toFixed(4), 'kg/m3']);
+        rows.push([`${r.water.name} displacement`, r.volume.toFixed(4), 'L']);
+        rows.push([`${r.water.name} buoyancy`, r.buoyancy.toFixed(1), 'g']);
+        rows.push([`${r.water.name} pump to neutral`, r.pumpNeeded.toFixed(1), 'cc']);
+      }
+      return rows;
+    }
+
+    async function toClipboard(text: string, ok: string) {
+      try {
+        await navigator.clipboard.writeText(text);
+        say(ok);
+      } catch {
+        const box = document.createElement('textarea');
+        box.readOnly = true;
+        box.value = text;
+        box.rows = 3;
+        box.style.cssText = 'width:100%;margin-top:.4em';
+        said.replaceChildren(box);
+        box.select();
+      }
+    }
+
+    function download(name: string, text: string) {
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ---- wiring ----------------------------------------------------------
+
+    function onEdit() {
+      if (sticky) { said.replaceChildren(); sticky = false; }
+      paint();
+    }
+
+    form.addEventListener('input', onEdit);
+    form.addEventListener('change', (e) => {
+      if ((e.target as HTMLElement).matches('[data-vehicle]')) {
+        applyVehicle((e.target as HTMLSelectElement).value);
+      }
+      onEdit();
+    });
+    form.addEventListener('submit', (e) => e.preventDefault());
+
+    host.addEventListener('click', (e) => {
+      const button = (e.target as HTMLElement).closest<HTMLElement>('[data-action]');
+      if (!button) return;
+      switch (button.dataset.action) {
+        case 'copy':
+          void toClipboard(table().map((r) => r.join('\t')).join('\n'), 'Ballast sheet copied.');
+          break;
+        case 'csv':
+          download('glider-ballast.csv',
+            `quantity,value,unit\n${table().map((r) => `${JSON.stringify(r[0])},${r[1]},${JSON.stringify(r[2])}`).join('\n')}\n`);
+          say('Downloaded glider-ballast.csv.');
+          break;
+        case 'share':
+          void toClipboard(window.location.href, 'Link copied.');
+          break;
+        case 'reset':
+          state = DEFAULTS();
+          write(state);
+          applyVehicle(state.vehicle);
+          paint();
+          say('Back to the defaults, and no longer remembered.');
+          break;
+      }
+    });
+
+    window.addEventListener('hashchange', () => {
+      const s = fromHash();
+      if (!s) return;
+      state = s;
+      write(state);
+      paint();
+    });
+
+    const shared = fromHash();
+    const restored = shared ?? remembered();
+    if (restored) {
+      state = restored;
+      write(state);
+    }
+    paint();
+    if (!shared && restored) say('Restored the setup from your last visit. Reset clears it.', true);
+  }
+</script>

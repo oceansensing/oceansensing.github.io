@@ -25,6 +25,8 @@ npm run data:teos10-fixture # re-record GSW's answers for test:teos10 (needs gsw
 npm run test:units   # the map's renderer-independent modules, directly
 npm run test:teos10  # the TEOS-10 package against GSW, calculus and physics
 npm run test:seawater # headless test of the built seawater calculator
+npm run test:ballast # the glider ballast arithmetic, against identities
+npm run test:ballast-page # headless test of the built ballast calculator
 npm run test:prose   # built pages keep the spaces Astro likes to eat
 npm run test:schema  # every published file against the contract in schema.ts
 npm run test:multimap # two maps on one page stay out of each other's way
@@ -4430,6 +4432,104 @@ three mutations reported "no failures" while the harness had never run at all.
 The same shape as every check-that-cannot-fail in the list below, one level
 up: **confirm the mutation reached what you think it did.**
 
+## The glider ballast calculator (`packages/glider-ballast/`, `/data/glider-ballast/`)
+
+The seawater calculator's engine, pointed at one job: setting a glider's lead
+so the buoyancy engine's travel straddles neutral across the water it will fly
+in. Target reader is an operator about to put a vehicle in the sea, which
+changes what the page owes them — see the caution below.
+
+**It reuses the calculator, not just the library.** Each water point goes
+through `evaluate()`, so an operator can enter a conductivity and a depth
+rather than an Absolute Salinity and a pressure, and the anomaly and the
+latitude-dependent gravity come along for free. On a 50 L hull the anomaly is
+worth about a gram, which is small and is exactly the resolution this tool
+works at.
+
+### One equation, and no reasoning about slopes
+
+`B = rho(SA, t, p) V(t, p) - m`. Everything on the page is that, evaluated at
+each point and subtracted.
+
+**Nothing anywhere asks which way buoyancy moves with depth**, and that is
+deliberate: it depends on whether the hull compresses more or less per dbar
+than seawater does, which is a property of the vehicle rather than a fact
+about gliders. The page *reports* the answer for the reader's own numbers —
+grams per 100 dbar, and grams per five degrees — rather than leaving it to a
+rule of thumb, because it is the thing operators most often have backwards.
+
+The closed form is `dB/dp = rho V (kappa_water - kappa_hull / (1 - kappa_hull
+p))`, and **the denominator is not decoration**: `V` already carries the
+`(1 - kappa p)` factor so its derivative does not, and dropping it is worth
+3e-4 of the answer at 1000 dbar. `test:ballast` writes that form out to check
+the module against TEOS-10's own compressibility and got it wrong on the first
+attempt — which is the argument for the module never writing it at all.
+
+### There is no reference implementation, and the gate is shaped by that
+
+`test:teos10` can hold its package against GSW. Nothing plays that role here:
+ballast procedures are per-vehicle spreadsheets, not a published standard. So
+`test:ballast` has three kinds of check, none of which needs one:
+
+- **Identities.** Ballasting for a point makes the buoyancy there exactly
+  zero; a tank reading round-trips to a mass and back; the pump figure that
+  should zero a buoyancy does zero it. These catch a sign or a factor of a
+  thousand instantly.
+- **Against TEOS-10.** The depth slope above, held against a compressibility
+  from a package that *is* checked against a reference.
+- **Sums anybody can redo.** A 50 L hull in 1025 against 1027 kg/m³ differs by
+  100 g. The first version of that check asserted fresh water is 1000 kg/m³
+  and was wrong by 45 g — it is 1000 only near the density maximum, and 999.1
+  at 15 °C. The module was right and the paper sum was not, which is the
+  ordinary way round for a made-up round number.
+
+Three separate thousands are named separately — `G_PER_KG`, `CC_PER_L`,
+`L_PER_M3` — because they are the same number and one constant would let a
+litres-to-cubic-metres conversion pass for a grams-to-kilograms one at review.
+
+### The vehicle numbers are stand-ins, and that is the page's main risk
+
+Four families are offered and **not one carries manufacturer data**. The
+masses are round figures in the range these vehicles occupy and each volume is
+simply that mass over 1025 kg/m³; the two hull coefficients are
+order-of-magnitude. A ballast figure computed from a stand-in compressibility
+is wrong by an amount nothing on the page can show, and it is the number
+somebody acts on with a $150k vehicle.
+
+So the caution is not a tooltip and not dismissible, it is checked to be
+*visible* for every vehicle in the list, and `illustrative: false` is the
+single switch that turns it off when a real ballast sheet arrives. Adding one
+is a data change, not a code change.
+
+**The volumes are rounded to the millilitre, which is not cosmetic.** They are
+displayed to three decimals, so an unrounded value read back out of its own
+box is a different number — the state could then never equal the defaults
+again, Reset could not tell it had reset, and the page went on remembering a
+setup identical to the defaults. Store what you show.
+
+### The tank reading is the measurement
+
+Nobody knows a glider's mass to the gram; everybody can float it and read a
+scale. So entering a measured tank buoyancy derives the mass, and the mass box
+shows what the reading implies.
+
+**Which cost two bugs worth recording.** The first version wrote the derived
+figure into the box and then read it back on the next repaint, so the typed
+mass was destroyed and clearing the reading left the derived number behind
+with no way back. The second version kept the typed mass but the box was still
+editable while showing something else — a control that silently discards what
+you put in it. It is `readOnly` while derived, so a box that ignores typing
+looks like one that is not for typing.
+
+### Reaching neutral is not the question
+
+The one that decides a mission is whether the engine has the travel to be
+positive at the shallowest point and negative at the deepest, at its stops.
+Both margins are computed at the shallowest and deepest of the three points
+**by pressure**, not at whichever the operator listed first — the fields are
+named for a profile and nothing makes them arrive in order. A vehicle that
+cannot do both gets a warning instead of a ballast figure that flies nothing.
+
 ### Known upstream quirks
 
 Both were found the hard way; do not re-derive them.
@@ -4485,15 +4585,19 @@ defeated the `hidden` attribute, because a class that sets `display` beats
 `[hidden]` at equal specificity. The browser check that passed before the CSS
 fix proved nothing about after it. **Re-verify after a fix, not before it.**
 
-**A space that exists in the source and not in the HTML.** Astro drops the
-whitespace *before* an inline element that begins a line and keeps the
-whitespace after it, so any ordinary reflow of a paragraph turns `from the` +
-newline + `<a>TEOS-10</a>` into "from theTEOS-10". The source looks right —
-the space is there at the end of the line — so review does not catch it and
-`astro check` has nothing to say. It reached the live site four times,
+**A space that exists in the source and not in the HTML.** Astro eats the
+whitespace at a line break next to an element boundary, so `from the` +
+newline + `<a>TEOS-10</a>` renders as "from theTEOS-10". The source looks
+right — the space is there at the end of the line — so review does not catch
+it and `astro check` has nothing to say. It reached the live site four times,
 including the map's own no-JavaScript fallback, which is text almost nobody
-sees. `npm run test:prose` reads every built page for it. **Never break a
-line immediately before an `<a>`, `<code>` or `<em>`.**
+sees. `npm run test:prose` reads every built page for it.
+
+**It is both sides**, and the gate shipped catching only one. A closing tag
+that *ends* a line loses the space in front of the text after it too, so
+`data.</strong>` + newline + `Each volume` renders as "dataEach" — which the
+first version passed a page containing. Keep the space on the same line as the
+tag, in both directions.
 
 **A control that will not shrink.** A grid item defaults to `min-width: auto`,
 and for an `<input>` that is the `size` attribute's default of twenty
