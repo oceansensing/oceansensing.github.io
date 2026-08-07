@@ -184,6 +184,22 @@ export async function drawFigure(
   const mapW = host.clientWidth;
   const mapH = host.clientHeight;
 
+  /* **Wait for the fonts before measuring or drawing any text.** A canvas
+     does not participate in font loading the way layout does: `fillText`
+     with a face the document has but the canvas has not yet resolved falls
+     back silently, to a stack that is usually wider. The DOM box was
+     measured with the real face and the drawn words then run past it —
+     which is how the brand mark came to overflow its own plate.
+
+     Guarded, because `document.fonts` is absent in jsdom and in older
+     embeddings, and a figure drawn in the fallback face is far better than
+     no figure. */
+  try {
+    await (document as Document & { fonts?: { ready: Promise<unknown> } }).fonts?.ready;
+  } catch {
+    // Font loading is unobservable here; draw with whatever resolved.
+  }
+
   const canvas = document.createElement('canvas');
   const measuring = canvas.getContext('2d');
   if (!measuring) throw new Error('no 2d context');
@@ -390,19 +406,38 @@ export async function drawFigure(
       continue;
     }
 
-    /* The plate behind the brand. It is as much a part of the mark as the
-       words, and with the text now measuring what the DOM measures it fits
-       rather than floating in it. */
+    /* **The plate is sized to the text this canvas will actually draw**, not
+       to the DOM element's box, and that is a robustness fix rather than a
+       tidiness one. Canvas does not resolve a webfont the way layout does: if
+       `Chakra Petch` is not resolvable at draw time, `fillText` silently
+       falls back to the monospace stack while the DOM box was measured with
+       the real face. The words then run past their own backing — reported as
+       the mark's background being too narrow.
+
+       `document.fonts.ready` (awaited above) removes the usual cause; this
+       removes the consequence, for that case and for any other reason the
+       two measurements might disagree.
+
+       The **right** edge is what stays put, because this mark is anchored
+       bottom-right: growing leftwards keeps it clear of the map's edge, where
+       growing rightwards would push it off. A box wide enough already is left
+       exactly as it is, so the ordinary case is untouched. */
+    const inkWidth = ctx.measureText(text).width;
+    const padR = parseFloat(style.paddingRight) || 0;
+    const needed = inkWidth + pad + indent + padR;
+    const plateW = Math.max(box.w, needed);
+    const plateX = box.x + box.w - plateW;
+
     const plate = style.backgroundColor;
     if (plate && plate !== 'transparent' && !/rgba\(0, 0, 0, 0\)/.test(plate)) {
       ctx.fillStyle = plate;
-      ctx.fillRect(box.x, box.y, box.w, box.h);
+      ctx.fillRect(plateX, box.y, plateW, box.h);
     }
     const edge = parseFloat(style.borderTopWidth) || 0;
     if (edge > 0) {
       ctx.strokeStyle = style.borderTopColor;
       ctx.lineWidth = edge;
-      ctx.strokeRect(box.x, box.y, box.w, box.h);
+      ctx.strokeRect(plateX, box.y, plateW, box.h);
     }
 
     /* A `text-shadow` halo is what makes a grid label legible over pale
@@ -435,8 +470,11 @@ export async function drawFigure(
       mapH - down - AIR
     );
     const width = metrics.width;
+    /* From the plate's left edge, not the element's — they are the same
+       unless the plate had to widen to hold the text, and then the text has
+       to move with it or it hangs off the backing that was widened for it. */
     const left = Math.min(
-      Math.max(box.x + pad + indent, AIR),
+      Math.max(plateX + pad + indent, AIR),
       Math.max(AIR, mapW - width - AIR)
     );
 

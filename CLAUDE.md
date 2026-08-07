@@ -3928,6 +3928,21 @@ optional, and each was reported before it was fixed:
   dead space to the right of a name looks like. Applied generally rather than
   as a brand special case: any redrawn chrome can carry them, and the failure
   is silent every time.
+- **And the plate is sized to the words the canvas draws, not to the DOM
+  box**, because applying those properties is not the same as them working.
+  `ctx.fontVariantCaps` is Chrome-only; Safari draws the mark in full caps,
+  and full caps are **32% wider** than the small caps the box was measured
+  for — 160 px against 121.5 in a 123.5 px slot. The words then run past
+  their own backing, which is how it was reported from an iPhone. A `max()`
+  on the plate width fixes it whatever a browser supports, where chasing font
+  features fixes it only where they are implemented. The **right** edge is
+  what stays put, the mark being anchored bottom-right: growing leftwards
+  keeps it clear of the map's edge.
+- **Fonts are awaited before any text is measured or drawn.** A canvas does
+  not participate in font loading the way layout does, so `fillText` with an
+  unresolved face falls back silently to a wider stack while the DOM box was
+  measured with the real one. `document.fonts.ready` removes the usual cause;
+  the `max()` above removes the consequence.
 - **Labels are clamped inside the figure by their own ink**, not by their line
   box. The longitude labels ride the bottom edge of the *viewport* and measure
   0.6 px past the map, so the clip took their descenders. A line box carries

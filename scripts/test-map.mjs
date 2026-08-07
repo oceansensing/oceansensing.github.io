@@ -141,7 +141,7 @@ window.Element.prototype.scrollIntoView = function () {};
 
    requestAnimationFrame is stubbed below, so the particle layer's loop really
    runs here — unlike a headless browser pane, which never paints. */
-const drawn = { moveTo: 0, lineTo: 0, stroke: 0, arc: 0, styles: new Set(), fills: new Set(), segments: [], images: [], drawImages: [], texts: [], encoded: [], gradients: [], textAt: [], svgSources: [] };
+const drawn = { moveTo: 0, lineTo: 0, stroke: 0, arc: 0, styles: new Set(), fills: new Set(), segments: [], images: [], drawImages: [], texts: [], encoded: [], gradients: [], textAt: [], svgSources: [], rects: [] };
 const properties = {};
 let penX = 0;
 let penY = 0;
@@ -234,6 +234,13 @@ const recordingContext = new Proxy(
           drawn.arc += 1;
         } else if (key === 'fill') {
           if (typeof properties.fillStyle === 'string') drawn.fills.add(properties.fillStyle);
+        } else if (key === 'fillRect') {
+          /* The brand's plate is a fillRect, and it has to be at least as
+             wide as the words drawn on it — see the check below. */
+          drawn.rects.push({
+            x: args[0], y: args[1], w: args[2], h: args[3],
+            fill: properties.fillStyle,
+          });
         } else if (key === 'fillText') {
           /* The export redraws what a canvas cannot be handed — the graticule
              labels, the scale bar, and every line of the provenance band —
@@ -2406,12 +2413,29 @@ const exported = await (async () => {
   const bathySvg = host.querySelector('.leaflet-bathy-pane svg');
   if (bathySvg) bathySvg.style.transform = 'translate3d(-106px, -70px, 0px) scale(1)';
 
+  /* **Give the brand a plate too narrow for its own words.** That is the
+     shape of a real bug: the mark is set in `font-variant-caps:
+     all-small-caps`, and a canvas that does not support `fontVariantCaps` —
+     Safari's does not — draws it in full caps, 32% wider, so the words run
+     past a plate measured for small caps. Reported from an iPhone.
+
+     jsdom applies no external CSS, so the brand has no background to draw
+     and no box of its own; both are supplied here, the box deliberately
+     narrower than the text, so the plate has something to fail to contain. */
+  const brandEl = host.querySelector('.om-brand');
+  if (brandEl) {
+    brandEl.style.backgroundColor = 'rgb(1, 2, 3)';
+    brandEl.getBoundingClientRect = () => ({
+      left: 40, top: 40, right: 80, bottom: 60, width: 40, height: 20, x: 40, y: 40,
+    });
+  }
+
   const button = host.closest('[data-ocean-map]')?.querySelector('[data-export-png]');
   /* Empty rather than absent, so a missing button fails the checks below
      instead of killing the harness on `undefined.length` — a crash during
      setup takes every later check with it and reads as a broken run rather
      than a broken feature. */
-  const nothing = { built: false, saved: null, images: [], texts: [], encoded: [], gradients: [], textAt: [], svgSources: [] };
+  const nothing = { built: false, saved: null, images: [], texts: [], encoded: [], gradients: [], textAt: [], svgSources: [], rects: [] };
   if (!button) return nothing;
   drawn.drawImages.length = 0;
   drawn.texts.length = 0;
@@ -2419,6 +2443,7 @@ const exported = await (async () => {
   drawn.gradients.length = 0;
   drawn.textAt.length = 0;
   drawn.svgSources.length = 0;
+  drawn.rects.length = 0;
   let saved = null;
   const realCreate = window.URL.createObjectURL;
   window.URL.createObjectURL = () => 'blob:stub';
@@ -2445,6 +2470,7 @@ const exported = await (async () => {
     gradients: drawn.gradients.map((g) => [...g]),
     textAt: [...drawn.textAt],
     svgSources: [...drawn.svgSources],
+    rects: [...drawn.rects],
   };
 })();
 
@@ -3181,6 +3207,21 @@ const checks = [
      so every raster layer was always right. Measured before and after
      against the paths' own `getScreenCTM` positions: 14.5% of sampled points
      had contour ink within 3 px, then 100%. */
+  /* **The mark's plate is sized to the words the canvas actually draws.**
+     The DOM box is measured with `font-variant-caps: all-small-caps`; a
+     canvas without `fontVariantCaps` support draws full caps, 32% wider —
+     measured, 160 px against 121.5 in a 123.5 px slot — and the words run
+     off their own backing. Reported from an iPhone, where Safari's canvas
+     lacks it. Widening the plate to the drawn text fixes it whatever the
+     browser supports, which is why the fix is a `max()` and not a font
+     workaround. */
+  ['the mark\'s plate is at least as wide as the words on it', (() => {
+    const plate = exported.rects.find((r) => /rgb\(1, ?2, ?3\)/.test(String(r.fill)));
+    if (!plate) return false;
+    const words = exported.texts.find((t) => /OCEAN VIEWER/i.test(t));
+    if (!words) return false;
+    return plate.w >= words.length * 6;      // the harness measures 6 px a character
+  })()],
   ['each rasterised pane is serialised without its own transform',
     exported.svgSources.length > 0 &&
       exported.svgSources.every((markup) => {
