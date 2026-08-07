@@ -222,15 +222,15 @@ export function evaluate(input: Input): Result {
     ? input.pressure
     : pressureFromDepth(-Math.abs(input.pressure), gLat);
   if (input.pressureKind === 'z' && !Number.isFinite(lat)) {
-    notes.push('Depth converted to pressure at the equator — enter a latitude to correct for gravity.');
+    notes.push('Depth converted to pressure at the equator. Enter a latitude to use the local gravity.');
   }
 
   const { sa, sp, t, anomalyApplied, ptRef } = resolve(input, p, lon, lat);
 
   if (!positioned && input.salinityKind !== 'SA' && input.salinityKind !== 'SR') {
-    notes.push('No position, so Absolute Salinity is Reference Salinity — enter one to apply the anomaly.');
+    notes.push('No position given, so Absolute Salinity is shown as Reference Salinity. Enter one to apply the anomaly.');
   } else if (positioned && !anomalyApplied && input.salinityKind !== 'SR') {
-    notes.push('That position is outside the anomaly atlas, so Absolute Salinity is Reference Salinity.');
+    notes.push('That position is outside the anomaly atlas, so Absolute Salinity is shown as Reference Salinity.');
   } else if (anomalyApplied && input.salinityKind !== 'SA') {
     const d = sa - srFromSP(sp);
     if (Number.isFinite(d)) {
@@ -239,7 +239,7 @@ export function evaluate(input: Input): Result {
   }
 
   if (!Number.isFinite(sa) || !Number.isFinite(t) || !Number.isFinite(p)) {
-    warnings.push('Those inputs do not describe a water sample.');
+    warnings.push('These inputs do not resolve to a water sample.');
   } else {
     if (sa > SA_MAX) warnings.push(`Absolute Salinity above ${SA_MAX} g/kg is outside the range TEOS-10 is fitted over.`);
     if (p > P_MAX || p < 0) warnings.push(`Sea pressure outside 0 to ${P_MAX} dbar is outside the range TEOS-10 is fitted over.`);
@@ -275,10 +275,10 @@ function build(
     {
       title: 'Salinity',
       rows: [
-        q('SP', 'Practical Salinity', sp, '', 4, 'PSS-78 — what a CTD measures. Dimensionless by construction.'),
-        q('SA', 'Absolute Salinity', sa, 'g/kg', 4, 'The salinity the equation of state uses. SR plus the measured composition anomaly.'),
+        q('SP', 'Practical Salinity', sp, '', 4, 'PSS-78. Dimensionless by construction.'),
+        q('SA', 'Absolute Salinity', sa, 'g/kg', 4, 'The salinity the equation of state uses: SR plus the measured composition anomaly.'),
         q('SR', 'Reference Salinity', srFromSP(sp), 'g/kg', 4, 'SP on a mass basis, with Standard Seawater composition assumed.'),
-        q('Sstar', 'Preformed Salinity', sstarFromSA(sa, p, lon, lat, atlas), 'g/kg', 4, 'The conservative salinity: what SA was before biogeochemistry changed it.'),
+        q('Sstar', 'Preformed Salinity', sstarFromSA(sa, p, lon, lat, atlas), 'g/kg', 4, 'The conservative salinity: SA before biogeochemical change.'),
         q('dSA', 'Salinity anomaly', positioned ? deltaSA(sp, p, lon, lat, atlas) : NaN, 'g/kg', 5, 'SA − SR. Reaches 0.03 g/kg in the North Pacific.'),
         q('C', 'Conductivity', cFromSP(sp, t, p), 'mS/cm', 4, 'At the in-situ temperature and pressure.'),
         q('R', 'Conductivity ratio', cFromSP(sp, t, p) / 42.914, '', 6, 'Against C(35, 15 °C, 0 dbar) = 42.914 mS/cm.'),
@@ -288,22 +288,22 @@ function build(
     {
       title: 'Temperature',
       rows: [
-        q('t', 'In-situ temperature', t, '°C', 4, 'ITS-90. What a thermometer at depth reads.'),
-        q('pt0', 'Potential temperature', pt0, '°C', 4, 'Referenced to the surface. Removes the warming from compression.'),
+        q('t', 'In-situ temperature', t, '°C', 4, 'ITS-90, as measured in situ.'),
+        q('pt0', 'Potential temperature', pt0, '°C', 4, 'Referenced to the surface, removing the warming from compression.'),
         q('pt', `Potential temperature (${ptRef} dbar)`, ptFromT(sa, t, p, ptRef), '°C', 4, 'Referenced to the pressure you chose.'),
         q('CT', 'Conservative Temperature', ct, '°C', 4, 'Potential enthalpy divided by cp0. Conserved about a hundred times better than pt.'),
         q('t68', 'In-situ temperature (IPTS-68)', t * 1.00024, '°C', 4, 'For comparison with data archived before 1990.'),
-        q('tf', 'Freezing temperature', freezingTemperature(sa, p, 0), '°C', 4, 'Air-free, at this pressure. Where the chemical potential of water equals that of ice.'),
+        q('tf', 'Freezing temperature', freezingTemperature(sa, p, 0), '°C', 4, 'Air-free, at this pressure: where the chemical potential of water equals that of ice.'),
         q('CTf', 'Freezing temperature (CT)', freezingCT(sa, p, 0), '°C', 4),
-        q('tmd', 'Temperature of maximum density', tMaxDensity(sa, p), '°C', 4, 'Below the freezing point above about SA 24 g/kg, which is why the open ocean does not overturn like a lake.'),
+        q('tmd', 'Temperature of maximum density', tMaxDensity(sa, p), '°C', 4, 'Below the freezing point above about SA 24 g/kg.'),
       ],
     },
     {
       title: 'Pressure and depth',
       rows: [
         q('p', 'Sea pressure', p, 'dbar', 3, 'Absolute pressure less one standard atmosphere.'),
-        q('z', 'Height', zFromP(p, gLat), 'm', 3, 'Negative in the ocean, as TEOS-10 defines it.'),
-        q('depth', 'Depth', depthFromPressure(p, gLat), 'm', 3, 'The same number said the way people say it.'),
+        q('z', 'Height', zFromP(p, gLat), 'm', 3, 'Negative in the ocean, per TEOS-10.'),
+        q('depth', 'Depth', depthFromPressure(p, gLat), 'm', 3, 'Depth positive downwards.'),
         /* The latitude is in the label, not only in the note. Gravity varies
            by half a percent from the equator to the pole, so "Gravity" alone
            is a number whose meaning is off-screen -- and a note is a tooltip,
@@ -330,17 +330,17 @@ function build(
            the numbers, which is what a label that needs explaining looks
            like from outside. */
         q('rho', 'In-situ density', rho, 'kg/m³', 5,
-          'At this pressure, so it includes the compression. 1 / g_P, not a fitted polynomial.'),
+          'At this pressure, so it includes the compression. Evaluated as 1 / g_P.'),
         q('v', 'Specific volume', specificVolume(sa, t, p), 'm³/kg', 9),
         q('sigma0', 'σ₀', sigma(0), 'kg/m³', 5,
           'The parcel moved adiabatically to the surface, then density − 1000. '
-          + 'Not the in-situ density less 1000 — decompressing it first is worth about 4 kg/m³ per 1000 dbar.'),
+          + 'Not the in-situ density less 1000: decompression is worth about 4 kg/m³ per 1000 dbar.'),
         q('sigma1', 'σ₁', sigma(1000), 'kg/m³', 5, 'Referenced to 1000 dbar.'),
         q('sigma2', 'σ₂', sigma(2000), 'kg/m³', 5, 'Referenced to 2000 dbar.'),
         q('sigma3', 'σ₃', sigma(3000), 'kg/m³', 5, 'Referenced to 3000 dbar.'),
         q('sigma4', 'σ₄', sigma(4000), 'kg/m³', 5, 'Referenced to 4000 dbar.'),
         q('delta', 'Specific volume anomaly', specificVolumeAnomaly(sa, t, p), 'm³/kg', 9, 'Against Standard Seawater at 0 °C and the same pressure.'),
-        q('spice0', 'Spiciness (0 dbar)', spiciness0(sa, ct), 'kg/m³', 5, 'Across the T–S diagram, orthogonal to density: same weight, different water.'),
+        q('spice0', 'Spiciness (0 dbar)', spiciness0(sa, ct), 'kg/m³', 5, 'Across the T–S diagram, orthogonal to density.'),
         q('spice1', 'Spiciness (1000 dbar)', spiciness1(sa, ct), 'kg/m³', 5),
         q('spice2', 'Spiciness (2000 dbar)', spiciness2(sa, ct), 'kg/m³', 5),
       ],
@@ -351,33 +351,33 @@ function build(
         q('alpha', 'Thermal expansion', alpha, '1/K', 9, 'With respect to in-situ temperature.'),
         q('beta', 'Haline contraction', beta, 'kg/g', 9, 'At constant in-situ temperature.'),
         q('alphaBeta', 'α / β', alpha / beta, 'g/(kg K)', 5, 'The slope of a density surface on a T–S diagram; sets the Turner angle.'),
-        q('kappa', 'Isentropic compressibility', isentropicCompressibility(sa, t, p), '1/Pa', 13, 'What a sinking parcel feels, and what sets the sound speed.'),
-        q('kappaT', 'Isothermal compressibility', isothermalCompressibility(sa, t, p), '1/Pa', 13, 'Larger — compressing at fixed temperature lets the heat out.'),
-        q('lapse', 'Adiabatic lapse rate', adiabaticLapseRate(sa, t, p) * DB2PA, 'K/dbar', 9, 'How much a parcel warms per decibar of descent with no heat exchange.'),
+        q('kappa', 'Isentropic compressibility', isentropicCompressibility(sa, t, p), '1/Pa', 13, 'The adiabatic value, which sets the sound speed.'),
+        q('kappaT', 'Isothermal compressibility', isothermalCompressibility(sa, t, p), '1/Pa', 13, 'Larger than the isentropic value, since compression at fixed temperature releases heat.'),
+        q('lapse', 'Adiabatic lapse rate', adiabaticLapseRate(sa, t, p) * DB2PA, 'K/dbar', 9, 'Warming per decibar of adiabatic descent.'),
       ],
     },
     {
       title: 'Energy, entropy and heat',
       rows: [
         q('cp', 'Isobaric heat capacity', heatCapacity(sa, t, p), 'J/(kg K)', 4),
-        q('cp0', 'cp0', CP0, 'J/(kg K)', 8, 'The fixed constant that defines Conservative Temperature. Not a heat capacity of any real seawater.'),
+        q('cp0', 'cp0', CP0, 'J/(kg K)', 8, 'The fixed constant defining Conservative Temperature. Not a heat capacity of real seawater.'),
         q('eta', 'Specific entropy', entropy(sa, t, p), 'J/(kg K)', 5),
         q('h', 'Specific enthalpy', enthalpy(sa, t, p), 'J/kg', 3),
-        q('h0', 'Potential enthalpy', potentialEnthalpy(sa, t, p), 'J/kg', 3, 'Enthalpy the parcel would have at the surface. CT is this over cp0.'),
+        q('h0', 'Potential enthalpy', potentialEnthalpy(sa, t, p), 'J/kg', 3, 'Enthalpy the parcel would have at the surface. CT is this divided by cp0.'),
         q('u', 'Internal energy', internalEnergy(sa, t, p), 'J/kg', 3),
         q('g', 'Gibbs energy', gibbsEnergy(sa, t, p), 'J/kg', 5),
         q('f', 'Helmholtz energy', helmholtzEnergy(sa, t, p), 'J/kg', 5),
         q('muW', 'Chemical potential of water', chemPotentialWater(sa, t, p), 'J/kg', 4),
         q('muS', 'Chemical potential of sea salt', chemPotentialSalt(sa, t, p), 'J/g', 5),
-        q('dilution', 'Dilution coefficient', dilutionCoefficient(sa, t, p), 'J/kg', 5, 'What it costs to dilute the parcel, which sets how a freshwater flux moves everything else.'),
+        q('dilution', 'Dilution coefficient', dilutionCoefficient(sa, t, p), 'J/kg', 5, 'The energy cost of dilution, which sets the response to a freshwater flux.'),
       ],
     },
     {
       title: 'Sound and phase change',
       rows: [
         q('c', 'Sound speed', soundSpeed(sa, t, p), 'm/s', 4),
-        q('Levap', 'Latent heat of evaporation', latentHeatEvaporation(sa, pt0), 'J/kg', 1, 'A surface quantity, taken at the potential temperature.'),
-        q('Lmelt', 'Latent heat of melting', latentHeatMelting(sa, p), 'J/kg', 1, 'Ice into seawater at the freezing point. Needs both standards.'),
+        q('Levap', 'Latent heat of evaporation', latentHeatEvaporation(sa, pt0), 'J/kg', 1, 'A surface quantity, evaluated at the potential temperature.'),
+        q('Lmelt', 'Latent heat of melting', latentHeatMelting(sa, p), 'J/kg', 1, 'Ice into seawater at the freezing point.'),
       ],
     },
   ];

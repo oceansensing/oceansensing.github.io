@@ -94,8 +94,8 @@ const pick = (sel, value) => {
 
 // ---- the caution -----------------------------------------------------------
 
-check('the illustrative-numbers caution is in the shipped HTML',
-  /illustrative numbers, not vehicle data/i.test(html));
+check('the illustrative-values caution is in the shipped HTML',
+  /illustrative values, not vehicle data/i.test(html));
 check('and it is showing, not hidden behind anything',
   q('[data-illustrative]') !== null && q('[data-illustrative]').hidden === false);
 check('and it says what to replace them with',

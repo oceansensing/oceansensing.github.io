@@ -131,8 +131,8 @@ const headline = (key: string) => {
     </div>
 
     <p class="hint" data-atlas-state>
-      A position turns Reference Salinity into Absolute Salinity, and fixes the
-      gravity used for depth. The anomaly atlas is fetched only when you enter one.
+      A position turns Reference Salinity into Absolute Salinity and sets the
+      gravity used for depth. The anomaly atlas is fetched only when one is given.
     </p>
 
     <div class="field ptref">
@@ -213,9 +213,10 @@ const headline = (key: string) => {
   <details class="panel batch" data-batch>
     <summary>Convert a column of measurements</summary>
     <p class="hint">
-      Paste rows of <b data-batch-order>salinity, temperature, pressure</b> — commas,
-      tabs or spaces, one sample per line, a header row if you like. Add two more
-      columns for longitude and latitude. The units are whichever you chose above.
+      Rows of <b data-batch-order>salinity, temperature, pressure</b> separated by
+      commas, tabs or spaces, one sample per line. A header row is ignored. Two
+      further columns are read as longitude and latitude. Units are those
+      selected above.
     </p>
     <textarea
       data-batch-input rows="6" spellcheck="false"
@@ -1038,8 +1039,8 @@ const headline = (key: string) => {
       const positioned = state.lon !== null && state.lat !== null;
       if (!positioned || atlas || atlasWanted) {
         if (!positioned && !atlas) {
-          atlasState.textContent = 'A position turns Reference Salinity into Absolute Salinity, and'
-            + ' fixes the gravity used for depth. The anomaly atlas is fetched only when you enter one.';
+          atlasState.textContent = 'A position turns Reference Salinity into Absolute Salinity and'
+            + ' sets the gravity used for depth. The anomaly atlas is fetched only when one is given.';
         }
         return;
       }

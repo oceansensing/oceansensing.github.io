@@ -209,7 +209,7 @@ export function ballast(input: Input): Report {
       tank: { density: NaN, volume: NaN, buoyancy: NaN },
       ballastChange: NaN, tankBuoyancy: NaN, neutralDensity: NaN, mass: NaN,
       readings: [], surfaceMargin: NaN, diveMargin: NaN,
-      warnings: ['Choose which of the water points to be neutral at.'],
+      warnings: ['Select which water point to be neutral at.'],
       notes,
     };
   }
@@ -267,8 +267,8 @@ export function ballast(input: Input): Report {
   if (Number.isFinite(tankGap) && Math.abs(tankGap) > 2) {
     notes.push(
       `The tank is ${Math.abs(tankGap).toFixed(1)} kg/m³ `
-      + `${tankGap > 0 ? 'lighter' : 'heavier'} than the water you are ballasting for, `
-      + `so a reading of ${tankBuoyancy.toFixed(0)} g there is expected rather than wrong.`
+      + `${tankGap > 0 ? 'lighter' : 'heavier'} than the target water, `
+      + `so the expected tank reading is ${tankBuoyancy.toFixed(0)} g.`
     );
   }
 
@@ -281,16 +281,16 @@ export function ballast(input: Input): Report {
     const perHundred = (buoyancy(hull, mass, { ...target, p: target.p + dp })
       - buoyancy(hull, mass, target));
     notes.push(
-      `Its hull ${perHundred > 0 ? 'compresses less' : 'compresses more'} than the water: `
-      + `${perHundred > 0 ? '+' : ''}${perHundred.toFixed(0)} g per 100 dbar deeper, `
+      `The hull ${perHundred > 0 ? 'compresses less' : 'compresses more'} than the water: `
+      + `${perHundred > 0 ? '+' : ''}${perHundred.toFixed(0)} g per 100 dbar of depth, `
       + 'at this temperature and salinity.'
     );
     const dt = 5;
     const perFive = (buoyancy(hull, mass, { ...target, t: target.t - dt })
       - buoyancy(hull, mass, target));
     notes.push(
-      `Cooling it 5 °C makes it ${Math.abs(perFive).toFixed(0)} g `
-      + `${perFive > 0 ? 'more' : 'less'} buoyant.`
+      `Cooling by 5 °C changes buoyancy by ${perFive > 0 ? '+' : '−'}`
+      + `${Math.abs(perFive).toFixed(0)} g.`
     );
   }
 

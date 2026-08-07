@@ -265,8 +265,8 @@ console.log('\n-- the notes --');
 
 {
   const r = ballast({ hull: REAL, tank: TANK, water: WATER, neutralAt: 1 });
-  check('a tank far from the target says the big reading is expected',
-    r.notes.some((n) => /expected rather than wrong/.test(n)), r.notes.join(' | '));
+  check('a tank far from the target states the reading to expect there',
+    r.notes.some((n) => /expected tank reading/.test(n)), r.notes.join(' | '));
   check('and the hull-against-water comparison is stated in grams per 100 dbar',
     r.notes.some((n) => /per 100 dbar/.test(n)));
   check('and the temperature one in grams per five degrees',
@@ -276,7 +276,7 @@ console.log('\n-- the notes --');
     hull: REAL, tank: { name: 'Tank', sa: 35.5, t: 19.5, p: 0 }, water: WATER, neutralAt: 1,
   });
   check('a tank near the target does not',
-    !seawaterTank.notes.some((n) => /expected rather than wrong/.test(n)),
+    !seawaterTank.notes.some((n) => /expected tank reading/.test(n)),
     seawaterTank.notes.join(' | '));
 
   const none = ballast({ hull: REAL, tank: TANK, water: WATER, neutralAt: 7 });

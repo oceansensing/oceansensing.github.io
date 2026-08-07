@@ -25,8 +25,7 @@ import SeawaterCalculator from '../../components/SeawaterCalculator.astro';
     </p>
 
     <Disclaimer tool="calculator">
-      Where it disagrees with the reference GSW toolbox, GSW is right and this
-      is wrong.
+      Where it disagrees with the GSW reference toolbox, GSW is the authority.
     </Disclaimer>
 
     <SeawaterCalculator />
@@ -40,61 +39,58 @@ import SeawaterCalculator from '../../components/SeawaterCalculator.astro';
     </p>
 
     <section class="about">
-      <h2>What it does, and what that costs</h2>
+      <h2>What it does</h2>
 
       <h3>Absolute Salinity needs a position</h3>
       <p>
-        The change TEOS-10 made over EOS-80 is that density depends on what the
-        salt is <em>made of</em>, not only on how much conductivity it carries.
-        Rivers, biology and the deep circulation leave different oceans with
-        different compositions, so Absolute Salinity is Reference Salinity plus
-        an anomaly that was measured rather than derived. It reaches
-        0.03 g/kg in the North Pacific — about 0.024 kg/m³ of density, or
-        thirty times the precision anyone quotes it to.
+        TEOS-10 differs from EOS-80 in that density depends on the composition
+        of the salt, not only on the conductivity it carries. Rivers, biology
+        and the deep circulation leave different oceans with different
+        compositions, so Absolute Salinity is Reference Salinity plus an
+        anomaly that was measured rather than derived. The anomaly reaches
+        0.03 g/kg in the North Pacific, or about 0.024 kg/m³ of density.
       </p>
       <p>
-        That correction is a global lookup table, so it needs a longitude and a
-        latitude. Enter them and the atlas is fetched, once, and applied.
-        Leave them out and the calculator uses Reference
-        Salinity <em>and says so</em> — reporting SR under SA's name without a word is
-        the one mistake a page like this must not make.
+        The correction is a global lookup table and needs a longitude and a
+        latitude. With a position, the atlas is fetched once and applied.
+        Without one, the calculator uses Reference Salinity and states which
+        salinity it used.
       </p>
 
       <h3>Full precision means the Gibbs function</h3>
       <p>
         The GSW toolbox evaluates most properties from a 75-term polynomial
-        fitted to specific volume, which is fast and accurate to about a part
-        in 10<sup>6</sup>. This evaluates the Gibbs function itself — IAPWS-09
-        for pure water, IAPWS-08 for the salt — and takes the analytic
-        derivatives. The freezing point additionally needs the Gibbs function
-        of ice, IAPWS-06, because it is the temperature at which the chemical
-        potential of water in seawater equals that of ice.
+        fitted to specific volume, accurate to about a part in
+        10<sup>6</sup>. This evaluates the Gibbs function itself — IAPWS-09 for
+        pure water, IAPWS-08 for the salt — and takes the analytic derivatives.
+        The freezing point additionally uses the Gibbs function of ice,
+        IAPWS-06, since it is the temperature at which the chemical potential
+        of water in seawater equals that of ice.
       </p>
       <p>
-        Two quantities have no exact form and say so on their rows: spiciness,
-        which <em>is</em> defined as a polynomial, and the reference column the
-        depth conversion is built on.
+        Two quantities have no exact form, and their rows say so: spiciness,
+        which is defined as a polynomial, and the reference column the depth
+        conversion is built on.
       </p>
 
       <h3>Where it stops</h3>
       <p>
         The standard is fitted over 0 to 42 g/kg, the freezing point to 40 °C,
-        and 0 to 10,000 dbar. Outside that the polynomials still return
-        numbers; the calculator flags them rather than clamping, because an
-        extrapolated fit is not seawater. PSS-78 itself is defined from 2 to
-        42, with the Hill et al. (1986) extension below that — also flagged.
+        and 0 to 10,000 dbar. Outside that range the polynomials still return
+        numbers; the calculator flags them rather than clamping them. PSS-78
+        is defined from 2 to 42, with the Hill et al. (1986) extension below
+        that, which is also flagged.
       </p>
 
       <h3>Checked against the reference implementation</h3>
       <p>
         The coefficients are transcribed mechanically
-        from <a href="https://github.com/TEOS-10/GSW-C">GSW-C</a>, never by
-        hand, and every function is checked against GSW at points spanning the
-        domain. Each derivative of the Gibbs function is separately checked
+        from <a href="https://github.com/TEOS-10/GSW-C">GSW-C</a> rather than
+        by hand, and every function is checked against GSW at points spanning
+        the domain. Each derivative of the Gibbs function is separately checked
         against a central difference of the one below it, over a few thousand
-        states — so a mistyped digit fails a test rather than quietly shifting
-        the density of the ocean. The salinity anomaly atlas reproduces GSW's
-        own lookup to 2×10<sup>-19</sup>.
+        states. The salinity anomaly atlas reproduces GSW's own lookup to
+        2×10<sup>-19</sup>.
       </p>
 
       <h3>Credits</h3>
@@ -113,8 +109,8 @@ import SeawaterCalculator from '../../components/SeawaterCalculator.astro';
         The pure-water and saline Gibbs functions are IAPWS-09 and IAPWS-08,
         and the ice one is IAPWS-06, all released by
         the <a href="https://iapws.org/">International Association for the
-        Properties of Water and Steam</a>. Nothing on this page is published
-        by any of them; the errors are ours.
+        Properties of Water and Steam</a>. This page is not published or
+        endorsed by any of them.
       </p>
     </section>
   </div>

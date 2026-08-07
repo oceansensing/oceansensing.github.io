@@ -4432,6 +4432,29 @@ three mutations reported "no failures" while the harness had never run at all.
 The same shape as every check-that-cannot-fail in the list below, one level
 up: **confirm the mutation reached what you think it did.**
 
+### The language on both calculator pages is factual
+
+Deliberate, and asked for. The first drafts read as instruction — "the one
+mistake a page like this must not make", "treat the answer as the starting
+point for a tank test", "a mistyped digit fails a test rather than quietly
+shifting the density of the ocean". Every one of those is true and none of
+them is the reader's business: they are the engineering rationale, and the
+place for that is this file.
+
+So the pages state what the tool does, what it assumes, and where it stops,
+without telling the reader how to feel about any of it. The distinction that
+survives is between a *fact about scope* — "the result is an input to a tank
+test, not a replacement for one" — and an *instruction* — "treat the answer
+as…". Both convey the limit; only one lectures.
+
+**Several gates assert on wording**, so a rewrite is not free: `test:seawater`
+matches "Reference Salinity", "composition anomaly", "equator", "freezing
+point" and "outside the range"; `test:ballast` matches "cannot surface",
+"cannot dive", "compresses less/more" and "per 100 dbar"; the disclaimer
+checks match "under test", "own risk" and "as-is|no warranty". They are the
+load-bearing phrases and are worth keeping through an edit rather than
+loosening the checks around.
+
 ### Both calculators say they are under test
 
 `src/components/Disclaimer.astro` carries it, one component for both pages so

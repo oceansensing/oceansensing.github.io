@@ -70,10 +70,10 @@ const n = (v: number, d: number) => (Number.isFinite(v) ? v.toFixed(d) : '—');
         and a ballast figure computed from a stand-in compressibility is wrong
         by an amount nothing on the page can show. */}
     <p class="caution" data-illustrative>
-      <strong>These are illustrative numbers, not vehicle data.</strong> Each
-      volume is simply the mass over 1025 kg/m³, and the two hull terms
-      are order-of-magnitude. Replace all four from your own ballast sheet or
-      tank test before trusting a gram of this.
+      <strong>Illustrative values, not vehicle data.</strong> Each volume is
+      the mass divided by 1025 kg/m³, and the two hull terms are
+      order-of-magnitude only. Replace all four with values from your ballast
+      sheet or a tank test.
     </p>
 
     <div class="pair">
@@ -152,10 +152,9 @@ const n = (v: number, d: number) => (Number.isFinite(v) ? v.toFixed(d) : '—');
       </div>
     </div>
     <p class="hint">
-      Float the glider in the tank and read the scale — positive if it floats.
-      Enter that and the mass above is worked out from it, which is the
-      direction the measurement actually goes. Leave it blank to use the mass
-      as typed.
+      The reading from floating the glider in the tank, positive if it floats.
+      Entering it determines the mass above. Leave it blank to use the mass as
+      entered.
     </p>
 
     <h2>The water it will fly in</h2>
@@ -199,9 +198,9 @@ const n = (v: number, d: number) => (Number.isFinite(v) ? v.toFixed(d) : '—');
       </div>
     </div>
     <p class="hint" data-atlas-state>
-      A position applies the Absolute Salinity anomaly and fixes the gravity
-      used to turn depth into pressure. On a 50 L glider the anomaly is worth
-      about a gram — small, and this is a tool that counts grams.
+      A position applies the Absolute Salinity anomaly and sets the gravity
+      used to convert depth to pressure. On a 50 L glider the anomaly is worth
+      about a gram.
     </p>
 
     <div class="actions">
@@ -235,8 +234,8 @@ const n = (v: number, d: number) => (Number.isFinite(v) ? v.toFixed(d) : '—');
     </dl>
 
     <p class="explain" data-explain>
-      Add or remove that much lead, then check the glider reads the tank
-      figure in the tank water above.
+      Add or remove that mass of ballast, then confirm the glider reads the
+      tank figure in the tank water above.
     </p>
 
     <table class="readings">

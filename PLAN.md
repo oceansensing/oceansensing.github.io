@@ -11,8 +11,9 @@ refresh the map data.
 
 Built and deployed: home, research (with per-project pages and a past-projects
 split), people, publications from BibTeX, presentations, news + RSS, data &
-tools, per-person CVs at `/cv/<person-id>/`, and Significant Observations
-(harmful algal blooms, hurricanes).
+tools, per-person CVs at `/cv/<person-id>/`, Significant Observations
+(harmful algal blooms, hurricanes), and two calculators under Data & Tools —
+`/data/seawater/` and `/data/glider-ballast/`.
 
 `/visualization/` opens on sea-surface temperature under the surface flow,
 with the shorelines, borders and grid, over the whole ocean — 232 KB on a
@@ -294,6 +295,49 @@ yesterday. Drawn as points on the same ramp and range as the field beneath
 them, a reader could see model and observations disagree. It needs no new
 dependency and shares the repository. Argo is the precedent for the
 renderer; the thinning rule needs measuring rather than guessing.
+
+## The two calculators
+
+Both are new and both carry an under-test notice; the language on them is
+factual rather than instructional.
+
+`/data/seawater/` evaluates the TEOS-10 Gibbs function directly — IAPWS-09,
+IAPWS-08, and IAPWS-06 for the freezing point — rather than the 75-term
+polynomial GSW uses by default, so every property is thermodynamically
+consistent with every other one. Fifty-one properties, filterable, with the
+Absolute Salinity anomaly applied from a position via a 188 KB atlas fetched
+only when one is entered. The physics is `packages/teos10`, checked against
+GSW at twenty-four points, against a central difference of each derivative
+branch over a few thousand states, and against physical anchors.
+
+`/data/glider-ballast/` uses that engine for glider ballasting: tank
+properties, vehicle properties, three water points, and the operator's choice
+of which to be neutral at. It reports the ballast change, the resulting tank
+reading, the neutral density, the ballasted mass, a row per point, and whether
+the buoyancy engine can surface and dive. The arithmetic is
+`packages/glider-ballast`.
+
+### Open on the calculators
+
+- **No vehicle carries manufacturer data.** All four families ship
+  illustrative values — masses are round figures, volumes are the mass over
+  1025 kg/m³, and both hull coefficients are order-of-magnitude. Replacing any
+  one of them with a real ballast sheet is a data change: an entry in
+  `packages/glider-ballast/vehicles.ts` with `illustrative: false`, which
+  turns off the page's caution for that vehicle. This is the single most
+  valuable thing anyone could contribute to the ballast page.
+- **The ballast arithmetic has no reference implementation to check against.**
+  TEOS-10 has GSW; ballasting has per-vehicle spreadsheets. The gate is
+  identities, TEOS-10's own compressibility, and hand calculations, which is
+  the best available but is weaker than what `test:teos10` gets. A comparison
+  against a real operator's spreadsheet would close the gap.
+- **The hull model is first order in pressure and temperature.** It does not
+  account for oil volume changing with temperature, air trapped in the
+  fairing, water absorption by foam, or vehicle attitude. Adding any of those
+  needs a vehicle to calibrate against.
+- **Neither calculator has been used in anger.** The under-test notice comes
+  off when someone has run a real ballast against a real tank test, or checked
+  a cast's densities against their own processing.
 
 ## Open items
 

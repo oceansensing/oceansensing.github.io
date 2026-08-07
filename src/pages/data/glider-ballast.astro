@@ -12,19 +12,16 @@ import GliderBallast from '../../components/GliderBallast.astro';
     <p class="crumb"><a href="/data/">Data &amp; Tools</a></p>
     <h1>Glider ballast calculator</h1>
     <p class="intro">
-      A glider flies by being slightly the wrong weight on purpose. Ballasting
-      sets the fixed part of that so the buoyancy engine's own travel straddles
-      neutral across the water the vehicle will actually fly in — and the
-      densities come from the same
+      A glider changes depth by changing its buoyancy. Ballasting sets the
+      vehicle's fixed mass so the buoyancy engine's travel spans neutral across
+      the water it will fly in. Densities here come from the same
       full-precision <a href="/data/seawater/">TEOS-10 engine</a> as the
-      seawater calculator, not from a table.
+      seawater calculator.
     </p>
 
     <Disclaimer tool="calculator">
-      That matters more here than on most pages: a wrong ballast figure risks
-      a vehicle. Treat what this gives you as the starting point for a tank
-      test, never as a substitute for one — and note that the vehicle numbers
-      it ships are stand-ins, not manufacturer data.
+      The vehicle values it ships are illustrative, not manufacturer data, and
+      the result is an input to a tank test rather than a replacement for one.
     </Disclaimer>
 
     <GliderBallast />
@@ -34,83 +31,78 @@ import GliderBallast from '../../components/GliderBallast.astro';
 
       <ol>
         <li>
-          Pick your vehicle, then <strong>replace every number in the glider
-          panel</strong> from your own ballast sheet or tank test. The ones
-          that ship are stand-ins.
+          Select the vehicle, then replace the values in the glider panel with
+          those from your ballast sheet or tank test. The values that ship are
+          illustrative.
         </li>
         <li>
-          Enter the tank water. If you have floated the glider and read a
-          scale, put that in <em>Measured buoyancy</em> — that reading is a
-          better measure of the vehicle's mass than any figure on paper, and
-          the mass box will follow it.
+          Enter the tank water. A measured tank buoyancy, if you have one,
+          determines the vehicle's mass, and the mass field follows it.
         </li>
         <li>
           Enter the three water points from a cast, a climatology or a
           forecast: the surface, the mixed layer, and the deepest inflection
-          the mission will use.
+          of the mission.
         </li>
         <li>
-          Choose which one to be neutral at, and read the ballast change.
+          Select which point to be neutral at. The ballast change is the
+          result.
         </li>
       </ol>
 
-      <h2>What it is doing</h2>
+      <h2>What it does</h2>
 
       <h3>One equation</h3>
       <p>
-        Buoyancy is the weight of the water displaced less the weight of the
+        Buoyancy is the weight of water displaced less the weight of the
         vehicle: <code>B = ρ(S<sub>A</sub>, t, p) · V(t, p) − m</code>. The
-        density is TEOS-10's, in situ — at the actual pressure and temperature,
-        not at the surface. The displaced volume is your hull's, moved by its
-        compressibility and its thermal expansion.
+        density is in situ, at the point's own pressure and temperature. The
+        displaced volume is the hull's, adjusted by its compressibility and
+        thermal expansion.
       </p>
       <p>
-        Ballasting for a point means setting <code>m</code> so
-        that <code>B</code> is zero there. Everything else on the page follows
-        from that one line.
+        Ballasting for a point sets <code>m</code> so that <code>B</code> is
+        zero there. The rest of the page follows from that.
       </p>
 
-      <h3>Which way the hull moves against the water</h3>
+      <h3>Buoyancy against depth</h3>
       <p>
-        This is the part most often had backwards, and it is not a fact about
-        gliders — it is a comparison between two numbers. If your hull
-        compresses <em>less</em> per dbar than seawater does, the glider gains
-        buoyancy on the way down; if more, it loses it. Seawater is about
-        4.3×10<sup>-6</sup> per dbar. The page states the answer for your
-        vehicle in grams per 100 dbar rather than leaving it to a rule of
-        thumb, and does the same for a five-degree change in temperature.
+        Whether a glider gains or loses buoyancy with depth is a comparison
+        between two compressibilities rather than a property of gliders. A hull
+        that compresses less per dbar than seawater gains buoyancy on descent;
+        one that compresses more loses it. Seawater is about
+        4.3×10<sup>-6</sup> per dbar. The page reports the result for the
+        entered vehicle in grams per 100 dbar, and does the same for a
+        five-degree change in temperature.
       </p>
 
       <h3>Surfacing and diving</h3>
       <p>
-        Reaching neutral is not the question that decides a mission. The
-        engine has to have enough travel to be <em>positive</em> at the
-        shallowest point and <em>negative</em> at the deepest one, with the
-        pump at its stops. Those two margins are computed at the shallowest
-        and deepest of the three points you entered — not at whichever you
-        listed first — and a vehicle that cannot do both gets a warning rather
-        than a ballast figure that flies nothing.
+        Neutral buoyancy at one point is not sufficient. The engine also needs enough travel to be positive at the shallowest point and
+        negative at the deepest, with the pump at its stops. Both margins are
+        computed at the shallowest and deepest of the three entered points, by
+        pressure rather than by the order they were entered. A vehicle that
+        cannot do both is reported as a warning.
       </p>
 
       <h3>Where it stops</h3>
       <p>
         The hull model is first order in pressure and in temperature, which is
-        all a ballast sheet's two coefficients can support. It does not know
-        about oil volume moving with temperature, air trapped in the fairing,
-        fresh-water absorption by foam, or the vehicle's attitude. It assumes
-        the three water points describe the water the glider will meet, which
-        is a forecast and not a measurement. Treat the answer as the starting
-        point for a tank test, not a substitute for one.
+        what a ballast sheet's two coefficients support. It does not account
+        for oil volume changing with temperature, air trapped in the fairing,
+        water absorption by foam, or vehicle attitude. It takes the three water
+        points as given. The result is an input to a tank test, not a
+        replacement for one.
       </p>
 
       <h3>Credits</h3>
       <p>
         Densities from TEOS-10 — see
-        the <a href="/data/seawater/">seawater calculator</a> for what that means
-        and how it is checked. The ballast arithmetic is ours, and so is any
-        error in it; there is no published standard for this the way there is
-        for the equation of state, so it is held to identities, to TEOS-10's
-        own compressibility, and to sums anybody can redo on paper.
+        the <a href="/data/seawater/">seawater calculator</a> for what that
+        covers and how it is checked. The ballast arithmetic is this site's
+        own. There is no published standard for it as there is for the equation
+        of state, so it is checked against identities, against TEOS-10's
+        compressibility, and against hand calculations.
       </p>
     </section>
   </div>

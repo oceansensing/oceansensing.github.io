@@ -26,20 +26,21 @@ const software = (await getCollection('software')).sort(byTitle);
         <li>
           <h3><a href="/data/seawater/">Seawater calculator</a></h3>
           <p>
-            Every thermodynamic property of seawater at full TEOS-10 precision
-            — density, sound speed, enthalpy, entropy, the freezing point —
-            evaluated from the Gibbs function rather than approximated, with
-            the Absolute Salinity anomaly applied from position.
+            Every thermodynamic property of seawater at full TEOS-10
+            precision — density, sound speed, enthalpy, entropy, the freezing
+            point — evaluated from the Gibbs function rather than from a
+            polynomial fit, with the Absolute Salinity anomaly applied from
+            position.
           </p>
           <p class="meta">TEOS-10 · runs in your browser</p>
         </li>
         <li>
           <h3><a href="/data/glider-ballast/">Glider ballast calculator</a></h3>
           <p>
-            How much lead to add, what the glider should then read in the
-            tank, and whether the buoyancy engine can cover the water it will
-            fly in — against in-situ TEOS-10 density at the surface, the
-            mixed layer and the deepest inflection.
+            Ballast change, the resulting tank reading, and whether the
+            buoyancy engine spans neutral across the water the vehicle will
+            fly in — against in-situ TEOS-10 density at the surface, the mixed
+            layer and the deepest inflection.
           </p>
           <p class="meta">TEOS-10 · runs in your browser</p>
         </li>
