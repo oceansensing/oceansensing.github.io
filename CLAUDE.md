@@ -4283,6 +4283,82 @@ Bugs worth not repeating, all found by looking rather than by a gate:
   describing a value that varies` shape from the list at the end of this file,
   met again.
 
+### What the page remembers, and the order it believes things in
+
+The inputs are kept in `localStorage`, so a return visit opens where the last
+one left off. Not `sessionStorage`: the promise is "next time", which is a
+different one from the map's saved view, and it is the same store the theme
+toggle uses so clearing site data clears both.
+
+**A link outranks the memory, which outranks the defaults, and that order is
+load-bearing.** Someone sends you a view and you have to see *theirs* — a
+stored state quietly winning would make the link feature untrustworthy in the
+one case it exists for. Same precedence the map settled on.
+
+**The whole input state, not only the two fields asked for.** Remembering
+salinity and temperature but resetting pressure would hand back a hybrid
+nobody was looking at, and dropping the position would silently turn the
+Absolute Salinity they left with back into Reference Salinity — which is
+precisely the substitution this page refuses to make anywhere else. The cost
+is that a returning reader who had entered a position fetches the 188 KB
+atlas on arrival; a reader who never entered one still fetches nothing.
+
+**Reset forgets as a consequence rather than as a second step.** `remember`
+stores nothing when the state *is* the defaults, so Reset clearing the memory
+falls out of what it already does. Two code paths saying the same thing would
+eventually disagree, and the map's saved view has a note about exactly this
+failure — reset, then reload, and everything comes back.
+
+**One definition of a valid state, shared with the link codec.** Both a link
+and a stored state have been outside this page's control — one through a chat
+client, the other written by an older version of this file — so both go
+through `sanitise`, which drops what it cannot read rather than refusing the
+whole thing. That closed a real hole: kinds used to be taken verbatim, so
+`#salinityKind=nonsense` fell through the engine's switch and produced
+Standard Seawater with no Practical Salinity at all. Plausible-looking, and
+wrong.
+
+**The restore notice is held until the reader touches something**, and that
+is a measurement rather than a preference. Four seconds suits "Copied",
+because the reader is looking at the button they just pressed. Measured in a
+browser, a returning reader had not looked at the page for **29 seconds** —
+so the transient version took away the only sentence explaining why the
+numbers were not the defaults, 25 seconds before it was read.
+
+**`test:seawater` had to grow a second page load for this**, since the whole
+point is what happens on the *next* visit: `reopen()` builds a fresh document
+with the storage already in it and imports the bundle again behind a query
+string, because `import` of the same specifier returns the same instance and
+would re-run nothing. jsdom scopes `localStorage` per instance rather than per
+origin, so "the same browser" is copied across by hand — the one simulated
+part, which is why the *writing* half is checked against the live store
+instead.
+
+**Node has no `localStorage` without `--localstorage-file`, and the page
+wraps every storage call in a try/catch** so private browsing still gets a
+working calculator. Leave it out of the harness realm and every call throws
+ReferenceError, every catch swallows it, and every check passes against a
+feature that never ran. It is in the list with a comment saying so.
+
+### Conductivity was already an input, and nobody could find it
+
+Reported as missing. It had been there from the first build, gated by a
+check that a conductivity resolves back to the salinity it came from — in a
+menu labelled **Salinity**.
+
+That is the same failure as the density label above, in a control rather than
+a readout: the label named one of the two things the field takes, so a reader
+holding a conductivity had no reason to open the menu. It is
+`Salinity or conductivity` now, and the options are in `<optgroup>`s so the
+menu says which are which when it opens.
+
+**The value boxes carry no visible label of their own** — the label belongs to
+the menu beside them — so their accessible name is the only thing telling a
+screen reader what the number is, and it now follows the selected kind.
+Written once as "Salinity value" it said the wrong thing the moment anyone
+picked conductivity: the label-written-once trap, in the one place a sighted
+reader cannot see it.
+
 **The T–S diagram is contoured, not fitted.** `contour.ts` is marching
 squares — there was one in this repository before, deleted when the sea-ice
 edge it served was removed; this is not it brought back, since it traces many

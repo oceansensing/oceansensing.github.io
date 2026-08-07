@@ -30,14 +30,24 @@ const DEFAULTS = {
 
 const initial = evaluate(DEFAULTS);
 
-const SALINITY_KINDS = [
-  ['SP', 'Practical Salinity'],
-  ['SA', 'Absolute Salinity (g/kg)'],
-  ['SR', 'Reference Salinity (g/kg)'],
-  ['Sstar', 'Preformed Salinity (g/kg)'],
-  ['C', 'Conductivity (mS/cm)'],
-  ['R', 'Conductivity ratio'],
-  ['SK', 'Knudsen Salinity'],
+/* Grouped, and the field is labelled "Salinity or conductivity" rather than
+   "Salinity", because a conductivity is what a CTD actually reports and this
+   is where you enter one. Both were already accepted and neither was
+   findable: the label named one of the two things the control takes, so a
+   reader with a conductivity had no reason to open the menu. Reported as a
+   missing feature, which is what an unfindable one looks like. */
+const SALINITY_KINDS: [string, [string, string][]][] = [
+  ['Salinity', [
+    ['SP', 'Practical Salinity'],
+    ['SA', 'Absolute Salinity (g/kg)'],
+    ['SR', 'Reference Salinity (g/kg)'],
+    ['Sstar', 'Preformed Salinity (g/kg)'],
+    ['SK', 'Knudsen Salinity'],
+  ]],
+  ['Conductivity', [
+    ['C', 'Conductivity (mS/cm)'],
+    ['R', 'Conductivity ratio, C/C(35, 15 °C, 0 dbar)'],
+  ]],
 ];
 const TEMPERATURE_KINDS = [
   ['t', 'In-situ, ITS-90 (°C)'],
@@ -63,15 +73,19 @@ const headline = (key: string) => {
     <h2 class="vh">Inputs</h2>
 
     <div class="field">
-      <label for="sw-sal-kind">Salinity</label>
+      <label for="sw-sal-kind">Salinity or conductivity</label>
       <select id="sw-sal-kind" data-kind="salinity">
-        {SALINITY_KINDS.map(([v, label]) => (
-          <option value={v} selected={v === DEFAULTS.salinityKind}>{label}</option>
+        {SALINITY_KINDS.map(([group, options]) => (
+          <optgroup label={group}>
+            {options.map(([v, label]) => (
+              <option value={v} selected={v === DEFAULTS.salinityKind}>{label}</option>
+            ))}
+          </optgroup>
         ))}
       </select>
       <input
         id="sw-sal" type="number" step="any" inputmode="decimal"
-        data-value="salinity" value={DEFAULTS.salinity} aria-label="Salinity value"
+        data-value="salinity" value={DEFAULTS.salinity} aria-label="Practical Salinity"
       />
     </div>
 
@@ -617,6 +631,57 @@ const headline = (key: string) => {
     ptRef: 0, lon: null, lat: null,
   };
 
+  const FIELDS: (keyof State)[] = [
+    'salinityKind', 'salinity', 'temperatureKind', 'temperature',
+    'pressureKind', 'pressure', 'ptRef', 'lon', 'lat',
+  ];
+
+  const KINDS: Record<string, readonly string[]> = {
+    salinityKind: ['SP', 'SA', 'SR', 'Sstar', 'C', 'R', 'SK'],
+    temperatureKind: ['t', 't68', 'pt', 'CT'],
+    pressureKind: ['p', 'z'],
+  };
+
+  /**
+   * The one definition of what a valid input state looks like.
+   *
+   * A state can arrive from three places — a link, the browser's memory of
+   * the last visit, and the defaults — and the first two are both things that
+   * have been outside this page's control. A link has been through a chat
+   * client and whatever truncated it; a stored state may have been written by
+   * an older version of this file that named its kinds differently.
+   *
+   * So both route through here, and it **drops what it cannot read rather
+   * than refusing the whole thing**: a mangled colour of one field still
+   * leaves you looking at the right water. That matters most for the kinds,
+   * which used to be taken verbatim — `#salinityKind=nonsense` fell through
+   * the engine's switch and produced Standard Seawater with no Practical
+   * Salinity at all, which is plausible-looking and wrong.
+   */
+  function sanitise(raw: unknown): State | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const from = raw as Record<string, unknown>;
+    const out: Record<string, unknown> = { ...DEFAULTS };
+    let any = false;
+
+    for (const key of FIELDS) {
+      const v = from[key];
+      if (v === undefined) continue;
+      const allowed = KINDS[key];
+      if (allowed) {
+        if (typeof v === 'string' && allowed.includes(v)) { out[key] = v; any = true; }
+        continue;
+      }
+      /* An empty box round-trips as null through JSON, and restoring a page
+         with no salinity on it helps nobody — so a missing number falls back
+         to the default for that field rather than to blank. */
+      if (v === null || v === '') continue;
+      const n = Number(v);
+      if (Number.isFinite(n)) { out[key] = n; any = true; }
+    }
+    return any ? (out as State) : null;
+  }
+
   for (const host of document.querySelectorAll<HTMLElement>('[data-seawater]')) {
     start(host);
   }
@@ -748,8 +813,25 @@ const headline = (key: string) => {
 
       drawDiagram(result.sa, result.groups, result.p);
       syncHash();
+      remember(state);
+      nameInputs();
       wantAtlas();
       batchHint();
+    }
+
+    /* The three value boxes have no visible label of their own — the label
+       belongs to the menu beside them — so their accessible name has to
+       follow whichever kind is selected. Written once as "Salinity value" it
+       said the wrong thing the moment a reader picked conductivity, which is
+       the label-written-once trap in the one place sighted readers cannot
+       see it. */
+    function nameInputs() {
+      for (const what of ['salinity', 'temperature', 'pressure'] as const) {
+        const menu = find<HTMLSelectElement>(`[data-kind="${what}"]`)!;
+        const box = find<HTMLInputElement>(`[data-value="${what}"]`)!;
+        const chosen = menu.selectedOptions[0]?.textContent?.trim();
+        if (chosen) box.setAttribute('aria-label', chosen);
+      }
     }
 
     // ---- the T-S diagram -------------------------------------------------
@@ -907,11 +989,6 @@ const headline = (key: string) => {
 
     // ---- the address bar -------------------------------------------------
 
-    const FIELDS: (keyof State)[] = [
-      'salinityKind', 'salinity', 'temperatureKind', 'temperature',
-      'pressureKind', 'pressure', 'ptRef', 'lon', 'lat',
-    ];
-
     function syncHash() {
       const q = new URLSearchParams();
       for (const f of FIELDS) {
@@ -929,28 +1006,66 @@ const headline = (key: string) => {
     function fromHash(): State | null {
       const raw = window.location.hash.replace(/^#/, '');
       if (!raw || !raw.includes('=')) return null;
-      const q = new URLSearchParams(raw);
-      const s: State = { ...DEFAULTS };
-      let any = false;
-      for (const f of FIELDS) {
-        const v = q.get(f);
-        if (v === null) continue;
-        any = true;
-        if (f.endsWith('Kind')) (s as Record<string, unknown>)[f] = v;
-        else {
-          const n = Number(v);
-          (s as Record<string, unknown>)[f] = Number.isFinite(n) ? n : null;
-        }
+      return sanitise(Object.fromEntries(new URLSearchParams(raw)));
+    }
+
+    // ---- what the browser remembers of the last visit ---------------------
+
+    const REMEMBERED = 'seawater-inputs';
+
+    /* `localStorage`, not `sessionStorage`: the point is that the page comes
+       back the way it was left *next time*, which is a different promise from
+       the map's saved view — that one only has to survive an hourly reload.
+       Same storage the theme toggle already uses, so a reader clearing site
+       data clears both together.
+
+       Every call is wrapped. Storage throws outright in some private-browsing
+       modes and on a full quota, and a calculator that refuses to start
+       because it could not write 200 bytes is a worse answer than one that
+       calculates and forgets. */
+    function remembered(): State | null {
+      try {
+        return sanitise(JSON.parse(localStorage.getItem(REMEMBERED) ?? 'null'));
+      } catch {
+        return null;
       }
-      return any ? s : null;
+    }
+
+    function remember(s: State) {
+      try {
+        /* Remembering the defaults is the same as remembering nothing, so it
+           stores nothing — which is also the whole of what makes Reset stick.
+           Clearing it there as well would be a second code path saying the
+           same thing, and the two would eventually disagree. */
+        if (FIELDS.every((f) => s[f] === DEFAULTS[f])) localStorage.removeItem(REMEMBERED);
+        else localStorage.setItem(REMEMBERED, JSON.stringify(s));
+      } catch {
+        /* Nothing to do, and nothing worth saying: the reader did not ask to
+           be remembered, so failing to remember them is not an error. */
+      }
     }
 
     // ---- copy, CSV, share ------------------------------------------------
 
     const table = (): Quantity[] => (last ? last.groups.flatMap((g: Group) => g.rows) : []);
 
-    function say(what: string) {
+    /**
+     * Feedback under the buttons.
+     *
+     * `keep` holds it until the reader touches something instead of clearing
+     * it after four seconds, and the difference is not cosmetic. "Copied" is
+     * about an action just taken, so the reader is looking; the restore
+     * notice is about how the page *opened*, and a returning reader may not
+     * look at it for half a minute — measured at 29 s in one check, by which
+     * time the only sentence explaining why the numbers are not the defaults
+     * had been gone for 25 of them.
+     */
+    let sticky = false;
+
+    function say(what: string, keep = false) {
       said.textContent = what;
+      sticky = keep;
+      if (keep) return;
       window.setTimeout(() => { if (said.textContent === what) said.textContent = ''; }, 4000);
     }
 
@@ -1079,8 +1194,18 @@ const headline = (key: string) => {
 
     // ---- wiring ----------------------------------------------------------
 
-    form.addEventListener('input', paint);
-    form.addEventListener('change', paint);
+    function onEdit() {
+      /* The first edit is what dismisses a held message: the reader has seen
+         the page, so the sentence explaining how it opened has done its job. */
+      if (sticky) {
+        said.replaceChildren();
+        sticky = false;
+      }
+      paint();
+    }
+
+    form.addEventListener('input', onEdit);
+    form.addEventListener('change', onEdit);
     form.addEventListener('submit', (e) => e.preventDefault());
 
     host.addEventListener('click', (e) => {
@@ -1103,8 +1228,11 @@ const headline = (key: string) => {
         case 'reset':
           state = { ...DEFAULTS };
           write(state);
+          /* `paint` calls `remember`, which drops the stored state when it is
+             the defaults — so Reset forgets as a consequence of what it
+             already does, with no second place to keep in step. */
           paint();
-          say('Back to the defaults.');
+          say('Back to the defaults, and no longer remembered.');
           break;
         case 'batch':
           runBatch();
@@ -1127,11 +1255,22 @@ const headline = (key: string) => {
       paint();
     });
 
+    /* A link outranks the browser's memory, which outranks the defaults, and
+       that order is not a preference. Someone sends you a view and you have
+       to see *theirs*: a stored state quietly overriding a shared link would
+       make the link feature untrustworthy in exactly the case it exists for.
+       Same precedence the map settled on for its own saved view. */
     const shared = fromHash();
-    if (shared) {
-      state = shared;
+    const restored = shared ?? remembered();
+    if (restored) {
+      state = restored;
       write(state);
     }
     paint();
+    /* Said out loud, because a page that silently opens on numbers you did
+       not type reads as a bug rather than as a convenience — and it is the
+       only hint that Reset is the way back. Not for a link: arriving at
+       someone else's view is the thing you clicked. */
+    if (!shared && restored) say('Restored the inputs from your last visit. Reset clears them.', true);
   }
 </script>

@@ -74,20 +74,66 @@ window.fetch = async (url) => {
 /* Node defines some of these as getters on globalThis, so they are defined
    rather than assigned. The bundle runs inside jsdom's realm and reaches for
    them by bare name. */
-for (const key of [
+/* `localStorage` is in this list for a specific reason: Node does not define
+   one without `--localstorage-file`, and the page wraps every storage call in
+   a try/catch so a reader in private browsing still gets a working
+   calculator. Leave it out and every storage call throws ReferenceError,
+   every catch swallows it, and every check below passes against a feature
+   that never ran. */
+const REALM = [
   'window', 'document', 'location', 'history', 'navigator', 'Event', 'Blob',
   'URL', 'fetch', 'HTMLElement', 'SVGElement', 'Node', 'CustomEvent',
-]) {
-  Object.defineProperty(globalThis, key, { value: window[key], configurable: true, writable: true });
-}
-globalThis.getComputedStyle = window.getComputedStyle.bind(window);
+  'localStorage',
+];
+const inhabit = (w) => {
+  for (const key of REALM) {
+    Object.defineProperty(globalThis, key, { value: w[key], configurable: true, writable: true });
+  }
+  globalThis.getComputedStyle = w.getComputedStyle.bind(w);
+};
+inhabit(window);
 
 /* Imported as a module into Node's own realm rather than injected as a
    <script>, which is what `test:map` does and for the same reason: jsdom will
    not run an injected script without `runScripts: 'dangerously'`, and with it
    the bundle gets a realm whose globals are harder to stub. */
-await import('./' + bundle.replace(/^dist/, '../dist'));
+const MODULE = './' + bundle.replace(/^dist/, '../dist');
+await import(MODULE);
 await new Promise((r) => setTimeout(r, 50));
+
+/**
+ * Load the page again, as the same browser would on a later visit.
+ *
+ * A fresh document with the given storage already in it and the given
+ * fragment in the address bar, then a fresh instance of the module — the
+ * query string is what defeats the ESM cache, since `import` of the same
+ * specifier returns the same instance and would re-run nothing.
+ *
+ * jsdom scopes `localStorage` to each instance rather than to the origin, so
+ * "the same browser" is copied across by hand. That is the one thing here
+ * that is a simulation rather than the real mechanism, and it is the reason
+ * the *writing* half is checked against the live store instead.
+ */
+let visits = 0;
+async function reopen(storage, hash = '', { instantTimers = false } = {}) {
+  const dom = new JSDOM(html, {
+    url: `https://oceansensing.org/data/seawater/${hash}`,
+    pretendToBeVisual: true,
+  });
+  for (const [key, value] of Object.entries(storage)) {
+    if (value !== null) dom.window.localStorage.setItem(key, value);
+  }
+  dom.window.fetch = window.fetch;
+  /* Runs every page timer immediately, which collapses the four seconds a
+     transient message waits before clearing itself into no time at all. That
+     is the only way to tell a held message from a transient one without
+     making the gate wait four real seconds. */
+  if (instantTimers) dom.window.setTimeout = (fn) => { fn(); return 0; };
+  inhabit(dom.window);
+  await import(`${MODULE}?visit=${++visits}`);
+  await new Promise((r) => setTimeout(r, 50));
+  return dom.window.document;
+}
 
 const q = (sel) => document.querySelector(sel);
 const cell = (key) => q(`[data-row="${key}"] [data-cell]`)?.textContent;
@@ -330,14 +376,122 @@ type('[data-value="temperature"]', '10');
     `SP ${q('[data-value="salinity"]').value}, t ${cell('t')}`);
 }
 
+// ---- conductivity is an input, and has to be findable as one -----------------
+
+{
+  const menu = q('[data-kind="salinity"]');
+  const groups = [...menu.querySelectorAll('optgroup')].map((g) => g.label);
+  check('the salinity menu says which of its options are conductivities',
+    groups.includes('Conductivity'), groups.join(', ') || 'no optgroups');
+  check('and the field is labelled for both, not just salinity',
+    /conductivity/i.test(q('label[for="sw-sal-kind"]').textContent));
+
+  /* The value box has no visible label of its own, so its accessible name is
+     the only thing telling a screen reader what the number is — and it has to
+     follow the menu. Written once it said "Salinity value" while the reader
+     typed a conductivity. */
+  pick('[data-kind="salinity"]', 'C');
+  const named = q('[data-value="salinity"]').getAttribute('aria-label');
+  check('and the value box renames itself to match', /conductivity/i.test(named ?? ''), named);
+  pick('[data-kind="salinity"]', 'SP');
+  check('and back again', /practical salinity/i.test(q('[data-value="salinity"]').getAttribute('aria-label') ?? ''));
+}
+
+// ---- what the browser remembers of the last visit -----------------------------
+
+const KEY = 'seawater-inputs';
+let snapshot = {};
+{
+  /* A state nothing else in this run uses, so a value left over from an
+     earlier check cannot pass for a restored one. */
+  pick('[data-kind="salinity"]', 'C');
+  type('[data-value="salinity"]', '41.7');
+  type('[data-value="temperature"]', '6.5');
+  type('[data-value="pressure"]', '250');
+
+  const held = JSON.parse(window.localStorage.getItem(KEY) ?? 'null');
+  check('the inputs are remembered as they are typed',
+    held?.salinityKind === 'C' && held?.salinity === 41.7
+      && held?.temperature === 6.5 && held?.pressure === 250,
+    JSON.stringify(held));
+
+  snapshot = { [KEY]: window.localStorage.getItem(KEY) };
+}
+
 // ---- reset -------------------------------------------------------------------
 
+const wantedSP = cell('SP');
 q('[data-action="reset"]').dispatchEvent(new window.Event('click', { bubbles: true }));
 const afterReset = Object.fromEntries(serverRows.map((k) => [k, cell(k)]));
 const stillWrong = serverRows.filter((k) => serverValues[k] !== afterReset[k]);
 check('Reset returns every row to the state the page shipped with',
   stillWrong.length === 0,
   stillWrong.length ? `${stillWrong.length} differ: ${stillWrong.slice(0, 4)}` : '');
+
+/* Reset has to forget as well as revert, or the next visit undoes it — which
+   is the bug the map's saved view already has a note about. It falls out of
+   `remember` storing nothing when the state is the defaults, so this is
+   checking that consequence rather than a second code path. */
+check('and forgets, so the next visit does not undo it',
+  window.localStorage.getItem(KEY) === null, window.localStorage.getItem(KEY));
+
+// ---- and the next visit -------------------------------------------------------
+
+{
+  const back = await reopen(snapshot);
+  const value = (d, key) => d.querySelector(`[data-row="${key}"] [data-cell]`)?.textContent;
+  check('a later visit in the same browser comes back to those inputs',
+    back.querySelector('[data-value="salinity"]').value === '41.7'
+      && back.querySelector('[data-kind="salinity"]').value === 'C'
+      && back.querySelector('[data-value="temperature"]').value === '6.5',
+    `${back.querySelector('[data-kind="salinity"]').value} ${back.querySelector('[data-value="salinity"]').value}`);
+  check('and to the same numbers', value(back, 'SP') === wantedSP,
+    `${value(back, 'SP')} against ${wantedSP}`);
+  check('and says it did, since numbers you did not type read as a bug',
+    /last visit/i.test(back.querySelector('[data-said]').textContent));
+
+  /* Held, not transient. Measured in a browser, a returning reader had not
+     looked at the page for 29 s — so the four-second clear that suits
+     "Copied" would have taken away the only sentence explaining why the
+     numbers were not the defaults, 25 seconds before they read it. */
+  const patient = await reopen(snapshot, '', { instantTimers: true });
+  check('and holds the notice rather than clearing it after four seconds',
+    /last visit/i.test(patient.querySelector('[data-said]').textContent),
+    `"${patient.querySelector('[data-said]').textContent}"`);
+
+  const box = patient.querySelector('[data-value="temperature"]');
+  box.value = '7.5';
+  box.dispatchEvent(new patient.defaultView.Event('input', { bubbles: true }));
+  check('and drops it once the reader touches anything',
+    patient.querySelector('[data-said]').textContent === '');
+
+  /* The precedence that matters: someone sends you a link and you must see
+     *their* view, not your own. A stored state winning here would make the
+     link feature untrustworthy in the one case it exists for. */
+  const linked = await reopen(snapshot, '#salinity=12&salinityKind=SP&temperature=3');
+  check('a link outranks what the browser remembers',
+    linked.querySelector('[data-value="salinity"]').value === '12'
+      && linked.querySelector('[data-kind="salinity"]').value === 'SP',
+    `${linked.querySelector('[data-kind="salinity"]').value} ${linked.querySelector('[data-value="salinity"]').value}`);
+  check('and does not claim to have restored anything',
+    !/last visit/i.test(linked.querySelector('[data-said]').textContent));
+
+  /* Storage outlives the code that wrote it. A state from an older version
+     naming a kind this one dropped must fall back rather than reach the
+     engine, where an unknown kind falls through a switch and yields Standard
+     Seawater with no Practical Salinity — plausible-looking and wrong. */
+  const stale = await reopen({ [KEY]: '{"salinityKind":"gone","salinity":"oops","temperature":9}' });
+  check('a stale or corrupt memory is read for what it can give',
+    stale.querySelector('[data-kind="salinity"]').value === 'SP'
+      && stale.querySelector('[data-value="salinity"]').value === '35'
+      && stale.querySelector('[data-value="temperature"]').value === '9',
+    `${stale.querySelector('[data-kind="salinity"]').value} ${stale.querySelector('[data-value="salinity"]').value} ${stale.querySelector('[data-value="temperature"]').value}`);
+
+  const junk = await reopen({ [KEY]: 'not json at all' });
+  check('and unreadable storage is simply the defaults',
+    junk.querySelector('[data-value="salinity"]').value === '35'
+      && Number(junk.querySelector('[data-row="rho"] [data-cell]').textContent) > 1000);
+}
 
 console.log(`\n${failures ? `${failures} FAILED` : 'all checks passed'}`);
 process.exit(failures ? 1 : 0);
