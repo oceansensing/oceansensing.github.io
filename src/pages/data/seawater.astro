@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import Disclaimer from '../../components/Disclaimer.astro';
 import SeawaterCalculator from '../../components/SeawaterCalculator.astro';
 ---
 
@@ -22,6 +23,11 @@ import SeawaterCalculator from '../../components/SeawaterCalculator.astro';
       are all consistent with each other and with density by construction,
       rather than to within a fit's residual.
     </p>
+
+    <Disclaimer tool="calculator">
+      Where it disagrees with the reference GSW toolbox, GSW is right and this
+      is wrong.
+    </Disclaimer>
 
     <SeawaterCalculator />
 

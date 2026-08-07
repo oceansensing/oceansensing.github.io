@@ -65,21 +65,37 @@ const pages = [];
   }
 })(ROOT);
 
+/* The same defect where there is no tag to anchor on. A `<slot />` leaves no
+   element in the output — the content is spliced straight in — so a newline
+   before it is eaten with nothing for the rule above to match, which is how
+   the calculators' shared disclaimer shipped reading "acting on it.Where it
+   disagrees". Two lowercase letters, a full stop and a capital is a missing
+   sentence space, and it is exactly zero-noise on this site: measured across
+   every built page, it matches nothing that is deliberate. */
+const MISSING_SENTENCE_SPACE = /[a-z]{2}[.!?]([A-Z])/g;
+
 const problems = [];
 for (const page of pages) {
   const html = fs.readFileSync(page, 'utf8');
   for (const para of html.matchAll(PARAGRAPH)) {
+    const near = (index, length) => {
+      const at = Math.max(0, index - 45);
+      return para[1].slice(at, index + length + 25).replace(/\s+/g, ' ');
+    };
     for (const hit of para[1].matchAll(NEEDS_SPACE)) {
+      problems.push(`${page}: …${near(hit.index, hit[0].length)}…`);
+    }
+    const text = para[1].replace(/<[^>]+>/g, '');
+    for (const hit of text.matchAll(MISSING_SENTENCE_SPACE)) {
       const at = Math.max(0, hit.index - 45);
-      const context = para[1].slice(at, hit.index + hit[0].length + 25).replace(/\s+/g, ' ');
-      problems.push(`${page}: …${context}…`);
+      problems.push(`${page}: …${text.slice(at, hit.index + hit[0].length + 25).replace(/\s+/g, ' ')}…`);
     }
   }
 }
 
 const ok = problems.length === 0;
 console.log(
-  `${ok ? 'ok  ' : 'FAIL'}  ${pages.length} built pages keep the spaces around every inline element in their prose`
+  `${ok ? 'ok  ' : 'FAIL'}  ${pages.length} built pages keep the spaces their prose was written with`
 );
 for (const p of problems) console.log(`        ${p}`);
 
@@ -89,6 +105,8 @@ if (!ok) {
     + '\n  boundary — before an opening tag that starts a line, and after a'
     + '\n  closing tag that ends one. Keep the space on the same line as the'
     + '\n  tag: `from the <a …>`, and `</strong> Each` rather than a newline.'
+    + '\n  A `<slot />` leaves no tag at all, so the same applies to the line'
+    + '\n  before it — put the space on that line, not at the start of the next.'
   );
 }
 process.exit(ok ? 0 : 1);

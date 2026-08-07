@@ -4432,6 +4432,27 @@ three mutations reported "no failures" while the harness had never run at all.
 The same shape as every check-that-cannot-fail in the list below, one level
 up: **confirm the mutation reached what you think it did.**
 
+### Both calculators say they are under test
+
+`src/components/Disclaimer.astro` carries it, one component for both pages so
+the two cannot drift and so each harness has one thing to check. It is the
+only text on either page saying the answers are not warranted, and both
+`test:seawater` and `test:ballast-page` assert it is present, showing, says
+*under test* **and** *at your own risk*, disclaims warranty rather than merely
+apologising, and sits **above** the tool — `compareDocumentPosition`, because
+a disclaimer under a calculator is one the reader meets after the number.
+
+Not dismissible and not a tooltip, for the reasons the ballast page's
+illustrative-numbers caution is neither: a notice that can be closed is absent
+for everyone who closed it, and one that needs a hover is absent on a phone.
+
+**It found a third form of the whitespace trap.** A `<slot />` leaves no
+element in the output, so a newline before it is eaten with no tag for
+`test:prose` to anchor on — the shared disclaimer shipped reading "acting on
+it.Where it disagrees". The gate now also matches a full stop between two
+lowercase letters and a capital, which across every built page has exactly
+zero deliberate instances.
+
 ## The glider ballast calculator (`packages/glider-ballast/`, `/data/glider-ballast/`)
 
 The seawater calculator's engine, pointed at one job: setting a glider's lead

@@ -72,6 +72,26 @@ const pick = (sel, value) => {
   el.dispatchEvent(new window.Event('change', { bubbles: true }));
 };
 
+// ---- the disclaimer ----------------------------------------------------------
+
+{
+  /* The only text on the page saying the answers are not warranted. It is
+     checked for the same reason the ballast page's illustrative-numbers
+     caution is: a layout change could hide it and nothing else would notice,
+     and what it protects is somebody acting on a number. */
+  const note = q('[data-disclaimer]');
+  check('the page carries an under-test disclaimer', note !== null);
+  check('and it is showing, not hidden or collapsed', note !== null && note.hidden === false);
+  check('and it says both halves — under test, and at your own risk',
+    /under test/i.test(note?.textContent ?? '') && /own risk/i.test(note?.textContent ?? ''),
+    (note?.textContent ?? '').slice(0, 60));
+  check('and it disclaims warranty rather than only apologising',
+    /as-is|no warranty/i.test(note?.textContent ?? ''));
+  check('and it is above the tool, where it is read before the numbers',
+    note !== null && Boolean(note.compareDocumentPosition(q('[data-ballast]')) & 4),
+    'the disclaimer follows the calculator');
+}
+
 // ---- the caution -----------------------------------------------------------
 
 check('the illustrative-numbers caution is in the shipped HTML',

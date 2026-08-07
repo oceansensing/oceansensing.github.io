@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import Disclaimer from '../../components/Disclaimer.astro';
 import GliderBallast from '../../components/GliderBallast.astro';
 ---
 
@@ -18,6 +19,13 @@ import GliderBallast from '../../components/GliderBallast.astro';
       full-precision <a href="/data/seawater/">TEOS-10 engine</a> as the
       seawater calculator, not from a table.
     </p>
+
+    <Disclaimer tool="calculator">
+      That matters more here than on most pages: a wrong ballast figure risks
+      a vehicle. Treat what this gives you as the starting point for a tank
+      test, never as a substitute for one — and note that the vehicle numbers
+      it ships are stand-ins, not manufacturer data.
+    </Disclaimer>
 
     <GliderBallast />
 

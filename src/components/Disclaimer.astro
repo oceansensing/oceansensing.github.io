@@ -1,0 +1,46 @@
+---
+/**
+ * The standing "this is under test" notice on the calculator pages.
+ *
+ * One component rather than a paragraph on each page, so the two cannot drift
+ * apart and so the harnesses have one thing to check. It follows the dev
+ * visualizer's banner, which exists for the same reason: a page that could be
+ * mistaken for a finished product has to say that it is not.
+ *
+ * **Not dismissible, and not a tooltip.** A disclaimer that can be closed is
+ * one that is absent for every reader who closed it, and a disclaimer nobody
+ * can see on a touchscreen is absent for all of them. It sits above the tool
+ * so it is read before the numbers rather than after them.
+ *
+ * `scripts/test-seawater.mjs` and `scripts/test-ballast-page.mjs` each assert
+ * it is in the built page and showing. That is not ceremony: this is the only
+ * text on either page saying the answers are not warranted, and it would go
+ * unnoticed if a layout change hid it.
+ */
+interface Props {
+  /** What the reader is being warned about, in the sentence's own words. */
+  tool: string;
+}
+
+const { tool } = Astro.props;
+---
+
+<p class="disclaimer" role="note" data-disclaimer>
+  <strong>Under test — use at your own risk.</strong> This {tool} is new and
+  still being checked against real use. It is offered as-is, with no warranty
+  of any kind: verify anything you rely on against a source you trust, and
+  satisfy yourself that an answer is right before acting on it. <slot />
+</p>
+
+<style>
+  .disclaimer {
+    margin-block: var(--space-sm) var(--space-lg);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--border);
+    border-inline-start: 4px solid var(--accent);
+    border-radius: var(--radius);
+    background: var(--bg-subtle);
+    font-size: var(--text-sm);
+    max-width: var(--prose-width);
+  }
+</style>
