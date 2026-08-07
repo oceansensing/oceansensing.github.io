@@ -27,6 +27,9 @@ const DOCS = [
      true. Its README is the one place saying what is currently being tried
      in there, so a stale one is worse than none. */
   'packages/ocean-map-dev/README.md',
+  /* Not a map, but the same argument: it is written to be used somewhere
+     else, so its README is the hand-off and nobody reads it week to week. */
+  'packages/teos10/README.md',
 ];
 const WORKFLOW = '.github/workflows/deploy.yml';
 
@@ -66,7 +69,11 @@ for (const doc of DOCS) {
   const ticked = [...text.matchAll(/`([^`\n]+)`/g)].map((m) => m[1]);
 
   // 1. npm scripts the docs tell people to run must exist.
-  for (const m of text.matchAll(/npm run ([a-z][a-z:-]*)/g)) {
+  /* Digits are part of a script name -- `test:teos10` -- and leaving them out
+     truncated it to `test:teos`, which package.json rightly does not define.
+     A checker that reports a name nobody wrote is worse than one that misses:
+     it sends you looking for a typo in the doc. */
+  for (const m of text.matchAll(/npm run ([a-z][a-z0-9:-]*)/g)) {
     if (!pkg.scripts[m[1]]) note(doc, `refers to \`npm run ${m[1]}\`, which package.json does not define`);
   }
 

@@ -42,6 +42,16 @@ Every push to `main` deploys automatically via GitHub Actions, and a scheduled
 run rebuilds hourly to refresh the map data; the hurricane page picks that up
 on its own without losing your place on the map.
 
+There is also a
+[**seawater calculator**](https://oceansensing.org/data/seawater/) under Data
+& Tools: every thermodynamic property at full TEOS-10 precision, evaluated
+from the Gibbs function rather than from the 75-term polynomial, with the
+Absolute Salinity anomaly applied from position. It runs entirely in the
+browser. The physics is
+**[`packages/teos10`](packages/teos10/)** — another workspace package,
+DOM-free and renderer-independent, checked against the GSW reference
+implementation on every build.
+
 ## Editing content
 
 All content lives in Markdown and data files — you never need to touch
@@ -57,6 +67,7 @@ layout code:
 | a past project     | set `status: completed` in the project's frontmatter — the Research page moves it to a "Past projects" section automatically |
 | a dataset          | new entry in `src/data/datasets.yaml`                         |
 | a software tool    | new entry in `src/data/software.yaml`                         |
+| a seawater property | one entry in `packages/teos10/index.ts`'s `build()`, and a check in `scripts/test-teos10.mjs` — the label, unit and precision live with the physics so the screen, the clipboard and the CSV cannot disagree |
 | a significant observation | new `.md` file in `src/content/observations/` — add `map: assets` for the live asset map, or `surveys:` entries for dated photo panels |
 | a CV item          | new entry in the matching `src/data/cv/<person>/*.yaml` file (grants, advising, service, …) — publications and presentations flow in automatically |
 | a member's CV      | new directory `src/data/cv/<person-id>/` (id matching their file in `src/content/people/`) with any of the section files — their page appears at `/cv/<person-id>/` |

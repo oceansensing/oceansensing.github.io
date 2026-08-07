@@ -3697,8 +3697,16 @@ const checks = [
      decision, it is an oversight waiting to happen, so the exemption is a
      named list. A third map package appearing here fails this until someone
      says which side of the line it is on. */
-  ['every map package is either gated or knowingly exempt', (() => {
-    const KNOWN = { 'ocean-map': 'gated', 'ocean-map-dev': 'sandbox, exempt' };
+  ['every package is either gated as a map or knowingly not one', (() => {
+    const KNOWN = {
+      'ocean-map': 'gated',
+      'ocean-map-dev': 'sandbox, exempt',
+      /* Not a map at all — TEOS-10 seawater thermodynamics, drawing nothing
+         and importing no renderer. It has its own gate, `test:teos10`, and
+         none of the rules below apply to it. Listed here so that stays a
+         decision rather than an oversight. */
+      teos10: 'not a map; gated by test:teos10',
+    };
     const found = fs.readdirSync('packages', { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => e.name);

@@ -1,0 +1,12 @@
+{
+  "name": "@c4po/teos10",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TEOS-10 seawater thermodynamics, evaluated from the Gibbs function",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./atlas": "./atlas.ts",
+    "./gibbs": "./gibbs.ts"
+  }
+}

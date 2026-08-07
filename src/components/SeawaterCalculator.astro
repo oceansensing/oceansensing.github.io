@@ -1,0 +1,1133 @@
+---
+/**
+ * The TEOS-10 seawater calculator.
+ *
+ * Markup and styling here; every number comes from `@c4po/teos10`, which
+ * imports no DOM and is gated by `npm run test:teos10`. The split is the same
+ * one the map keeps: this file decides what the tool looks like and the
+ * package decides what is true.
+ *
+ * **It renders its default state at build time.** The results below are real
+ * HTML in the deployed page, not a skeleton waiting for JavaScript, so the
+ * page arrives with a worked example already on it and nothing shifts when
+ * the script loads. It costs one duplicated render -- the loop in this
+ * template and `paint()` in the script must agree -- which is a real cost and
+ * is why `test:seawater` checks that the two produce the same rows.
+ */
+import { evaluate, formatValue, type Group } from '@c4po/teos10';
+
+/* Standard Seawater at 10 degrees and a kilometre down: a defensible middle
+   of the ocean, and a state whose numbers an oceanographer will recognise
+   well enough to spot a broken page at a glance. */
+const DEFAULTS = {
+  salinityKind: 'SP' as const,
+  salinity: 35,
+  temperatureKind: 't' as const,
+  temperature: 10,
+  pressureKind: 'p' as const,
+  pressure: 1000,
+};
+
+const initial = evaluate(DEFAULTS);
+
+const SALINITY_KINDS = [
+  ['SP', 'Practical Salinity'],
+  ['SA', 'Absolute Salinity (g/kg)'],
+  ['SR', 'Reference Salinity (g/kg)'],
+  ['Sstar', 'Preformed Salinity (g/kg)'],
+  ['C', 'Conductivity (mS/cm)'],
+  ['R', 'Conductivity ratio'],
+  ['SK', 'Knudsen Salinity'],
+];
+const TEMPERATURE_KINDS = [
+  ['t', 'In-situ, ITS-90 (°C)'],
+  ['t68', 'In-situ, IPTS-68 (°C)'],
+  ['pt', 'Potential (°C)'],
+  ['CT', 'Conservative (°C)'],
+];
+const PRESSURE_KINDS = [
+  ['p', 'Sea pressure (dbar)'],
+  ['z', 'Depth (m)'],
+];
+
+/* The five a reader looks at first. Everything else is below, in full. */
+const HEADLINE = ['SA', 'CT', 'rho', 'sigma0', 'c'];
+const headline = (key: string) => {
+  const row = initial.groups.flatMap((g: Group) => g.rows).find((q) => q.key === key)!;
+  return { ...row, text: formatValue(row) };
+};
+---
+
+<div class="calc" data-seawater>
+  <form class="panel inputs" data-inputs autocomplete="off">
+    <h2 class="vh">Inputs</h2>
+
+    <div class="field">
+      <label for="sw-sal-kind">Salinity</label>
+      <select id="sw-sal-kind" data-kind="salinity">
+        {SALINITY_KINDS.map(([v, label]) => (
+          <option value={v} selected={v === DEFAULTS.salinityKind}>{label}</option>
+        ))}
+      </select>
+      <input
+        id="sw-sal" type="number" step="any" inputmode="decimal"
+        data-value="salinity" value={DEFAULTS.salinity} aria-label="Salinity value"
+      />
+    </div>
+
+    <div class="field">
+      <label for="sw-temp-kind">Temperature</label>
+      <select id="sw-temp-kind" data-kind="temperature">
+        {TEMPERATURE_KINDS.map(([v, label]) => (
+          <option value={v} selected={v === DEFAULTS.temperatureKind}>{label}</option>
+        ))}
+      </select>
+      <input
+        id="sw-temp" type="number" step="any" inputmode="decimal"
+        data-value="temperature" value={DEFAULTS.temperature} aria-label="Temperature value"
+      />
+    </div>
+
+    <div class="field">
+      <label for="sw-pres-kind">Pressure</label>
+      <select id="sw-pres-kind" data-kind="pressure">
+        {PRESSURE_KINDS.map(([v, label]) => (
+          <option value={v} selected={v === DEFAULTS.pressureKind}>{label}</option>
+        ))}
+      </select>
+      <input
+        id="sw-pres" type="number" step="any" inputmode="decimal"
+        data-value="pressure" value={DEFAULTS.pressure} aria-label="Pressure value"
+      />
+    </div>
+
+    <div class="field position">
+      <label for="sw-lon">Position</label>
+      <input
+        id="sw-lon" type="number" step="any" inputmode="decimal" placeholder="longitude °E"
+        data-value="lon" aria-label="Longitude, degrees east"
+      />
+      <input
+        id="sw-lat" type="number" step="any" inputmode="decimal" placeholder="latitude °N"
+        data-value="lat" aria-label="Latitude, degrees north"
+      />
+    </div>
+
+    <p class="hint" data-atlas-state>
+      A position turns Reference Salinity into Absolute Salinity, and fixes the
+      gravity used for depth. The anomaly atlas is fetched only when you enter one.
+    </p>
+
+    <div class="field ptref">
+      <label for="sw-ptref">Reference pressure</label>
+      <input
+        id="sw-ptref" type="number" step="any" inputmode="decimal"
+        data-value="ptRef" value="0" aria-label="Reference pressure for potential temperature, dbar"
+      />
+      <span class="unit">dbar, for potential temperature</span>
+    </div>
+
+    <div class="actions">
+      <button type="button" data-action="copy">Copy</button>
+      <button type="button" data-action="csv">Download CSV</button>
+      <button type="button" data-action="share">Copy link</button>
+      <button type="button" data-action="reset">Reset</button>
+    </div>
+    <p class="said" data-said role="status" aria-live="polite"></p>
+  </form>
+
+  <div class="panel summary">
+    <h2 class="vh">Summary</h2>
+    <dl class="headline" data-headline>
+      {HEADLINE.map((key) => {
+        const q = headline(key);
+        return (
+          <div data-headline-row={key}>
+            <dt>{q.label}</dt>
+            <dd><b data-headline-value>{q.text}</b><span class="unit">{q.unit}</span></dd>
+          </div>
+        );
+      })}
+    </dl>
+
+    <figure class="ts">
+      <svg data-ts viewBox="0 0 460 340" role="img" aria-label="Temperature–salinity diagram with potential density contours"></svg>
+      <figcaption data-ts-caption>
+        Absolute Salinity against Conservative Temperature, with σ₀ contours
+        and the freezing point at this pressure.
+      </figcaption>
+    </figure>
+
+    <div class="messages" data-messages>
+      {initial.notes.map((n: string) => <p class="note">{n}</p>)}
+      {initial.warnings.map((w: string) => <p class="warn">{w}</p>)}
+    </div>
+  </div>
+
+  <div class="panel results" data-results>
+    <h2 class="vh">All properties</h2>
+    {initial.groups.map((group: Group) => (
+      <section data-group>
+        <h3>{group.title}</h3>
+        <dl>
+          {group.rows.map((q) => (
+            <div data-row={q.key} title={q.note ?? ''}>
+              <dt>{q.label}</dt>
+              <dd><span data-cell>{formatValue(q)}</span><span class="unit">{q.unit}</span></dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    ))}
+  </div>
+
+  <details class="panel batch" data-batch>
+    <summary>Convert a column of measurements</summary>
+    <p class="hint">
+      Paste rows of <b data-batch-order>salinity, temperature, pressure</b> — commas,
+      tabs or spaces, one sample per line, a header row if you like. Add two more
+      columns for longitude and latitude. The units are whichever you chose above.
+    </p>
+    <textarea
+      data-batch-input rows="6" spellcheck="false"
+      placeholder={'35.0, 10.0, 1000\n34.7, 4.2, 2000\n34.9, 12.1, 50'}></textarea>
+    <div class="actions">
+      <button type="button" data-action="batch">Convert</button>
+      <button type="button" data-action="batch-csv">Download CSV</button>
+    </div>
+    <p class="said" data-batch-said role="status" aria-live="polite"></p>
+    <div class="batch-out" data-batch-out></div>
+  </details>
+</div>
+
+<style>
+  .calc {
+    display: grid;
+    gap: var(--space-md);
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  @media (min-width: 60rem) {
+    .calc {
+      grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr);
+    }
+    .inputs { grid-column: 1; }
+    .summary { grid-column: 2; grid-row: 1 / span 2; }
+    .results { grid-column: 1 / -1; }
+    .batch { grid-column: 1 / -1; }
+  }
+
+  .panel {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-md);
+  }
+
+  .vh {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* ---- inputs ---- */
+
+  .field {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-2xs);
+    margin-block-end: var(--space-sm);
+  }
+
+  .field label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .field select,
+  .field input {
+    font: inherit;
+    font-size: var(--text-sm);
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.45em 0.6em;
+    /* iOS Safari restyles both of these to its own rounded grey box, which
+       overrides background and border-radius together. The map's chrome has
+       the same line for the same reason, and it only shows on a real phone. */
+    appearance: none;
+  }
+
+  .field input {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .field select {
+    /* The arrow the appearance reset just removed. */
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+      linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+    background-position: right 1.05em top 55%, right 0.75em top 55%;
+    background-size: 0.33em 0.33em, 0.33em 0.33em;
+    background-repeat: no-repeat;
+    padding-inline-end: 2em;
+  }
+
+  .field select:focus-visible,
+  .field input:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .position,
+  .ptref {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .position label,
+  .ptref label {
+    grid-column: 1 / -1;
+  }
+
+  .ptref .unit {
+    align-self: center;
+  }
+
+  .hint {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-block: var(--space-xs) var(--space-md);
+  }
+
+  .unit {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2xs);
+    margin-block-start: var(--space-sm);
+  }
+
+  button {
+    font: inherit;
+    font-size: var(--text-sm);
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.45em 0.8em;
+    cursor: pointer;
+    appearance: none;
+  }
+
+  button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .said {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-block-start: var(--space-2xs);
+    min-height: 1.4em;
+  }
+
+  /* ---- summary ---- */
+
+  .headline {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: var(--space-sm);
+    margin: 0 0 var(--space-md);
+  }
+
+  /* The five values line up on one baseline even though "Conservative
+     Temperature" takes two lines and "Density" takes one: the label reserves
+     the height of two, so a longer name does not shove its own number down
+     past its neighbours'. */
+  .headline dt {
+    font-size: var(--text-sm);
+    line-height: 1.3;
+    min-height: 2.6em;
+    color: var(--text-muted);
+    margin-block-end: 0.15em;
+  }
+
+  .headline dd {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.35em;
+    white-space: nowrap;
+  }
+
+  .headline b {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: var(--text-lg);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  .ts {
+    margin: 0 0 var(--space-sm);
+  }
+
+  .ts svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .ts figcaption {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-block-start: var(--space-2xs);
+  }
+
+  /* The diagram carries no colour of its own: every stroke is a token, so a
+     theme switch restyles it with no redraw. Same rule as the map's vectors. */
+  :global(.ts .iso) {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 1;
+  }
+
+  :global(.ts .iso-label),
+  :global(.ts .axis-label),
+  :global(.ts .tick-label) {
+    fill: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 9px;
+  }
+
+  :global(.ts .axis-title) {
+    fill: var(--text-muted);
+    font-family: var(--font-sans);
+    font-size: 10px;
+  }
+
+  /* `fill: none` on every stroked path, and it is not optional: an SVG path
+     fills by default, so the two-legged axis renders as a solid black
+     triangle over the diagram. It shipped that way for one browser check. */
+  :global(.ts .axis) {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 1;
+  }
+
+  :global(.ts .freeze) {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    stroke-dasharray: 5 3;
+  }
+
+  :global(.ts .sample) {
+    fill: var(--accent);
+    stroke: var(--bg);
+    stroke-width: 2;
+  }
+
+  :global(.ts .crosshair) {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1;
+    stroke-dasharray: 2 2;
+    opacity: 0.6;
+  }
+
+  .messages p {
+    font-size: var(--text-sm);
+    margin: 0 0 var(--space-2xs);
+    padding-inline-start: var(--space-sm);
+    border-inline-start: 3px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  .messages .warn {
+    border-inline-start-color: var(--accent);
+    color: var(--text);
+  }
+
+  /* ---- results ---- */
+
+  .results section {
+    margin-block-end: var(--space-md);
+  }
+
+  .results section:last-child {
+    margin-block-end: 0;
+  }
+
+  .results h3 {
+    font-size: var(--text-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-2xs);
+    padding-block-end: var(--space-2xs);
+    border-block-end: 1px solid var(--border);
+  }
+
+  .results dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+    column-gap: var(--space-md);
+  }
+
+  .results dl > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-xs);
+    padding-block: 0.28em;
+    border-block-end: 1px dotted var(--border);
+  }
+
+  .results dt {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    min-width: 0;
+  }
+
+  .results dd {
+    margin: 0;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .results dd [data-cell] {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: var(--text-sm);
+  }
+
+  .results dd .unit {
+    display: inline-block;
+    min-width: 4.2em;
+    text-align: left;
+    margin-inline-start: 0.4em;
+  }
+
+  /* ---- batch ---- */
+
+  .batch summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .batch textarea {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    width: 100%;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.6em;
+    appearance: none;
+  }
+
+  .batch-out {
+    overflow-x: auto;
+    margin-block-start: var(--space-sm);
+  }
+
+  :global(.batch-out table) {
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+  }
+
+  :global(.batch-out th),
+  :global(.batch-out td) {
+    padding: 0.25em 0.7em 0.25em 0;
+    text-align: right;
+    white-space: nowrap;
+    border-block-end: 1px solid var(--border);
+  }
+
+  :global(.batch-out th) {
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  /* ---- phones ----
+     Bigger targets. Measured at 375 px the controls came out 35 px tall
+     against the 44 px both Apple and WCAG ask for, and this is the one page
+     on the site where a reader taps a dozen small controls in a row rather
+     than following a link.
+
+     **It has to sit at the end of the sheet**, below every rule it overrides.
+     The base `button` rule sets the `padding` shorthand at one-selector
+     specificity, which is what this has too — so source order decides, and
+     written higher up it silently loses for the buttons alone while working
+     for the inputs. Same cascade trap the map's basemap block has a note
+     about, and it was found by measuring the tap targets rather than by
+     reading the CSS. */
+  @media (max-width: 48rem) {
+    .field select,
+    .field input,
+    .batch textarea,
+    button {
+      padding-block: 0.78em;
+    }
+  }
+</style>
+
+<script>
+  import {
+    contour, evaluate, formatValue, levels, loadAtlas, ptFromCT, density,
+    freezingCT, ATLAS_URL,
+    type Group, type Input, type Quantity, type SalinityAtlas,
+  } from '@c4po/teos10';
+
+  type State = {
+    salinityKind: Input['salinityKind'];
+    salinity: number;
+    temperatureKind: Input['temperatureKind'];
+    temperature: number;
+    pressureKind: Input['pressureKind'];
+    pressure: number;
+    ptRef: number;
+    lon: number | null;
+    lat: number | null;
+  };
+
+  const DEFAULTS: State = {
+    salinityKind: 'SP', salinity: 35,
+    temperatureKind: 't', temperature: 10,
+    pressureKind: 'p', pressure: 1000,
+    ptRef: 0, lon: null, lat: null,
+  };
+
+  for (const host of document.querySelectorAll<HTMLElement>('[data-seawater]')) {
+    start(host);
+  }
+
+  function start(host: HTMLElement) {
+    const find = <T extends Element>(sel: string) => host.querySelector<T>(sel);
+    const all = <T extends Element>(sel: string) => [...host.querySelectorAll<T>(sel)];
+
+    const form = find<HTMLFormElement>('[data-inputs]')!;
+    const results = find<HTMLElement>('[data-results]')!;
+    const messages = find<HTMLElement>('[data-messages]')!;
+    const svg = find<SVGSVGElement>('[data-ts]')!;
+    const said = find<HTMLElement>('[data-said]')!;
+    const atlasState = find<HTMLElement>('[data-atlas-state]')!;
+
+    let state: State = { ...DEFAULTS };
+    let atlas: SalinityAtlas | null = null;
+    let atlasWanted = false;
+    let last: ReturnType<typeof evaluate> | null = null;
+
+    /* The contour grid depends only on the window, and the window is snapped
+       to round bounds, so it changes far less often than the sample does.
+       Measured in a browser: a keystroke that leaves the window alone repaints
+       in 0.98 ms, and one that moves it takes 3.59 ms. The trace is 5,120
+       density evaluations, which the library does in about half a millisecond
+       -- so this is worth having and is not the difference between fast and
+       slow. Both are inside a frame. */
+    let tracedWindow = '';
+    let traced = '';
+
+    // ---- reading the form ------------------------------------------------
+
+    const num = (sel: string): number => {
+      const el = find<HTMLInputElement>(sel);
+      return el && el.value.trim() !== '' ? Number(el.value) : NaN;
+    };
+
+    function read(): State {
+      const kind = (what: string) => find<HTMLSelectElement>(`[data-kind="${what}"]`)!.value;
+      const lon = num('[data-value="lon"]');
+      const lat = num('[data-value="lat"]');
+      return {
+        salinityKind: kind('salinity') as State['salinityKind'],
+        salinity: num('[data-value="salinity"]'),
+        temperatureKind: kind('temperature') as State['temperatureKind'],
+        temperature: num('[data-value="temperature"]'),
+        pressureKind: kind('pressure') as State['pressureKind'],
+        pressure: num('[data-value="pressure"]'),
+        ptRef: Number.isFinite(num('[data-value="ptRef"]')) ? num('[data-value="ptRef"]') : 0,
+        lon: Number.isFinite(lon) ? lon : null,
+        lat: Number.isFinite(lat) ? lat : null,
+      };
+    }
+
+    function write(s: State) {
+      find<HTMLSelectElement>('[data-kind="salinity"]')!.value = s.salinityKind;
+      find<HTMLSelectElement>('[data-kind="temperature"]')!.value = s.temperatureKind;
+      find<HTMLSelectElement>('[data-kind="pressure"]')!.value = s.pressureKind;
+      const set = (sel: string, v: number | null) => {
+        find<HTMLInputElement>(sel)!.value = v === null || !Number.isFinite(v) ? '' : String(v);
+      };
+      set('[data-value="salinity"]', s.salinity);
+      set('[data-value="temperature"]', s.temperature);
+      set('[data-value="pressure"]', s.pressure);
+      set('[data-value="ptRef"]', s.ptRef);
+      set('[data-value="lon"]', s.lon);
+      set('[data-value="lat"]', s.lat);
+    }
+
+    const asInput = (s: State): Input => ({
+      salinityKind: s.salinityKind,
+      salinity: s.salinity,
+      temperatureKind: s.temperatureKind,
+      temperature: s.temperature,
+      pressureKind: s.pressureKind,
+      pressure: s.pressure,
+      ptRef: s.ptRef,
+      lon: s.lon ?? undefined,
+      lat: s.lat ?? undefined,
+      atlas,
+    });
+
+    // ---- painting --------------------------------------------------------
+
+    function paint() {
+      state = read();
+      const result = evaluate(asInput(state));
+      last = result;
+
+      for (const q of result.groups.flatMap((g: Group) => g.rows)) {
+        const cell = results.querySelector<HTMLElement>(`[data-row="${q.key}"] [data-cell]`);
+        if (cell) cell.textContent = formatValue(q);
+        const label = results.querySelector<HTMLElement>(`[data-row="${q.key}"] dt`);
+        /* Two labels carry a number of their own -- the reference pressure and
+           the latitude gravity was taken at -- so they are rewritten rather
+           than left saying something that was true a moment ago. That is the
+           label-written-once failure this project keeps meeting. */
+        if (label && label.textContent !== q.label) label.textContent = q.label;
+        const row = results.querySelector<HTMLElement>(`[data-row="${q.key}"]`);
+        if (row && q.note) row.title = q.note;
+      }
+
+      for (const box of all<HTMLElement>('[data-headline-row]')) {
+        const key = box.dataset.headlineRow!;
+        const q = result.groups.flatMap((g: Group) => g.rows).find((r) => r.key === key);
+        if (!q) continue;
+        box.querySelector('dt')!.textContent = q.label;
+        box.querySelector<HTMLElement>('[data-headline-value]')!.textContent = formatValue(q);
+        box.querySelector<HTMLElement>('.unit')!.textContent = q.unit;
+      }
+
+      messages.replaceChildren();
+      for (const n of result.notes) {
+        const p = document.createElement('p');
+        p.className = 'note';
+        p.textContent = n;
+        messages.append(p);
+      }
+      for (const w of result.warnings) {
+        const p = document.createElement('p');
+        p.className = 'warn';
+        p.textContent = w;
+        messages.append(p);
+      }
+
+      drawDiagram(result.sa, result.groups, result.p);
+      syncHash();
+      wantAtlas();
+      batchHint();
+    }
+
+    // ---- the T-S diagram -------------------------------------------------
+
+    const W = 460;
+    const H = 340;
+    const PAD = { l: 46, r: 12, t: 12, b: 34 };
+
+    function drawDiagram(sa: number, groups: Group[], p: number) {
+      const ct = groups.flatMap((g) => g.rows).find((q) => q.key === 'CT')?.value ?? NaN;
+      if (!Number.isFinite(sa) || !Number.isFinite(ct)) {
+        svg.replaceChildren();
+        return;
+      }
+
+      /* A window snapped to round bounds, so it holds still while the reader
+         types and only jumps when the sample genuinely leaves it. */
+      const snap = (v: number, step: number) => Math.floor(v / step) * step;
+      const saLo = Math.max(0, snap(sa - 2.5, 0.5));
+      const saHi = saLo + (saLo === 0 ? Math.max(5, snap(sa + 2.5, 0.5)) : 5);
+      const ctLo = snap(ct - 6, 1);
+      const ctHi = ctLo + 12;
+
+      const x = (v: number) => PAD.l + (v - saLo) / (saHi - saLo) * (W - PAD.l - PAD.r);
+      const y = (v: number) => H - PAD.b - (v - ctLo) / (ctHi - ctLo) * (H - PAD.t - PAD.b);
+
+      const key = `${saLo},${saHi},${ctLo},${ctHi}`;
+      if (key !== tracedWindow) {
+        tracedWindow = key;
+        traced = traceIsopycnals(saLo, saHi, ctLo, ctHi, x, y);
+      }
+
+      const parts: string[] = [traced];
+
+      // Axes, ticks and titles.
+      parts.push(`<path class="axis" d="M${PAD.l} ${PAD.t} L${PAD.l} ${H - PAD.b} L${W - PAD.r} ${H - PAD.b}"/>`);
+      for (const v of levels(saLo, saHi, 6, [0.5, 1, 2, 5])) {
+        parts.push(`<text class="tick-label" x="${x(v).toFixed(1)}" y="${H - PAD.b + 13}" text-anchor="middle">${round(v, 1)}</text>`);
+      }
+      for (const v of levels(ctLo, ctHi, 6, [1, 2, 5, 10])) {
+        parts.push(`<text class="tick-label" x="${PAD.l - 5}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end">${round(v, 0)}</text>`);
+      }
+      parts.push(`<text class="axis-title" x="${(PAD.l + W - PAD.r) / 2}" y="${H - 4}" text-anchor="middle">Absolute Salinity (g/kg)</text>`);
+      parts.push(`<text class="axis-title" x="${-(PAD.t + H - PAD.b) / 2}" y="11" transform="rotate(-90)" text-anchor="middle">Conservative Temperature (°C)</text>`);
+
+      // The freezing line at this sample's pressure.
+      const freeze: string[] = [];
+      const N = 60;
+      for (let i = 0; i <= N; i++) {
+        const s = saLo + (saHi - saLo) * i / N;
+        const f = freezingCT(s, p, 0);
+        if (!Number.isFinite(f)) continue;
+        freeze.push(`${i === 0 ? 'M' : 'L'}${x(s).toFixed(1)} ${clamp(y(f)).toFixed(1)}`);
+      }
+      if (freeze.length > 1) parts.push(`<path class="freeze" d="${freeze.join(' ')}"/>`);
+
+      // The sample, with a crosshair so it reads against the axes.
+      const px = x(sa);
+      const py = y(ct);
+      if (px >= PAD.l && px <= W - PAD.r && py >= PAD.t && py <= H - PAD.b) {
+        parts.push(`<path class="crosshair" d="M${PAD.l} ${py.toFixed(1)} H${px.toFixed(1)} V${H - PAD.b}"/>`);
+        parts.push(`<circle class="sample" cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="4.5"/>`);
+      }
+
+      svg.innerHTML = parts.join('');
+    }
+
+    const clamp = (v: number) => Math.min(Math.max(v, PAD.t), H - PAD.b);
+    const round = (v: number, d: number) => (Math.abs(v) < 1e-9 ? '0' : v.toFixed(d));
+
+    /**
+     * Trace the potential-density contours across the window.
+     *
+     * Referenced to the surface, which is what a T-S diagram means: the
+     * question it answers is which of two samples is denser once you take the
+     * pressure away, and referencing to anything else would answer a
+     * different one. The caption says so.
+     */
+    function traceIsopycnals(
+      saLo: number, saHi: number, ctLo: number, ctHi: number,
+      x: (v: number) => number, y: (v: number) => number
+    ): string {
+      const COLS = 80;
+      const ROWS = 64;
+      const dx = (saHi - saLo) / (COLS - 1);
+      const dy = (ctHi - ctLo) / (ROWS - 1);
+      const v: number[][] = [];
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (let j = 0; j < ROWS; j++) {
+        const row: number[] = [];
+        const ct = ctLo + j * dy;
+        for (let i = 0; i < COLS; i++) {
+          const sa = saLo + i * dx;
+          const sig = density(sa, ptFromCT(sa, ct), 0) - 1000;
+          row.push(sig);
+          if (Number.isFinite(sig)) {
+            if (sig < lo) lo = sig;
+            if (sig > hi) hi = sig;
+          }
+        }
+        v.push(row);
+      }
+
+      const field = { v, x0: saLo, dx, y0: ctLo, dy };
+      const out: string[] = [];
+      for (const level of levels(lo, hi, 10)) {
+        const segs = contour(field, level);
+        if (!segs.length) continue;
+        const d = segs
+          .map((s) => `M${x(s.x1).toFixed(1)} ${y(s.y1).toFixed(1)}L${x(s.x2).toFixed(1)} ${y(s.y2).toFixed(1)}`)
+          .join('');
+        out.push(`<path class="iso" d="${d}"/>`);
+        /* Label at the contour's warm end, which is where these fan apart and
+           where there is room. Clamped into the plot rather than dropped when
+           it falls outside: a contour running off the top-right corner is
+           exactly the one whose label lands on the edge, so rejecting those
+           labelled none of them -- which is what the first version did. */
+        const at = segs.reduce((best, s) => (s.y1 > best.y1 ? s : best), segs[0]);
+        const lx = Math.min(Math.max(x(at.x1) + 4, PAD.l + 4), W - PAD.r - 24);
+        const ly = Math.min(Math.max(y(at.y1) + 11, PAD.t + 11), H - PAD.b - 4);
+        out.push(`<text class="iso-label" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}">${round(level, 1)}</text>`);
+      }
+      return out.join('');
+    }
+
+    // ---- the salinity anomaly atlas --------------------------------------
+
+    function wantAtlas() {
+      const positioned = state.lon !== null && state.lat !== null;
+      if (!positioned || atlas || atlasWanted) {
+        if (!positioned && !atlas) {
+          atlasState.textContent = 'A position turns Reference Salinity into Absolute Salinity, and'
+            + ' fixes the gravity used for depth. The anomaly atlas is fetched only when you enter one.';
+        }
+        return;
+      }
+      atlasWanted = true;
+      atlasState.textContent = 'Fetching the Absolute Salinity Anomaly atlas…';
+      loadAtlas(ATLAS_URL)
+        .then((a) => {
+          atlas = a;
+          atlasState.textContent = 'Absolute Salinity Anomaly atlas loaded.';
+          paint();
+        })
+        .catch(() => {
+          /* Degrade to Reference Salinity and say so, rather than showing a
+             number that looks like SA and is not. `evaluate` already puts
+             that in its notes; this says the fetch is why. */
+          atlasWanted = false;
+          atlasState.textContent = 'The anomaly atlas could not be fetched, so'
+            + ' Absolute Salinity falls back to Reference Salinity.';
+        });
+    }
+
+    // ---- the address bar -------------------------------------------------
+
+    const FIELDS: (keyof State)[] = [
+      'salinityKind', 'salinity', 'temperatureKind', 'temperature',
+      'pressureKind', 'pressure', 'ptRef', 'lon', 'lat',
+    ];
+
+    function syncHash() {
+      const q = new URLSearchParams();
+      for (const f of FIELDS) {
+        const v = state[f];
+        if (v === null || v === undefined || (typeof v === 'number' && !Number.isFinite(v))) continue;
+        if (JSON.stringify(v) === JSON.stringify(DEFAULTS[f])) continue;
+        q.set(f, String(v));
+      }
+      const hash = q.toString();
+      /* replaceState, never pushState: typing a digit is not a navigation, and
+         a hundred of them would bury the page the reader arrived from. */
+      history.replaceState(null, '', hash ? `#${hash}` : window.location.pathname);
+    }
+
+    function fromHash(): State | null {
+      const raw = window.location.hash.replace(/^#/, '');
+      if (!raw || !raw.includes('=')) return null;
+      const q = new URLSearchParams(raw);
+      const s: State = { ...DEFAULTS };
+      let any = false;
+      for (const f of FIELDS) {
+        const v = q.get(f);
+        if (v === null) continue;
+        any = true;
+        if (f.endsWith('Kind')) (s as Record<string, unknown>)[f] = v;
+        else {
+          const n = Number(v);
+          (s as Record<string, unknown>)[f] = Number.isFinite(n) ? n : null;
+        }
+      }
+      return any ? s : null;
+    }
+
+    // ---- copy, CSV, share ------------------------------------------------
+
+    const table = (): Quantity[] => (last ? last.groups.flatMap((g: Group) => g.rows) : []);
+
+    function say(what: string) {
+      said.textContent = what;
+      window.setTimeout(() => { if (said.textContent === what) said.textContent = ''; }, 4000);
+    }
+
+    async function toClipboard(text: string, ok: string) {
+      try {
+        await navigator.clipboard.writeText(text);
+        say(ok);
+      } catch {
+        /* The clipboard needs a secure context and can be refused outright, so
+           the fallback is a selectable field rather than a button that
+           silently does nothing. Same call the map's share button makes. */
+        const box = document.createElement('textarea');
+        box.readOnly = true;
+        box.value = text;
+        box.rows = 3;
+        box.style.cssText = 'width:100%;margin-top:.4em';
+        said.replaceChildren(box);
+        box.select();
+      }
+    }
+
+    function csv(): string {
+      const head = 'quantity,value,unit\n';
+      return head + table()
+        .map((q) => `${JSON.stringify(q.label)},${Number.isFinite(q.value) ? q.value : ''},${JSON.stringify(q.unit)}`)
+        .join('\n') + '\n';
+    }
+
+    function download(name: string, text: string) {
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ---- a column of measurements ----------------------------------------
+
+    const batchOut = find<HTMLElement>('[data-batch-out]')!;
+    const batchSaid = find<HTMLElement>('[data-batch-said]')!;
+    const batchOrder = find<HTMLElement>('[data-batch-order]')!;
+    let batchRows: { input: number[]; rows: Quantity[] }[] = [];
+
+    function batchHint() {
+      const name = {
+        SP: 'practical salinity', SA: 'absolute salinity', SR: 'reference salinity',
+        Sstar: 'preformed salinity', C: 'conductivity', R: 'conductivity ratio',
+        SK: 'Knudsen salinity',
+      }[state.salinityKind];
+      const temp = { t: 'in-situ °C', t68: 'IPTS-68 °C', pt: 'potential °C', CT: 'conservative °C' }[state.temperatureKind];
+      const pres = state.pressureKind === 'p' ? 'pressure dbar' : 'depth m';
+      batchOrder.textContent = `${name}, ${temp}, ${pres}`;
+    }
+
+    /* Preview columns. The download carries every property; a table 51 wide is
+       not something anyone reads on a screen. */
+    const PREVIEW = ['SA', 'CT', 'sigma0', 'rho', 'c', 'tf'];
+
+    function runBatch() {
+      const text = find<HTMLTextAreaElement>('[data-batch-input]')!.value;
+      const parsed: number[][] = [];
+      let skipped = 0;
+      for (const line of text.split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        /* One character class over all the separators, and `filter` after it.
+           An alternation of "commas" or "whitespace" splits `35.0, 10.0` at
+           the comma *and* again at the space, leaving an empty token between
+           them -- and `Number('')` is 0, not NaN, so the row silently shifts
+           one column left and the reader gets plausible numbers for water
+           they did not describe. Comma-space is the commonest paste there is,
+           and it is the one that was broken. */
+        const cells = line.trim().split(/[\s,;]+/).filter(Boolean).map(Number);
+        // A header row parses to NaN throughout; that is not an error.
+        if (cells.length < 3 || cells.slice(0, 3).some((n) => !Number.isFinite(n))) {
+          skipped++;
+          continue;
+        }
+        parsed.push(cells);
+      }
+
+      batchRows = parsed.map((cells) => {
+        const input: Input = {
+          ...asInput(state),
+          salinity: cells[0],
+          temperature: cells[1],
+          pressure: cells[2],
+          lon: Number.isFinite(cells[3]) ? cells[3] : (state.lon ?? undefined),
+          lat: Number.isFinite(cells[4]) ? cells[4] : (state.lat ?? undefined),
+        };
+        return { input: cells, rows: evaluate(input).groups.flatMap((g: Group) => g.rows) };
+      });
+
+      if (!batchRows.length) {
+        batchOut.replaceChildren();
+        batchSaid.textContent = 'Nothing to convert — each line needs at least three numbers.';
+        return;
+      }
+
+      const cols = PREVIEW
+        .map((k) => batchRows[0].rows.find((q) => q.key === k))
+        .filter((q): q is Quantity => Boolean(q));
+      const head = `<tr><th>#</th>${cols.map((q) => `<th>${q.label}<br><span>${q.unit || '—'}</span></th>`).join('')}</tr>`;
+      const body = batchRows.slice(0, 200).map((r, i) => {
+        const cells = cols
+          .map((c) => `<td>${formatValue(r.rows.find((q) => q.key === c.key)!)}</td>`)
+          .join('');
+        return `<tr><td>${i + 1}</td>${cells}</tr>`;
+      }).join('');
+      batchOut.innerHTML = `<table>${head}${body}</table>`;
+      batchSaid.textContent = `${batchRows.length} sample${batchRows.length === 1 ? '' : 's'} converted`
+        + (skipped ? `, ${skipped} line${skipped === 1 ? '' : 's'} skipped` : '')
+        + (batchRows.length > 200 ? ' — showing the first 200, the download has them all' : '')
+        + '.';
+    }
+
+    function batchCsv(): string {
+      if (!batchRows.length) return '';
+      const keys = batchRows[0].rows;
+      const head = ['sample', ...keys.map((q) => (q.unit ? `${q.label} (${q.unit})` : q.label))]
+        .map((h) => JSON.stringify(h)).join(',');
+      const body = batchRows.map((r, i) =>
+        [i + 1, ...r.rows.map((q) => (Number.isFinite(q.value) ? q.value : ''))].join(','));
+      return `${head}\n${body.join('\n')}\n`;
+    }
+
+    // ---- wiring ----------------------------------------------------------
+
+    form.addEventListener('input', paint);
+    form.addEventListener('change', paint);
+    form.addEventListener('submit', (e) => e.preventDefault());
+
+    host.addEventListener('click', (e) => {
+      const button = (e.target as HTMLElement).closest<HTMLElement>('[data-action]');
+      if (!button) return;
+      switch (button.dataset.action) {
+        case 'copy':
+          void toClipboard(
+            table().map((q) => `${q.label}\t${Number.isFinite(q.value) ? q.value : ''}\t${q.unit}`).join('\n'),
+            'Every property copied.'
+          );
+          break;
+        case 'csv':
+          download('seawater.csv', csv());
+          say('Downloaded seawater.csv.');
+          break;
+        case 'share':
+          void toClipboard(window.location.href, 'Link copied.');
+          break;
+        case 'reset':
+          state = { ...DEFAULTS };
+          write(state);
+          paint();
+          say('Back to the defaults.');
+          break;
+        case 'batch':
+          runBatch();
+          break;
+        case 'batch-csv': {
+          const text = batchCsv();
+          if (!text) { batchSaid.textContent = 'Convert something first.'; break; }
+          download('seawater-batch.csv', text);
+          batchSaid.textContent = 'Downloaded seawater-batch.csv.';
+          break;
+        }
+      }
+    });
+
+    window.addEventListener('hashchange', () => {
+      const s = fromHash();
+      if (!s) return;
+      state = s;
+      write(state);
+      paint();
+    });
+
+    const shared = fromHash();
+    if (shared) {
+      state = shared;
+      write(state);
+    }
+    paint();
+  }
+</script>
