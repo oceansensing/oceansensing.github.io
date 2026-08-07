@@ -142,7 +142,7 @@ const headline = (key: string) => {
       {HEADLINE.map((key) => {
         const q = headline(key);
         return (
-          <div data-headline-row={key}>
+          <div data-headline-row={key} title={q.note ?? ''}>
             <dt>{q.label}</dt>
             <dd><b data-headline-value>{q.text}</b><span class="unit">{q.unit}</span></dd>
           </div>
@@ -726,6 +726,10 @@ const headline = (key: string) => {
         box.querySelector('dt')!.textContent = q.label;
         box.querySelector<HTMLElement>('[data-headline-value]')!.textContent = formatValue(q);
         box.querySelector<HTMLElement>('.unit')!.textContent = q.unit;
+        /* The headline is where in-situ density and σ₀ sit side by side, so it
+           is the one place the note has to reach — it was on the table rows
+           below and not here, which is the half a reader is not looking at. */
+        if (q.note) box.title = q.note;
       }
 
       messages.replaceChildren();

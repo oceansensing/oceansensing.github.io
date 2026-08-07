@@ -319,9 +319,19 @@ function build(
     {
       title: 'Density',
       rows: [
-        q('rho', 'Density', rho, 'kg/m³', 5, '1 / g_P. Not a fitted polynomial.'),
+        /* "In-situ", not just "Density", and the word is load-bearing: this
+           row sits beside σ₀ and a reader will try to subtract 1000 from one
+           to get the other. They differ by the compression of the water above
+           the parcel — 4.2 kg/m³ at 1000 dbar — and nothing but this word
+           says so before the subtraction is attempted. Reported as a bug in
+           the numbers, which is what a label that needs explaining looks
+           like from outside. */
+        q('rho', 'In-situ density', rho, 'kg/m³', 5,
+          'At this pressure, so it includes the compression. 1 / g_P, not a fitted polynomial.'),
         q('v', 'Specific volume', specificVolume(sa, t, p), 'm³/kg', 9),
-        q('sigma0', 'σ₀', sigma(0), 'kg/m³', 5, 'Potential density anomaly referenced to the surface.'),
+        q('sigma0', 'σ₀', sigma(0), 'kg/m³', 5,
+          'The parcel moved adiabatically to the surface, then density − 1000. '
+          + 'Not the in-situ density less 1000 — decompressing it first is worth about 4 kg/m³ per 1000 dbar.'),
         q('sigma1', 'σ₁', sigma(1000), 'kg/m³', 5, 'Referenced to 1000 dbar.'),
         q('sigma2', 'σ₂', sigma(2000), 'kg/m³', 5, 'Referenced to 2000 dbar.'),
         q('sigma3', 'σ₃', sigma(3000), 'kg/m³', 5, 'Referenced to 3000 dbar.'),
