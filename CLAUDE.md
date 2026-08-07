@@ -4303,6 +4303,15 @@ precisely the substitution this page refuses to make anywhere else. The cost
 is that a returning reader who had entered a position fetches the 188 KB
 atlas on arrival; a reader who never entered one still fetches nothing.
 
+**The position and the reference pressure were remembered from the start and
+gated later, which is its own small lesson.** They are part of the state
+object, so they worked the day the memory did — and nothing asserted them, so
+a later change could have dropped either silently. Reported as missing.
+An ungated feature is one that eventually becomes missing, and the gate now
+names every field rather than counting them, and checks that the latitude
+reaches the gravity row and the reference pressure reaches the
+potential-temperature row rather than merely sitting in its box.
+
 **Reset forgets as a consequence rather than as a second step.** `remember`
 stores nothing when the state *is* the defaults, so Reset clearing the memory
 falls out of what it already does. Two code paths saying the same thing would

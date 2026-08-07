@@ -408,12 +408,24 @@ let snapshot = {};
   type('[data-value="salinity"]', '41.7');
   type('[data-value="temperature"]', '6.5');
   type('[data-value="pressure"]', '250');
+  type('[data-value="ptRef"]', '2000');
+  type('[data-value="lon"]', '-45');
+  type('[data-value="lat"]', '55');
 
   const held = JSON.parse(window.localStorage.getItem(KEY) ?? 'null');
+  /* Every field, named one by one rather than counted. The position and the
+     reference pressure worked from the day the memory did — they are simply
+     part of the state object — but nothing held them, so a later change could
+     have dropped either without a check going red. Reported as missing, which
+     is what an ungated feature eventually becomes. */
   check('the inputs are remembered as they are typed',
     held?.salinityKind === 'C' && held?.salinity === 41.7
       && held?.temperature === 6.5 && held?.pressure === 250,
     JSON.stringify(held));
+  check('including the position, which decides Absolute Salinity',
+    held?.lon === -45 && held?.lat === 55, `lon ${held?.lon}, lat ${held?.lat}`);
+  check('and the reference pressure, which decides what pt means',
+    held?.ptRef === 2000, `${held?.ptRef}`);
 
   snapshot = { [KEY]: window.localStorage.getItem(KEY) };
 }
@@ -447,6 +459,21 @@ check('and forgets, so the next visit does not undo it',
     `${back.querySelector('[data-kind="salinity"]').value} ${back.querySelector('[data-value="salinity"]').value}`);
   check('and to the same numbers', value(back, 'SP') === wantedSP,
     `${value(back, 'SP')} against ${wantedSP}`);
+  check('and to the position and reference pressure too',
+    back.querySelector('[data-value="lon"]').value === '-45'
+      && back.querySelector('[data-value="lat"]').value === '55'
+      && back.querySelector('[data-value="ptRef"]').value === '2000',
+    `${back.querySelector('[data-value="lon"]').value}, `
+      + `${back.querySelector('[data-value="lat"]').value}, `
+      + `ptRef ${back.querySelector('[data-value="ptRef"]').value}`);
+  /* Both are restored to be *used*, not merely to sit in their boxes: the
+     latitude has to reach gravity and the reference pressure has to reach the
+     potential-temperature row, and both of those say so in their own labels. */
+  check('and both reach the rows that depend on them',
+    /55/.test(back.querySelector('[data-row="grav"] dt').textContent)
+      && /2000/.test(back.querySelector('[data-row="pt"] dt').textContent),
+    `${back.querySelector('[data-row="grav"] dt').textContent}; `
+      + `${back.querySelector('[data-row="pt"] dt').textContent}`);
   check('and says it did, since numbers you did not type read as a bug',
     /last visit/i.test(back.querySelector('[data-said]').textContent));
 
