@@ -317,7 +317,10 @@ function build(
       ],
     },
     {
-      title: 'Density',
+      /* Spiciness is filed here because it is the T-S diagram's other axis,
+         and the title says so: a reader scanning seven group headings for
+         "spice" found "Density" and concluded it was not on the page. */
+      title: 'Density and spiciness',
       rows: [
         /* "In-situ", not just "Density", and the word is load-bearing: this
            row sits beside σ₀ and a reader will try to subtract 1000 from one

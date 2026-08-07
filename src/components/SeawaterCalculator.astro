@@ -46,7 +46,10 @@ const SALINITY_KINDS: [string, [string, string][]][] = [
   ]],
   ['Conductivity', [
     ['C', 'Conductivity (mS/cm)'],
-    ['R', 'Conductivity ratio, C/C(35, 15 °C, 0 dbar)'],
+    /* Short, because a `<select>` shows its selected option in the width it
+       is given: the definition would be truncated mid-formula on the panel
+       and reads in full on the `R` row's own note instead. */
+    ['R', 'Conductivity ratio'],
   ]],
 ];
 const TEMPERATURE_KINDS = [
@@ -179,7 +182,18 @@ const headline = (key: string) => {
   </div>
 
   <div class="panel results" data-results>
-    <h2 class="vh">All properties</h2>
+    {/* Fifty-one properties in seven groups is more than anyone scans. The
+        filter is the general answer to "is X on this page?", which had been
+        answered one relabelled row at a time. */}
+    <div class="results-head">
+      <h2>All {initial.groups.reduce((n: number, g: Group) => n + g.rows.length, 0)} properties</h2>
+      <input
+        type="search" data-filter spellcheck="false"
+        placeholder="Filter — spiciness, entropy, sound…"
+        aria-label="Filter the properties by name"
+      />
+      <span class="count" data-filter-count role="status" aria-live="polite"></span>
+    </div>
     {initial.groups.map((group: Group) => (
       <section data-group>
         <h3>{group.title}</h3>
@@ -193,6 +207,7 @@ const headline = (key: string) => {
         </dl>
       </section>
     ))}
+    <p class="nothing" data-filter-empty hidden>Nothing here matches that.</p>
   </div>
 
   <details class="panel batch" data-batch>
@@ -272,6 +287,17 @@ const headline = (key: string) => {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 0.45em 0.6em;
+    /* A grid item defaults to `min-width: auto`, which means it refuses to
+       shrink below its own min-content width — and for an `<input>` that is
+       driven by the `size` attribute's default of 20 characters, about 184 px
+       here, whatever the column is worth. So the two-column Position row was
+       asking for 368 px inside a 293 px panel and the latitude box hung 79 px
+       out the side. The long option text did the same to the salinity select,
+       by 18.
+       Reported as the latitude box being cut off, and it is the one overflow
+       my own check could not see: it measured against the *viewport*, and
+       these elements overflow their panel while staying on screen. */
+    min-inline-size: 0;
     /* iOS Safari restyles both of these to its own rounded grey box, which
        overrides background and border-radius together. The map's chrome has
        the same line for the same reason, and it only shows on a real phone. */
@@ -478,6 +504,54 @@ const headline = (key: string) => {
   }
 
   /* ---- results ---- */
+
+  .results-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-xs) var(--space-sm);
+    margin-block-end: var(--space-md);
+  }
+
+  .results-head h2 {
+    font-size: var(--text-base);
+    margin: 0;
+  }
+
+  .results-head input {
+    font: inherit;
+    font-size: var(--text-sm);
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.4em 0.7em;
+    appearance: none;
+    flex: 1 1 12rem;
+    min-inline-size: 0;
+  }
+
+  .results-head input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .results-head .count,
+  .nothing {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  /* `[hidden]` is one selector and so is `.results dl > div`, but the scoped
+     form of the latter is three — so the UA rule loses and a filtered row
+     stays on screen. Every place this component hides something needs its own
+     rule at matching specificity; the map's chrome has the same note, learned
+     the same way. */
+  .results dl > div[hidden],
+  .results section[hidden],
+  .nothing[hidden] {
+    display: none;
+  }
 
   .results section {
     margin-block-end: var(--space-md);
@@ -1194,6 +1268,47 @@ const headline = (key: string) => {
 
     // ---- wiring ----------------------------------------------------------
 
+    // ---- finding one of fifty-one properties -----------------------------
+
+    const filterBox = find<HTMLInputElement>('[data-filter]')!;
+    const filterCount = find<HTMLElement>('[data-filter-count]')!;
+    const nothing = find<HTMLElement>('[data-filter-empty]')!;
+
+    /**
+     * Narrow the table to rows whose name, key, unit or note matches.
+     *
+     * Matching the **note** as well as the label is what makes it work as a
+     * question rather than a lookup: "compress" finds the two
+     * compressibilities and the in-situ density, whose note is the only place
+     * the word appears. Terms are ANDed, so "spice 2000" reaches one row.
+     *
+     * Purely a view: it changes nothing about the calculation, rides in
+     * neither the address bar nor the browser's memory, and every hidden row
+     * is still in the clipboard and the CSV — a filter that quietly shortened
+     * an export would be a data bug wearing a UI feature's clothes.
+     */
+    function applyFilter() {
+      const terms = filterBox.value.toLowerCase().split(/\s+/).filter(Boolean);
+      let shown = 0;
+
+      for (const section of all<HTMLElement>('[data-group]')) {
+        let inSection = 0;
+        for (const row of [...section.querySelectorAll<HTMLElement>('[data-row]')]) {
+          const hay = `${row.dataset.row} ${row.textContent} ${row.title}`.toLowerCase();
+          const match = terms.every((t) => hay.includes(t));
+          row.hidden = !match;
+          if (match) inSection++;
+        }
+        section.hidden = inSection === 0;
+        shown += inSection;
+      }
+
+      nothing.hidden = shown > 0;
+      filterCount.textContent = terms.length
+        ? `${shown} of ${all('[data-row]').length} shown`
+        : '';
+    }
+
     function onEdit() {
       /* The first edit is what dismisses a held message: the reader has seen
          the page, so the sentence explaining how it opened has done its job. */
@@ -1207,6 +1322,15 @@ const headline = (key: string) => {
     form.addEventListener('input', onEdit);
     form.addEventListener('change', onEdit);
     form.addEventListener('submit', (e) => e.preventDefault());
+
+    filterBox.addEventListener('input', applyFilter);
+    /* Escape empties it, which is what a search box is expected to do and
+       what the browser's own clear button does on the same control. */
+    filterBox.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key !== 'Escape') return;
+      filterBox.value = '';
+      applyFilter();
+    });
 
     host.addEventListener('click', (e) => {
       const button = (e.target as HTMLElement).closest<HTMLElement>('[data-action]');

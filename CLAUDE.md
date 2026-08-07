@@ -25,6 +25,7 @@ npm run data:teos10-fixture # re-record GSW's answers for test:teos10 (needs gsw
 npm run test:units   # the map's renderer-independent modules, directly
 npm run test:teos10  # the TEOS-10 package against GSW, calculus and physics
 npm run test:seawater # headless test of the built seawater calculator
+npm run test:prose   # built pages keep the spaces Astro likes to eat
 npm run test:schema  # every published file against the contract in schema.ts
 npm run test:multimap # two maps on one page stay out of each other's way
 npm run test:contrast # map colours stay visible on both bathymetries
@@ -4349,6 +4350,39 @@ working calculator. Leave it out of the harness realm and every call throws
 ReferenceError, every catch swallows it, and every check passes against a
 feature that never ran. It is in the list with a comment saying so.
 
+### Fifty-one properties, and no way to find one
+
+Four requests in a row — the density label, conductivity, the remembered
+position, spiciness — were all **"add X" for an X already on the page**. Three
+were answered by relabelling the one row involved, which is right each time
+and does not converge: the next thing nobody can find is a different row.
+
+The general answer is a filter over the results, and it is the point at which
+a list stops being scannable rather than a fault in any one label.
+
+**It searches the note as well as the label**, which is what makes it answer a
+question rather than perform a lookup: "compress" is in no label, only in the
+notes of the two compressibilities and of in-situ density. Terms are ANDed, so
+"spice 2000" reaches one row.
+
+**A filtered-away row is still in the clipboard and the CSV.** Hiding is a
+view decision; an export that silently shortened with it would be a data bug
+wearing a UI feature's clothes — a reader would get a file missing exactly the
+rows they had filtered away, with nothing to say so. `test:seawater` checks it
+through the page's own copy path, which jsdom reaches because there is no
+`navigator.clipboard` there and the fallback puts the text in a real field.
+Reading the module's row list instead would have proved nothing about what
+leaves the page.
+
+**`[hidden]` needed its own rule again.** `.results dl > div` scoped by Astro
+is three compound selectors against the UA's one, so a filtered row would have
+stayed on screen. That is the same trap the map's chrome has a note about, and
+jsdom cannot see it — `row.hidden` reads true either way — so it is decided
+over the built stylesheet.
+
+The group is called **"Density and spiciness"** now, for the reader who scans
+seven headings rather than typing.
+
 ### Conductivity was already an input, and nobody could find it
 
 Reported as missing. It had been there from the first build, gated by a
@@ -4450,6 +4484,25 @@ never arrives at it twice.
 defeated the `hidden` attribute, because a class that sets `display` beats
 `[hidden]` at equal specificity. The browser check that passed before the CSS
 fix proved nothing about after it. **Re-verify after a fix, not before it.**
+
+**A space that exists in the source and not in the HTML.** Astro drops the
+whitespace *before* an inline element that begins a line and keeps the
+whitespace after it, so any ordinary reflow of a paragraph turns `from the` +
+newline + `<a>TEOS-10</a>` into "from theTEOS-10". The source looks right —
+the space is there at the end of the line — so review does not catch it and
+`astro check` has nothing to say. It reached the live site four times,
+including the map's own no-JavaScript fallback, which is text almost nobody
+sees. `npm run test:prose` reads every built page for it. **Never break a
+line immediately before an `<a>`, `<code>` or `<em>`.**
+
+**A control that will not shrink.** A grid item defaults to `min-width: auto`,
+and for an `<input>` that is the `size` attribute's default of twenty
+characters — about 184 px, whatever the column is worth. The two-column
+Position row therefore asked for 368 px inside a 293 px panel and the latitude
+box hung out the side of it. Worth knowing because the obvious check misses
+it: a viewport-width overflow scan finds nothing, since the box overflows its
+*panel* while staying comfortably on screen. Measure against the container,
+not the window.
 
 **A check that cannot fail.** `test:map` prints `ok` for any *truthy* value,
 so the tidy-looking `condition || 'why it failed'` idiom passes whenever the

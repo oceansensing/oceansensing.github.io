@@ -10,13 +10,17 @@ import SeawaterCalculator from '../../components/SeawaterCalculator.astro';
   <div class="container">
     <p class="crumb"><a href="/data/">Data &amp; Tools</a></p>
     <h1>Seawater calculator</h1>
+    {/* Astro drops the whitespace before an inline element that begins a
+        line, and keeps the whitespace after it — so a paragraph reflowed so
+        that a link starts a line renders as "from theTEOS-10". Never break
+        immediately before an `<a>`, `<code>` or `<em>` in this file. */}
     <p class="intro">
-      Every thermodynamic property of seawater, from the
-      <a href="https://www.teos-10.org/">TEOS-10</a> Gibbs function. Density is
-      <code>1/g<sub>P</sub></code> here, not a fitted polynomial — so sound
-      speed, heat capacity, entropy and the expansion coefficients are all
-      consistent with each other and with density by construction, rather than
-      to within a fit's residual.
+      Every thermodynamic property of seawater, from
+      the <a href="https://www.teos-10.org/">TEOS-10</a> Gibbs function.
+      Density is <code>1/g<sub>P</sub></code> here, not a fitted polynomial —
+      so sound speed, heat capacity, entropy and the expansion coefficients
+      are all consistent with each other and with density by construction,
+      rather than to within a fit's residual.
     </p>
 
     <SeawaterCalculator />
@@ -45,8 +49,8 @@ import SeawaterCalculator from '../../components/SeawaterCalculator.astro';
       <p>
         That correction is a global lookup table, so it needs a longitude and a
         latitude. Enter them and the atlas is fetched, once, and applied.
-        Leave them out and the calculator uses Reference Salinity
-        <em>and says so</em> — reporting SR under SA's name without a word is
+        Leave them out and the calculator uses Reference
+        Salinity <em>and says so</em> — reporting SR under SA's name without a word is
         the one mistake a page like this must not make.
       </p>
 
@@ -77,9 +81,9 @@ import SeawaterCalculator from '../../components/SeawaterCalculator.astro';
 
       <h3>Checked against the reference implementation</h3>
       <p>
-        The coefficients are transcribed mechanically from
-        <a href="https://github.com/TEOS-10/GSW-C">GSW-C</a>, never by hand,
-        and every function is checked against GSW at points spanning the
+        The coefficients are transcribed mechanically
+        from <a href="https://github.com/TEOS-10/GSW-C">GSW-C</a>, never by
+        hand, and every function is checked against GSW at points spanning the
         domain. Each derivative of the Gibbs function is separately checked
         against a central difference of the one below it, over a few thousand
         states — so a mistyped digit fails a test rather than quietly shifting
@@ -90,19 +94,19 @@ import SeawaterCalculator from '../../components/SeawaterCalculator.astro';
       <h3>Credits</h3>
       <p>
         TEOS-10 is the work of SCOR/IAPSO Working Group 127, published by IOC,
-        SCOR and IAPSO (2010) and available at
-        <a href="https://www.teos-10.org/">teos-10.org</a>. The reference
-        implementation is the
-        <a href="https://www.teos-10.org/software.htm">Gibbs SeaWater (GSW)
-        Oceanographic Toolbox</a> — this page is checked against its
-        <a href="https://github.com/TEOS-10/GSW-C">C implementation</a>, and
-        its <a href="https://www.teos-10.org/pubs/gsw/html/gsw_contents.html">function
+        SCOR and IAPSO (2010) and available
+        at <a href="https://www.teos-10.org/">teos-10.org</a>. The reference
+        implementation is
+        the <a href="https://www.teos-10.org/software.htm">Gibbs SeaWater (GSW)
+        Oceanographic Toolbox</a> — this page is checked against
+        its <a href="https://github.com/TEOS-10/GSW-C">C implementation</a>,
+        and its <a href="https://www.teos-10.org/pubs/gsw/html/gsw_contents.html">function
         reference</a> is the place to look up anything named here.
       </p>
       <p>
         The pure-water and saline Gibbs functions are IAPWS-09 and IAPWS-08,
-        and the ice one is IAPWS-06, all released by the
-        <a href="https://iapws.org/">International Association for the
+        and the ice one is IAPWS-06, all released by
+        the <a href="https://iapws.org/">International Association for the
         Properties of Water and Steam</a>. Nothing on this page is published
         by any of them; the errors are ours.
       </p>

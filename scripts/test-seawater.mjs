@@ -296,6 +296,24 @@ type('[data-value="temperature"]', '10');
      48rem breakpoint sorts first — so searching for the query matched
      `.ocean-map{height:…}` and reported a missing rule that was never in it.
      The same masking `test:map` has a note about, met from a new direction. */
+  /* A grid item will not shrink below its own min-content width, and for an
+     `<input>` that is the `size` attribute's default of twenty characters —
+     about 184 px, whatever the column is worth. So the two-column Position
+     row asked for 368 px inside a 293 px panel and the latitude box hung
+     79 px out the side of it.
+     Checked over the built stylesheet because jsdom does no layout, and it
+     is the overflow a viewport-width check cannot see: these elements
+     overflow their *panel* while staying comfortably on screen.
+
+     Anchored on `.field … input`, with no loose fallback. The first version
+     had one, and it passed with the declaration deleted: `builtCss` is every
+     stylesheet in dist concatenated, and something else in the map already
+     carries a `min-inline-size:0`. The exact masking `test:map` has a note
+     about, in a new place. */
+  const shrinkable = /\.field\[[^\]]*\][^{}]*input\[[^\]]*\][^{}]*\{[^{}]*min-inline-size:\s*0/.test(css);
+  check('form controls can shrink below their intrinsic width, or the row overflows its panel',
+    shrinkable, shrinkable ? '' : 'the .field input rule does not set min-inline-size:0');
+
   const at = css.search(/padding-block:\s*0?\.78em/);
   const opened = at > 0 ? css.lastIndexOf('@media', at) : -1;
   check('phones get a bigger tap target than the 35 px default',
@@ -374,6 +392,80 @@ type('[data-value="temperature"]', '10');
   check('and a link pasted into an open page is applied',
     q('[data-value="salinity"]').value === '20' && Math.abs(Number(cell('t')) - 4) < 1e-9,
     `SP ${q('[data-value="salinity"]').value}, t ${cell('t')}`);
+}
+
+// ---- finding one of fifty-one properties -------------------------------------
+
+{
+  const box = q('[data-filter]');
+  const filter = (v) => {
+    box.value = v;
+    box.dispatchEvent(new window.Event('input', { bubbles: true }));
+  };
+  const showing = () => [...document.querySelectorAll('[data-row]')]
+    .filter((r) => !r.hidden && !r.closest('section').hidden)
+    .map((r) => r.dataset.row);
+  const total = document.querySelectorAll('[data-row]').length;
+
+  filter('spice');
+  check('a name narrows the table to the rows that carry it',
+    showing().join(' ') === 'spice0 spice1 spice2', showing().join(' '));
+  check('and empty groups go with them',
+    [...document.querySelectorAll('[data-group]')].filter((s) => !s.hidden).length === 1);
+  check('and it says how much of the table is left',
+    /3 of \d+/.test(q('[data-filter-count]').textContent), q('[data-filter-count]').textContent);
+
+  filter('spice 2000');
+  check('terms are ANDed, so two words reach one row', showing().join(' ') === 'spice2');
+
+  /* Searching the note is what makes this answer a question rather than
+     perform a lookup: "compress" is not in any label, only in the notes of
+     the two compressibilities and of in-situ density. */
+  filter('compress');
+  check('the notes are searched too, not only the labels',
+    showing().includes('kappa') && showing().includes('kappaT') && showing().length > 2,
+    showing().join(' '));
+
+  filter('zzz');
+  check('and nothing matching says so rather than showing an empty panel',
+    showing().length === 0 && q('[data-filter-empty]').hidden === false);
+
+  /* The one thing a filter must not do. Hiding a row is a view decision, and
+     an export that silently shortened with it would be a data bug wearing a
+     UI feature's clothes — the reader would get a CSV missing exactly the
+     rows they had filtered away and no sign of it. */
+  filter('spice');
+  q('[data-action="copy"]').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await wait();
+  await wait();
+  /* jsdom has no `navigator.clipboard`, so the page takes its own fallback
+     path and puts the text in a selectable field — which is the real export,
+     observable. Reaching into the module for its row list would have proved
+     nothing about what actually leaves the page. */
+  const copied = q('[data-said] textarea')?.value ?? '';
+  const lines = copied.split('\n').filter(Boolean).length;
+  check('a filtered-away row is still in the clipboard and the CSV',
+    lines === total, `${lines} copied against ${total} in the table`);
+  check('and the copy really is the whole table, spiciness included',
+    /Spiciness/.test(copied) && /Entropy|entropy/.test(copied));
+
+  filter('');
+  check('clearing brings all of them back', showing().length === total, `${showing().length}`);
+  check('and drops the count', q('[data-filter-count]').textContent === '');
+
+  /* `[hidden]` is one selector and the scoped `.results dl > div` is three,
+     so the UA rule loses and a filtered row would stay on screen. jsdom
+     applies no external CSS, so `row.hidden` reads true either way and only
+     the built stylesheet can show it. Same trap the map's chrome has a note
+     about. */
+  const css = fs.readdirSync('dist/_astro')
+    .filter((f) => f.endsWith('.css'))
+    .map((f) => fs.readFileSync(`dist/_astro/${f}`, 'utf8'))
+    .join('\n');
+  check('and the hidden rule out-specifies the row rule, or nothing hides',
+    /\.results\[[^\]]*\]\s+dl\[[^\]]*\]>div\[[^\]]*\]\[hidden\][^{}]*\{[^{}]*display:none/.test(css)
+      || /div\[[^\]]*\]\[hidden\][^{}]*\{[^{}]*display:none/.test(css),
+    /\[hidden\]/.test(css) ? '' : 'no [hidden] rule in the built CSS');
 }
 
 // ---- conductivity is an input, and has to be findable as one -----------------
