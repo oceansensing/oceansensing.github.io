@@ -330,9 +330,13 @@ export function dilutionCoefficient(sa: number, t: number, p: number): number {
  * ice, so it is the one place in this package where both standards meet.
  */
 export function freezingTemperature(sa: number, p: number, saturationFraction = 0): number {
-  /* Freezing-point polynomial coefficients, local because `a`, `b` and `t0`
-     are names this module uses for other things at other scales. */
-  const a = 0.014289763856964, b = 0.057000649899720;
+  /* Freezing-point polynomial coefficients, local because `t0` is a name this
+     module uses for the Celsius zero point at module scope.
+
+     GSW's macro also carries `a` and `b`, which belong to the *Conservative*
+     Temperature freezing polynomial and are not used here. They are left out
+     rather than declared and ignored: an unused constant inside a block of
+     coefficients reads as a term somebody forgot to include. */
   const t0 = 0.002519, t1 = -5.946302841607319, t2 = 4.136051661346983,
     t3 = -1.115150523403847e1, t4 = 1.476878746184548e1, t5 = -1.088873263630961e1,
     t6 = 2.961018839640730, t7 = -7.433320943962606, t8 = -1.561578562479883,
