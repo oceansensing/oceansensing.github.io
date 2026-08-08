@@ -56,7 +56,7 @@ DOM-free and renderer-independent, checked against the GSW reference
 implementation on every build.
 
 There is also a
-[**Slocum glider decoder**](https://oceansensing.org/data/slocum/): the
+[**Slocum glider data decoder**](https://oceansensing.org/data/slocum/): the
 binary files a Slocum logs — `sbd`, `tbd`, `mbd`, `nbd`, `dbd`, `ebd` and
 their compressed forms — read in the browser and written out as CSV or
 netCDF, with seawater properties from the CTD if you want them, and an
