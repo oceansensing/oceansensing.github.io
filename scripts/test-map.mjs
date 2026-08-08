@@ -16,6 +16,7 @@ import path from 'node:path';
    rather than by a third copy of it. */
 import { admissible } from '../packages/ocean-map/contrast.ts';
 import { REGIONS, INTERESTS } from '../packages/ocean-map/places.ts';
+import { forwardReferences } from './lib/forward-refs.mjs';
 const basemapWater = JSON.parse(
   fs.readFileSync('packages/ocean-map/data/basemap-ocean.json', 'utf8')
 );
@@ -2254,6 +2255,12 @@ const siteStyles = (function walk(dir) {
   });
 })('src');
 
+const forwardRefs = forwardReferences(
+  fs.readFileSync('packages/ocean-map/index.ts', 'utf8'),
+  'packages/ocean-map/index.ts',
+  'createOceanMap'
+);
+
 const strayMapStyles = siteStyles
   .filter(([, css]) =>
     /--map-[\w-]+\s*:/.test(css) || /\.ocean-map|data-basemap-tone|\.map-(coast|bathy|land|grid|eez|asset|casing)\b/.test(css)
@@ -3188,6 +3195,38 @@ const checks = [
     strayMapStyles.length === 0],
   ['every data fetch goes through the configured dataBase',
     strayPaths.length === 0 && hardcodedPaths.length === 1],
+  /* `index.ts` is one 4,700-line closure, and its problem is ordering rather
+     than size: three bugs in a single session were use-before-declaration
+     inside it, and `astro check` sees none of them because TypeScript does
+     not track whether a closure's statements have run yet. This reads the
+     source with TypeScript's own parser and fails on a binding read at
+     statement level — as the map is built — but declared further down. That
+     is a ReferenceError on load and a blank map.
+
+     `test:map` already fails on an uncaught setup error, so the two overlap
+     where the harness happens to execute the faulty line. This is worth
+     having beside it for the case it does not: a forward reference on a
+     branch no test reaches — a preset that includes a layer, an option
+     nothing here sets — is invisible at runtime until a reader finds it, and
+     is named here with both line numbers.
+
+     References *inside* a function body are deliberately not flagged. There
+     are 632 of them, they are how the whole file works, and a gate that
+     cries wolf gets switched off. */
+  /* The detail is in the *name*, not a third element: this harness's printer
+     destructures `[name, pass]` and drops anything after it, so a third
+     argument is invisible however useful it looks in the source. Naming it
+     here also follows CLAUDE.md's own rule, learned from the
+     `condition || 'why it failed'` idiom that made two checks unable to
+     fail — put the detail in the name and keep the value a strict boolean. */
+  [`nothing in createOceanMap is read before it is declared — ${
+    forwardRefs.problems.length
+      ? forwardRefs.problems
+          .map((p) => `${p.name} read at line ${p.usedAt}, declared at line ${p.declaredAt}`)
+          .join('; ')
+      : `${forwardRefs.declarations} declarations, ${forwardRefs.reads} setup-time reads`
+  }`,
+    forwardRefs.problems.length === 0],
   /* The shoreline replaced a Natural Earth polyline whose vertices were 16
      px apart at zoom 7 — as coarse as the isobaths were before they were
      fixed, and drawn a few pixels off the basemap's own coast. It is a

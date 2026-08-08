@@ -97,7 +97,7 @@ website, `PORTING-IOS.md` for the iOS app, and `BOUNDARIES.md` for anyone
 adding to it — those separations are what keep the other two possible, and
 they are easy to breach by accident.
 
-`npm run verify` stands at **1,300 printed `ok` lines** across fourteen
+`npm run verify` stands at **1,301 printed `ok` lines** across fourteen
 steps: build, type-check, docs, then eleven test suites — the
 renderer-independent units, TEOS-10 against GSW, the ballast arithmetic, the
 published data contract, colour contrast, the rendered map, two maps on a
@@ -139,6 +139,14 @@ renderer-bound half in `index.ts` — and the file is now past the 4,542 that
 started this. Nothing moved back; the seams below simply have not been taken
 as fast as features arrived. The argument for the next one is stronger than
 when the first was taken, not weaker.
+
+**The bug class is gated now, ahead of the refactor.**
+`scripts/lib/forward-refs.mjs` parses the file with TypeScript's own parser
+and `test:map` fails on a binding read at statement level but declared
+further down — the ReferenceError-on-load shape. It reads 182 declarations
+and 632 setup-time references today and flags none. References inside
+function bodies are deliberately exempt, which is the line between a crash
+and the ordering smell the split is actually for.
 
 The rule that has held: **behaviour moves, the reader's state stays.**
 `choices` and `particleTint` are per map; a module-level copy would put two

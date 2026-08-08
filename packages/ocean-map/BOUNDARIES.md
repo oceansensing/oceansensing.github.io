@@ -237,5 +237,5 @@ Before adding anything, ask:
 6. Does it change a measured constant? Then re-measure and rewrite the reason.
 
 `npm run verify` is the gate — a build, a type-check, a docs check and eleven
-test suites, 1,300 assertions. CI runs exactly it, and the deploy will not run
+test suites, 1,301 assertions. CI runs exactly it, and the deploy will not run
 unless it passes.

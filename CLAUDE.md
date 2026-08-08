@@ -354,6 +354,42 @@ The remaining seams, in order of what they unlock:
   when the first was taken, and that the line count is worth re-reading
   whenever a feature lands rather than only when one moves out.
 
+  **The bug class now has a gate of its own**, which is worth having whether
+  or not the split ever finishes. `scripts/lib/forward-refs.mjs` parses
+  `index.ts` with TypeScript's own parser — already a devDependency — and
+  `test:map` fails on any binding read at the closure's *statement level*,
+  as the map is built, but declared further down. That is a
+  `ReferenceError` on load and a blank map, and `astro check` cannot see it
+  because TypeScript does not track whether a closure's statements have run.
+
+  **References inside a function body are deliberately not flagged.** There
+  are 632 of them against 182 statement-level declarations; they are how the
+  whole file works, and a gate that cries wolf gets switched off. That is
+  also the honest line between a fault and a smell: `measure.ts` was
+  declared 700 lines below one of its callers and *worked*, because a click
+  handler cannot run during setup. The refactor is for that; this is for the
+  crash.
+
+  It overlaps with the uncaught-setup-error listener already in `test:map`,
+  and earns its place on the case that listener cannot reach: a forward
+  reference on a branch no test executes — a preset naming a layer, an
+  option nothing here sets — is invisible at runtime until a reader finds
+  it. Here it is named with both line numbers before anything runs.
+
+  Mutation-tested three ways: the crash shape fails it, the identical
+  reference inside an arrow does not, and **renaming the closure makes the
+  helper throw** rather than quietly reporting no problems — the
+  check-that-cannot-fail shape, guarded at the one place it could appear.
+  A first version counted braces and reported *zero* declarations in a file
+  with 182, because `options: OceanMapOptions = {}` meant "the first `{`
+  after the signature" was the parameter default. A real parser costs
+  nothing here.
+
+  One trap it surfaced: this harness's printer destructures `[name, pass]`
+  and **drops any third element**, so detail passed as a third argument is
+  invisible however useful it looks in the source. The detail goes in the
+  name.
+
   The rule that has held: **behaviour moves, the reader's state stays.**
   `choices` and `particleTint` are per map, and a module-level copy of either
   would put two maps on a page back to sharing one — the singleton bug this
