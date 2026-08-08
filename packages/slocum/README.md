@@ -57,11 +57,68 @@ The default is the lossless one. The other is offered and is never applied
 without being asked, which is the same bargain the rest of this site strikes
 with its readers.
 
-Two sensors of the same name from the two computers stay two columns, suffixed
-with their file family: `sci_water_pressure` is measured by the science
-computer at full rate and *relayed* to the flight computer at a much slower
-one — 853 samples against 4 in the test fixture. The same sensor across
-segments is one column, concatenated.
+**Columns are ordered, not left as they fell.** The quantities a reader opens
+a glider file for lead — position, depth, the CTD, and what is derived from it
+— and the rest follow by how populated they are, so the nearly-empty channels
+end up last. Untouched, the order is the cache file's alphabetical namespace,
+which buried water temperature in the sixty-second column. `orderColumns` is
+exported because derived columns are appended after the table is built.
+
+Columns are keyed on **(sensor, glider, computer)**. The glider is the vehicle;
+flight and science are the two computers inside it, and the sensor prefix says
+which owns what — `sci_` is the science computer's, `m_` measured and `c_`
+commanded on the flight computer, `u_` parameters the user sets and `f_`
+factory values, with `x_` and a few others derived. Measured on the test glider, the science namespace is 100%
+`sci_` and the flight namespace holds 1,022 `sci_` sensors it knows only
+because science values are relayed to it.
+
+So two gliders' `m_depth` stay two columns, and within one glider a sensor
+written by both computers stays two — `sci_water_pressure` is measured by the
+science computer at full rate and relayed to the flight computer at a much
+slower one, 853 samples against 4 in the fixture.
+
+Within one computer the opposite holds. The same sensor across segments is one
+column, concatenated; and `sbd`/`mbd`/`dbd` are three decimations of one flight
+record, as `tbd`/`nbd`/`ebd` are of one science record, so dropping any
+combination gives one column per sensor, **deduplicated by timestamp**.
+
+Merged per sensor rather than per file: the lists are chosen independently with
+`sbdlist.dat` and `mbdlist.dat`, so they are not nested — on one test segment
+the sbd holds 64 sensors and the mbd 134, sharing 58. The result is the union.
+
+## More than one deployment in a pile of files
+
+`splitDeployments(files, { gapSeconds })` groups decoded files before anything
+is written:
+
+```ts
+import { splitDeployments, deploymentStem } from '@c4po/slocum';
+
+const { deployments, undated } = splitDeployments(
+  files.map((f) => ({ file: f.name, series: readSeries(openDbd(f.bytes, f)) })),
+);
+for (const d of deployments) write(`${deploymentStem(d)}.csv`, toCsv(buildTable(d.series)));
+```
+
+**A deployment is one glider over one continuous stretch of time.** A
+different glider always splits; a gap of three days or more splits one
+glider's record. Two gliders in one table is obvious once seen, but one
+glider's spring and summer work is not — the filenames match and the sensor
+names match, and once they are combined there is nothing to separate them by.
+
+The gap is measured **between segments**, not between samples. A glider logs
+different sensors on wildly different schedules — a position fix only on
+surfacing, an Iridium counter once a segment — so a per-sample gap would split
+a deployment whenever a slow channel went quiet for a weekend.
+
+`gapSeconds` defaults to three days. It has to clear the longest a glider can
+plausibly go dark inside one deployment while staying shorter than the
+shortest turnaround between two; Slocum segments are hours apart, so three
+days leaves room on both sides.
+
+Files with no usable clock come back in `undated` rather than being placed.
+A segment with no time cannot be tested against a gap, and putting it in the
+first deployment would be inventing a fact.
 
 ## OceanGliders OG1.0
 
@@ -93,6 +150,23 @@ position between fixes, `DEPTH` from pressure and latitude via TEOS-10, `PSAL`
 via PSS-78, and `PHASE` with its segment and profile numbering. Each says so
 in its own attributes.
 
+## Deployments
+
+`deployment.ts` groups decoded files before anything is written, so each
+deployment becomes its own output file. A deployment is **one glider over one
+continuous stretch of time**: a different vehicle always starts a new one, and
+so does a gap of three days or more, measured between segments rather than
+between samples.
+
+```ts
+const { deployments, undated } = splitDeployments(
+  files.map((f) => ({ file: f.name, series: f.series })),
+);
+```
+
+`undated` holds files with no usable clock — they cannot be placed against a
+gap, and putting them in the first deployment would be inventing a fact.
+
 ## Files
 
 | file | what it is |
@@ -104,6 +178,7 @@ in its own attributes.
 | `table.ts` | series → a rectangular table |
 | `derive.ts` | seawater properties, via `@c4po/teos10` |
 | `csv.ts`, `netcdf.ts` | CSV, and a netCDF-3 classic document writer |
+| `deployment.ts` | which files belong to which deployment |
 | `og1.ts`, `cdl.ts` | the OceanGliders OG1.0 mapping, and its text form |
 | `types.ts`, `index.ts` | shapes, and the public surface |
 

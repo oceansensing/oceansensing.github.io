@@ -63,6 +63,11 @@ export interface DbdFile {
   timePosition: number;
   /** The decoded bytes — already decompressed if the file was. */
   bytes: Uint8Array;
+  /**
+   * Which vehicle this came off, from the header's own `full_filename`.
+   * Two gliders' `m_depth` are different records and must not merge.
+   */
+  glider: string;
 }
 
 /**
@@ -82,13 +87,21 @@ export interface Series {
    * The file it came out of.
    *
    * Load-bearing when several files are decoded together, because a sensor
-   * name is not unique across the pair: `sci_water_pressure` is written by
-   * the science computer at full rate *and* relayed to the flight computer,
+   * name is not unique across them: `sci_water_pressure` is written by the
+   * science computer at full rate *and* relayed to the flight computer,
    * which logs it a handful of times a segment. Two columns, same name, three
    * orders of magnitude apart in how much they say. Without a source there is
    * nothing to tell them apart by but position.
    */
   from?: string;
+  /**
+   * Which glider it came off — the vehicle, not the computer inside it.
+   *
+   * The grouping key is (sensor, glider, computer). Leave the glider out and
+   * a fleet directory silently merges `m_depth` from two vehicles into one
+   * column, interleaved and looking exactly like data.
+   */
+  glider?: string;
 }
 
 /** The 2-bit state of one sensor in one cycle. */
@@ -111,4 +124,89 @@ export class MissingCacheError extends Error {
     this.crc = crc;
     this.file = file;
   }
+}
+
+/**
+ * Which glider a file came off.
+ *
+ * Slocum names a segment `<glider>-YYYY-DDD-M-S.ext` — the vehicle, the year,
+ * the day of year, the mission and the segment — so the glider is everything
+ * before that trailing run of numbers. `electa-2025-120-1-169` is `electa`.
+ *
+ * **Read from the header's `full_filename`, not from the name on disk.** The
+ * two usually agree and the header is the one the glider wrote; a file the
+ * reader renamed, or one still under its 8.3 name (`02150008.sbd`), would
+ * otherwise be its own vehicle.
+ *
+ * The glider is the vehicle. Flight and science are the two computers *in*
+ * it — see `familyOf` — so telling two records apart needs both: `m_depth`
+ * off one glider is not `m_depth` off another, and neither is the flight
+ * computer's copy of a science sensor.
+ */
+export function gliderOf(fullFilename: string): string {
+  const stem = (fullFilename.split('/').pop() ?? '').replace(/\.[^.]*$/, '');
+  const match = /^(.*?)-\d+-\d+-\d+-\d+$/.exec(stem);
+  return (match ? match[1] : stem).toLowerCase();
+}
+
+/**
+ * Which computer inside the glider wrote a file, from its name alone.
+ *
+ * The flight computer writes `sbd`/`mbd`/`dbd` and the science computer
+ * `tbd`/`nbd`/`ebd`, in ascending order of how much they hold — the short
+ * ones are the decimated subsets sent over Iridium mid-deployment, the long
+ * ones are what is recovered from the glider afterwards. `c` in the middle
+ * means the same file compressed.
+ *
+ * **The three within a family are one record, not three.** A `.tbd` is a
+ * decimation of the same samples the `.ebd` holds, off the same sensors on
+ * the same clock, so dropping both after a recovery must not produce two
+ * columns per sensor. Only *across* families are two same-named sensors
+ * genuinely different records — `sci_water_pressure` is measured by the
+ * science computer and relayed to the flight computer at a much slower rate.
+ */
+export function familyOf(name: string): 'flight' | 'science' | 'cache' | 'unknown' {
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  if (/^[smd](b|c)d$/.test(ext)) return 'flight';
+  if (/^[tne](b|c)d$/.test(ext)) return 'science';
+  if (ext === 'cac' || ext === 'ccc') return 'cache';
+  return 'unknown';
+}
+
+/**
+ * Which computer a sensor *belongs* to, from its name.
+ *
+ * Slocum prefixes say what a sensor is. `sci_` is measured by the science
+ * computer; `m_` is measured by the flight computer and `c_` is commanded on
+ * it; `u_` are parameters the user sets and `f_` are factory values, with
+ * `x_`, `s_` and `xs_` the remaining derived channels.
+ *
+ * Measured on this glider's two namespaces: the science computer's 105
+ * sensors are **100% `sci_`**, and the flight computer's 2,709 include 1,022
+ * `sci_` ones — which it knows about only because science values can be
+ * relayed to it. So a `sci_` sensor found in a flight file is a relay of a
+ * measurement made elsewhere, and that is worth knowing without counting
+ * samples: the prefix says it outright, where sample counts only imply it.
+ *
+ * `m_leakdetect_voltage_science` is the trap to keep in mind here. It is an
+ * `m_` sensor — measured by the *flight* computer — that happens to describe
+ * the science bay. The prefix is the signal; a word inside the name is not.
+ */
+export function homeOf(sensor: string): 'flight' | 'science' {
+  return sensor.startsWith('sci_') ? 'science' : 'flight';
+}
+
+/**
+ * How much of the record a file holds, most complete first.
+ *
+ * Used only to settle a disagreement: where a sample appears in two files of
+ * one family with different values — which should not happen, since they are
+ * decimations of the same measurements — the fuller file wins.
+ */
+export function resolutionOf(name: string): number {
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  if (/^[de](b|c)d$/.test(ext)) return 0; // dbd, ebd — the whole record
+  if (/^[mn](b|c)d$/.test(ext)) return 1; // mbd, nbd — medium
+  if (/^[st](b|c)d$/.test(ext)) return 2; // sbd, tbd — the Iridium subset
+  return 3;
 }

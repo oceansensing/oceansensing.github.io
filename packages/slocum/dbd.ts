@@ -43,7 +43,7 @@
 import { decompressStream, isCompressedName } from './lz4.ts';
 import { parseSensorList, readHeader } from './header.ts';
 import type { DbdFile, Series } from './types.ts';
-import { MissingCacheError, NOTSET, SAME, UPDATED } from './types.ts';
+import { gliderOf, MissingCacheError, NOTSET, SAME, UPDATED } from './types.ts';
 
 /** The two names Slocum gives the per-cycle clock, flight and science. */
 const TIME_NAMES = ['m_present_time', 'sci_m_present_time'];
@@ -125,6 +125,9 @@ export function openDbd(bytes: Uint8Array, options: OpenOptions = {}): DbdFile {
     timeName,
     timePosition: position.get(timeName)!,
     bytes: input,
+    // The header's own name for itself, so a renamed file still reports the
+    // vehicle that wrote it.
+    glider: gliderOf(header.fullFilename || name),
   };
 }
 
@@ -305,6 +308,7 @@ export function readSeries(
       time: Float64Array.from(out?.time ?? []),
       value: Float64Array.from(out?.value ?? []),
       from: file.name,
+      glider: file.glider,
     };
   });
 }

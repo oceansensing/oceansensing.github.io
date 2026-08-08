@@ -6,146 +6,210 @@ import SlocumDecoder from '../../components/SlocumDecoder.astro';
 <BaseLayout
   title="Slocum glider decoder"
   description="Decode Slocum glider binary data — sbd, tbd, mbd, nbd, dbd, ebd and their compressed forms — to CSV or netCDF, entirely in your browser. Nothing is uploaded."
+  wide
 >
-  <div class="container">
+  <div class="container wide full">
     <p class="crumb"><a href="/data/">Data &amp; Tools</a></p>
     <h1>Slocum glider decoder</h1>
     <p class="intro">
-      Teledyne Webb's Slocum gliders log to a binary format with no published
-      specification. This reads it — flight and science files, compressed or
-      not — and writes CSV or netCDF. It runs entirely in your browser: the
-      files are never uploaded, which matters while a deployment is still under
-      embargo.
+      Teledyne Webb's Slocum gliders log to a binary format for which no
+      specification has been published. This decoder reads the flight and
+      science files, compressed or not, and writes CSV, netCDF, or the
+      OceanGliders OG1.0 format. The decoding runs in the browser and no file
+      is uploaded, so data under embargo stays on the machine it is read on.
     </p>
 
     <SlocumDecoder />
 
     <section class="about">
-      <h2>What you need</h2>
+      <h2>Data files and sensor-list caches</h2>
       <p>
-        Two things: the data files, and the <strong>sensor-list cache</strong> they refer to.
+        A Slocum file is <em>factored</em>. It names an eight-character CRC and
+        carries no sensor list of its own, so the binary section cannot be
+        interpreted without the matching <code>&lt;crc&gt;.cac</code>. A file
+        whose cache is absent cannot be read partially or approximately, so the
+        decoder reports the CRC it requires. Caches are written to the glider's <code>cache</code> directory and to the deployment directory the
+        dockserver creates. Once a cache has been supplied it is retained in
+        this browser and does not need to be supplied again.
       </p>
       <p>
-        A file off a glider is <em>factored</em> — it names an eight-character
-        CRC and carries no sensor list of its own, so the bytes cannot be
-        interpreted without the matching <code>&lt;crc&gt;.cac</code>. There is
-        no partial or approximate reading of a file whose cache is missing, so
-        the decoder names the one it wants rather than failing vaguely. Caches
-        live in the glider's <code>cache</code> directory and in the deployment
-        directory the dockserver writes; select them alongside the data, or
-        select the whole deployment folder. Once supplied they are kept in this
-        browser, so it is a one-time step.
-      </p>
-
-      <h2>What it produces</h2>
-
-      <h3>Rows, and the one choice that is yours</h3>
-      <p>
-        There is no single time base in a Slocum file. Each sensor is written
-        on its own subset of cycles — the flight computer logs depth every few
-        seconds and position only when the glider surfaces, and the science
-        computer keeps its own clock — so making a rectangular table is a
-        decision rather than a formatting step.
-      </p>
-      <p>
-        The default is the lossless one: one row per time <em>any</em> sensor
-        reported, blank where a sensor did not. Nothing is invented and nothing
-        is dropped, and the table is mostly blank, which is an honest picture
-        of what a glider logs. The alternative interpolates everything onto one
-        sensor's times, which is dense and immediately usable and in which
-        every value but the base column is a number the glider never recorded.
-        The decoder will do it; it will not do it without being asked.
+        The two kinds of file may be supplied in either order. A data file that
+        arrives before its cache is retained, and it is decoded as soon as the
+        cache arrives. Dropping the data, reading which cache it names, and
+        then supplying that cache therefore works without dropping the data a
+        second time. A whole folder may also be dropped or selected, which is
+        the one action that supplies both: the file dialog selects within a
+        single directory, and the data and the caches are in different ones.
       </p>
 
-      <h3>Both computers, one table</h3>
+      <h2>Deployments</h2>
       <p>
-        Flight and science files merge on one axis: both stamp epoch seconds
-        and the science clock is set from the flight computer's. Where a sensor
-        is written by <em>both</em> — <code>sci_water_pressure</code> is
-        measured by the science computer and relayed to the flight computer at
-        a much slower rate — the two stay separate columns, suffixed with the
-        file family they came from. They are not the same record and merging
-        them would hide that.
+        Files are grouped into deployments before anything is written, and each
+        deployment is exported as its own file. Two gliders, or one glider's
+        spring and summer work, are therefore never written into a single file.
+        The filenames and the sensor names are identical across such cases, so
+        the two records cannot be separated once they have been combined.
+      </p>
+      <p>
+        A deployment is one glider over one continuous stretch of time. A
+        different vehicle begins a new deployment, and so does a gap of three
+        days or more. The gap is measured between segments and not between
+        samples. A glider logs different sensors on very different schedules,
+        and a slow channel that goes quiet over a weekend is not a break in the
+        deployment. With a single deployment the page behaves as it does for a
+        single pair of files.
+      </p>
+
+      <h2>The table and the exports</h2>
+
+      <h3>Rows and the time base</h3>
+      <p>
+        A Slocum file has no single time base. Each sensor is written on its
+        own subset of cycles: the flight computer logs depth every few seconds
+        and position only at surfacings, and the science computer keeps a
+        separate clock. Assembling a rectangular table is therefore a decision
+        about which times become rows, and not a question of formatting.
+      </p>
+      <p>
+        The default assembles one row per time at which any sensor reported,
+        and leaves a cell blank where that sensor did not report. No value is
+        added and none is discarded, so the file can be reconstructed from the
+        table. Most cells are blank, which is the shape of what a glider logs.
+        The alternative interpolates every sensor onto one sensor's times. It
+        is dense and immediately usable. Every value in it outside the base
+        column is a number the glider did not record, and it is applied only
+        when it is selected.
+      </p>
+
+      <h3>Column order</h3>
+      <p>
+        Position comes first, then depth, then the CTD and the quantities
+        derived from it. The remaining columns follow in order of how many
+        values they hold, which places the nearly empty engineering channels at
+        the far right. The order the cache file gives is alphabetical over the
+        glider's whole sensor namespace: on one test segment that placed a
+        channel holding 3 values of 1,328 in the first column, and water
+        temperature, holding 853, in the sixty-second.
+      </p>
+      <p>
+        Where the two rules disagree, the named quantity is placed first.
+        Position is recorded only at surfacings and so holds few values, and it
+        remains among the first columns. The CSV, the on-screen preview and
+        both netCDF exports use one order.
+      </p>
+
+      <h3>One glider, two computers</h3>
+      <p>
+        A glider carries a flight computer and a science computer, and the
+        sensor names record which of the two a sensor belongs to. <code>sci_</code> is measured by the science computer. <code>m_</code> is measured by the flight computer and <code>c_</code> is commanded on it. <code>u_</code> are parameters the user sets, <code>f_</code> are factory values, and <code>x_</code> and several
+        others are derived channels.
+      </p>
+      <p>
+        Columns are grouped by glider first and by computer second. Two
+        vehicles' <code>m_depth</code> are separate records, so they remain
+        separate columns and each names its glider. Within one glider, a sensor
+        written by both computers also remains two columns. <code>sci_water_pressure</code> is measured by the science computer and
+        relayed to the flight computer at a much lower rate, and the <code>sci_</code> prefix identifies which of the two holds the
+        measurement.
+      </p>
+      <p>
+        Within one computer the files combine. <code>sbd</code>, <code>mbd</code> and <code>dbd</code> are three decimations of one
+        flight record, and <code>tbd</code>, <code>nbd</code> and <code>ebd</code> are three decimations of one science record. The short
+        files are transmitted over Iridium during the deployment and the long
+        ones are recovered from the glider afterwards. Supplying any
+        combination of them produces one column per sensor. Samples that appear
+        in more than one file are merged by timestamp, and the number merged is
+        reported. Where two files hold different values at one timestamp the
+        value from the more complete file is retained, and the page reports
+        that as well.
+      </p>
+      <p>
+        The merge is performed per sensor rather than per file, because the
+        decimation lists are not nested. The lists are set independently with <code>sbdlist.dat</code> and <code>mbdlist.dat</code>: on one segment of
+        the test deployment the sbd holds 64 sensors and the mbd 134, of which
+        58 are common and 6 are in the sbd alone. The merged table holds the
+        union.
       </p>
 
       <h3>Seawater properties</h3>
       <p>
         A Slocum CTD writes conductivity, in-situ temperature and pressure.
-        Ticking the box adds practical salinity, Absolute Salinity,
-        Conservative Temperature, density, σ<sub>0</sub> and sound speed,
-        computed with the same full-precision <a href="/data/seawater/">TEOS-10 engine</a> as the seawater
-        calculator. They are marked as derived in the CSV heading and in the
-        netCDF attributes, and without a position or the anomaly atlas the
-        salinity column is named <code>salinity_reference</code> rather than <code>salinity_absolute</code>, because that is what it is.
+        Selecting the seawater option adds practical salinity, Absolute
+        Salinity, Conservative Temperature, density, σ<sub>0</sub> and sound
+        speed, computed with the full-precision <a href="/data/seawater/">TEOS-10 implementation</a> that the seawater calculator uses. These
+        columns are marked as derived in the CSV heading and in the netCDF
+        attributes. Without a position, or without the Absolute Salinity
+        Anomaly atlas, the composition correction cannot be applied, and the
+        column is named <code>salinity_reference</code> rather than <code>salinity_absolute</code>, which is the quantity it then holds.
       </p>
 
       <h3>OceanGliders OG1.0</h3>
       <p>
-        There is an <a href="https://oceangliderscommunity.github.io/OG-format-user-manual/OG_Format.html">OG1.0</a> export for anyone submitting to the community
-        format. It needs metadata a Slocum file does not carry — the glider's
-        WMO number, who flew it, where it went in the water — so the panel
-        asks for it, keeps it in this browser, and will save it as a profile,
-        since a deployment's second segment needs the same answers as its
-        first.
+        The <a href="https://oceangliderscommunity.github.io/OG-format-user-manual/OG_Format.html">OG1.0</a> export writes the community trajectory format. OG1.0
+        requires metadata that a Slocum file does not carry, including the
+        glider's WMO identifier, the people and institutions responsible, and
+        the deployment time and position. The panel collects those fields,
+        retains them in this browser, and writes them to a profile file. The
+        segments of one deployment take the same values, so the profile is
+        loaded rather than re-entered.
       </p>
       <p>
-        <strong>It claims the structure, not certification.</strong> The
-        variables, units and attributes are OG1.0, but the encoding is
-        netCDF-3 classic, because a browser cannot write netCDF-4 — that is
-        HDF5 — without shipping a great deal of code to do it. Where OG1
-        declares a string variable, the netCDF export writes a fixed-width
-        character array. The <strong>CDL</strong> export declares it as a real <code>string</code>, so <code>ncgen -4 file.cdl -o file.nc</code> produces the netCDF-4
-        form; that is the exact route to a conformant file, and it is checked —
-        <code>ncgen</code> compiles the CDL and every value survives the trip. What
-        neither has been through is an OG1 <em>validator</em>: the community's
-        own checkers describe themselves as experimental.
+        The variables, units and attributes are OG1.0. The encoding is netCDF-3
+        classic, because a browser cannot write netCDF-4 without a large HDF5
+        implementation, so the variables OG1.0 declares as strings are written
+        as fixed-width character arrays. The CDL export declares them as <code>string</code>, and <code>ncgen -4 file.cdl -o file.nc</code> compiles
+        it to netCDF-4. That path has been checked: <code>ncgen</code> compiles
+        the CDL, and the values, the attributes and the string variables are
+        identical across the two encodings. No OG1 validator has checked either
+        file, and the community's own checkers describe themselves as
+        experimental.
       </p>
       <p>
-        Four things OG1 wants at every measurement are computed rather than
-        recorded, and each says so in its own attributes: position between the
-        glider's fixes, depth from pressure and latitude, practical salinity
-        from the CTD, and the dive phase with its segment and profile
-        numbering. Where the glider logs its own behaviour state the published
-        OceanGliders translation is used; where it does not — which is usual
-        for files sent over Iridium — the phase is inferred from the rate of
-        change of pressure, and the file records which of the two happened.
+        Four quantities that OG1.0 requires at every measurement are computed
+        rather than recorded, and each records in its own attributes how it was
+        obtained. Position between the glider's fixes is interpolated, and the
+        fixes themselves are written to <code>LATITUDE_GPS</code> and <code>LONGITUDE_GPS</code>. Depth is computed from pressure and
+        latitude. Practical salinity is computed from the CTD. The dive phase,
+        with its segment and profile numbering, is taken from the glider's own
+        behaviour state where that state is logged, and inferred from the rate
+        of change of pressure where it is not, which is the usual case for
+        files transmitted over Iridium. The file records which of the two
+        methods was used.
       </p>
 
       <h3>CSV and netCDF</h3>
       <p>
-        The CSV carries data alone, with no comment lines, so it opens
-        anywhere. The netCDF is <strong>netCDF-3 classic</strong>, written
-        directly rather than through a library, and it is the one that carries
-        provenance: the source files, the decode history and every note the
-        table produced. Its units are the glider's own unit strings —
-        <code>degc</code>, <code>nodim</code>, <code>enum</code> — carried
-        verbatim, so it does not claim CF conventions it does not meet. The
-        time variable is the exception, and is genuinely udunits.
+        The CSV holds data alone and carries no comment lines, so it opens in
+        any reader. The netCDF is netCDF-3 classic, written directly rather
+        than through a library, and it carries the provenance: the source
+        files, the decoding history, and every note the table produced. Its
+        units are the glider's own unit strings, <code>degc</code>, <code>nodim</code> and <code>enum</code> among them, carried verbatim,
+        so the file does not claim CF conventions. The time variable is the
+        exception and its units are udunits.
       </p>
 
-      <h3>Where it stops</h3>
+      <h3>Processing not applied</h3>
       <p>
-        It reads files; it does not process them. There is no thermal-lag
-        correction, no despiking, no quality control and no gridding, and it
-        does not write the IOOS Glider DAC's trajectory format. The OG1 quality
-        flags are all zero — <em>no QC has been applied</em> — which is the
-        honest value rather than a placeholder. Position is
-        converted from NMEA and otherwise left as the glider dead-reckoned it.
+        The decoder reads files and does not process them. It applies no
+        thermal-lag correction, no despiking, no quality control and no
+        gridding, and it does not write the IOOS Glider DAC trajectory format.
+        The OG1.0 quality flags are all zero, the value that records that no
+        quality control has been applied. Position is converted from NMEA and
+        is otherwise the glider's own dead-reckoned position.
       </p>
 
-      <h2>How it is checked</h2>
+      <h2>Checks against dbdreader</h2>
       <p>
-        Against <a href="https://github.com/smerckel/dbdreader">dbdreader</a>,
-        value for value: every sensor's times and values are compared by a
-        SHA-256 over their raw bytes, for a matched flight/science pair from a
-        real deployment. The decoder is a port of <a href="https://github.com/oceansensing/SlocumIO.jl">SlocumIO.jl</a>,
-        which was itself validated against dbdreader, so agreeing with one is
-        agreeing with both. The netCDF writer was separately confirmed by
+        Every sensor's times and values are compared with <a href="https://github.com/smerckel/dbdreader">dbdreader</a> by a
+        SHA-256 over their raw bytes, for a matched flight and science pair
+        from a real deployment. The decoder is a port of <a href="https://github.com/oceansensing/SlocumIO.jl">SlocumIO.jl</a>,
+        which was itself validated against dbdreader, so agreement here is
+        agreement with both. The netCDF writer was checked separately by
         reading its output with <code>scipy.io.netcdf_file</code>.
       </p>
       <p>
-        That is one glider and one deployment, which is the honest limit of it.
-        The format has no specification to check against instead.
+        That is one glider and one deployment, which is the extent of what has
+        been tested. The format has no specification to check against instead.
       </p>
     </section>
   </div>
@@ -163,13 +227,11 @@ import SlocumDecoder from '../../components/SlocumDecoder.astro';
 
   .intro {
     color: var(--text-muted);
-    max-width: var(--prose-width);
     margin-block-end: var(--space-lg);
   }
 
   .about {
     margin-block: var(--space-2xl);
-    max-width: var(--prose-width);
   }
 
   .about h2 {

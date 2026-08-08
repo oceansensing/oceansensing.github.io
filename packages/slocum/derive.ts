@@ -71,8 +71,8 @@ export interface DeriveResult {
 const finite = (v: number) => Number.isFinite(v);
 
 /**
- * The file-family suffix `buildTable` adds when a sensor is written by both
- * computers — `sci_water_pressure_tbd`.
+ * The suffix `buildTable` adds when a sensor is written by both computers —
+ * `sci_water_pressure_tbd`.
  *
  * Anchored to the actual extensions rather than "three letters after an
  * underscore", which is what this was first written as and which strips the
@@ -82,7 +82,7 @@ const finite = (v: number) => Number.isFinite(v);
  */
 const FAMILY_SUFFIX = /_[smdtne][bc]d$/;
 
-const SCIENCE = ['tbd', 'nbd', 'ebd', 'tcd', 'ncd', 'ecd'];
+
 
 /**
  * The first of `names` the table has a column for, following the suffix when
@@ -104,8 +104,8 @@ function findColumn(
     );
     if (variants.length === 0) continue;
     if (variants.length === 1) return variants[0];
-    const science = variants.find((c) => SCIENCE.includes(c.name.slice(-3)));
-    const flight = variants.find((c) => !SCIENCE.includes(c.name.slice(-3)));
+    const science = variants.find((c) => /_[tne][bc]d$/.test(c.name));
+    const flight = variants.find((c) => !/_[tne][bc]d$/.test(c.name));
     return (prefer === 'science' ? science ?? flight : flight ?? science) ?? variants[0];
   }
   return undefined;
@@ -198,8 +198,8 @@ export function deriveSeawater(table: Table, options: DeriveOptions = {}): Deriv
   const presScale = /^bar$/i.test(presColumn!.unit) ? 10 : 1;
   if (condScale === 1 && !/ms\/cm/i.test(condColumn!.unit)) {
     notes.push(
-      `Conductivity is in "${condColumn!.unit}", which is not the S/m these files normally use — ` +
-        'it has been taken as mS/cm. Check the salinity before using it.',
+      `Conductivity is in "${condColumn!.unit}", which is not the S/m these files normally use. ` +
+        'It has been taken as mS/cm, so the salinity below rests on that reading of the unit.',
     );
   }
   if (presScale === 1 && !/dbar/i.test(presColumn!.unit)) {

@@ -38,6 +38,12 @@ import Disclaimer from './Disclaimer.astro';
       </span>
     </label>
 
+    <p class="pick-folder">
+      A whole deployment folder works too: <label class="folder"><input type="file" data-folder multiple {...{ webkitdirectory: '', directory: '' }} /> <span>choose a folder</span></label>, or drag one onto the box. That is the
+      easiest way to get the data and its <code>cache</code> directory in one
+      go — the file dialog cannot select across two directories.
+    </p>
+
     <p class="cache-state" data-cache-state>
       No sensor-list caches held yet.
     </p>
@@ -47,6 +53,12 @@ import Disclaimer from './Disclaimer.astro';
 
   <div class="results" data-results hidden>
     <div class="summary" data-summary></div>
+
+    <div class="control deployments" data-deployment-control hidden>
+      <label for="slocum-deployment">Deployment</label>
+      <select id="slocum-deployment" data-deployment></select>
+      <span class="deployment-note" data-deployment-note></span>
+    </div>
 
     <div class="controls">
       <div class="control">
@@ -114,6 +126,7 @@ import Disclaimer from './Disclaimer.astro';
     <div class="download">
       <button type="button" data-csv>Download CSV</button>
       <button type="button" data-netcdf>Download netCDF</button>
+      <button type="button" data-all hidden>Download every deployment</button>
       <span class="download-note" data-download-note></span>
     </div>
 
@@ -153,10 +166,9 @@ import Disclaimer from './Disclaimer.astro';
         <strong>OG1.0 structure, netCDF-3 encoding.</strong> A browser cannot
         write netCDF-4, which is HDF5, so the variables OG1 declares as
         strings are fixed-width character arrays here. The CDL export declares
-        them as <code>string</code>: <code>ncgen -4 file.cdl -o file.nc</code> turns it into a
-        netCDF-4 file. Neither has been through an OG1 validator — the
-        community's own checkers are still experimental — so this claims the
-        structure, not certification.
+        them as <code>string</code>, and <code>ncgen -4 file.cdl -o file.nc</code> compiles that
+        into a netCDF-4 file. No OG1 validator has checked either file. The
+        community's own checkers are still experimental.
       </p>
     </details>
   </div>
@@ -205,7 +217,6 @@ import Disclaimer from './Disclaimer.astro';
     display: block;
     font-size: var(--text-sm);
     color: var(--text-muted);
-    max-inline-size: 52ch;
     margin-inline: auto;
   }
 
@@ -214,6 +225,25 @@ import Disclaimer from './Disclaimer.astro';
   .problem code {
     font-family: var(--font-mono);
     font-size: 0.9em;
+  }
+
+  .pick-folder {
+    margin-block: var(--space-xs) 0;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  .folder {
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .folder input {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
   }
 
   .cache-state {
@@ -283,6 +313,26 @@ import Disclaimer from './Disclaimer.astro';
     background: var(--bg);
     color: var(--text);
     min-inline-size: 0;
+  }
+
+  .deployments {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-block-end: var(--space-md);
+    flex-wrap: wrap;
+  }
+
+  .deployments[hidden] {
+    display: none;
+  }
+
+  .deployment-note {
+    color: var(--text-muted);
+  }
+
+  .download button[hidden] {
+    display: none;
   }
 
   /* ---- charts ----------------------------------------------------------- */
@@ -394,7 +444,6 @@ import Disclaimer from './Disclaimer.astro';
     padding-inline-start: 1.2em;
     font-size: var(--text-sm);
     color: var(--text-muted);
-    max-inline-size: var(--prose-width);
   }
 
   .notes[hidden] {
@@ -468,7 +517,6 @@ import Disclaimer from './Disclaimer.astro';
   .og1-intro,
   .og1-caveat {
     color: var(--text-muted);
-    max-inline-size: var(--prose-width);
     margin-block: var(--space-sm);
   }
 
@@ -705,12 +753,16 @@ import Disclaimer from './Disclaimer.astro';
     deriveSeawater,
     describe,
     exportName,
+    deploymentLabel,
+    deploymentStem,
     familyOf,
     isCompressedName,
     MissingCacheError,
     openDbd,
     readSeries,
     sortFileNames,
+    splitDeployments,
+    orderColumns,
     toCsv,
     toNetcdf,
     type Column,
@@ -725,6 +777,7 @@ import Disclaimer from './Disclaimer.astro';
     writeNetcdf,
     OG1_DEFAULTS,
     OG1_FIELDS,
+    type Deployment,
     type Og1Field,
     type Og1Metadata,
   } from '@c4po/slocum';
@@ -760,6 +813,10 @@ import Disclaimer from './Disclaimer.astro';
     const previewNote = find('[data-preview-note]');
     const previewTable = find<HTMLTableElement>('[data-preview]');
     const notesList = find('[data-notes]');
+    const deploymentControl = find('[data-deployment-control]');
+    const deploymentSelect = find<HTMLSelectElement>('[data-deployment]');
+    const deploymentNote = find('[data-deployment-note]');
+    const allButton = find<HTMLButtonElement>('[data-all]');
     const csvButton = find<HTMLButtonElement>('[data-csv]');
     const ncButton = find<HTMLButtonElement>('[data-netcdf]');
     const downloadNote = find('[data-download-note]');
@@ -768,8 +825,18 @@ import Disclaimer from './Disclaimer.astro';
     const caches = new Map<string, string>();
     /** Decoded data files, in deployment order. */
     let decoded: { name: string; series: Series[] }[] = [];
-    /** Data files that arrived without the cache they need. */
-    let pending: { name: string; crc: string }[] = [];
+    /**
+     * Data files waiting for a cache, with their bytes.
+     *
+     * The bytes are the point. Keeping only the name and the CRC meant a file
+     * that arrived before its cache could never be retried — and since the
+     * file dialog cannot select across two directories, and a deployment
+     * keeps its data in `realtime/` and its caches in `cache/`, that is the
+     * ordinary way to use this page. Caches had to be dropped first or the
+     * data drop was simply lost.
+     */
+    let pending: { name: string; bytes: Uint8Array; crc: string }[] = [];
+    let deployments: Deployment[] = [];
     let selected = new Set<string>();
     let everySensor: string[] = [];
     let table: Table | null = null;
@@ -839,6 +906,39 @@ import Disclaimer from './Disclaimer.astro';
       if (input.files) void take([...input.files]);
     });
 
+    find<HTMLInputElement>('[data-folder]').addEventListener('change', (event) => {
+      const picked = (event.target as HTMLInputElement).files;
+      if (picked) void take([...picked]);
+    });
+
+    /**
+     * Everything under a dropped directory.
+     *
+     * `dataTransfer.files` is empty for a dropped folder, so without this a
+     * reader who drags a deployment across gets nothing at all and no reason
+     * why. `webkitGetAsEntry` is the only way to see inside one, and it is
+     * supported everywhere despite the prefix.
+     */
+    async function filesUnder(entry: any): Promise<File[]> {
+      if (!entry) return [];
+      if (entry.isFile) {
+        return [await new Promise<File>((resolve, reject) => entry.file(resolve, reject))];
+      }
+      if (!entry.isDirectory) return [];
+      const reader = entry.createReader();
+      const found: File[] = [];
+      // readEntries hands back a batch at a time and signals the end with an
+      // empty one; taking only the first batch silently truncates a folder of
+      // more than about a hundred files, which a deployment always is.
+      for (;;) {
+        const batch: any[] = await new Promise((resolve, reject) =>
+          reader.readEntries(resolve, reject));
+        if (batch.length === 0) break;
+        for (const child of batch) found.push(...(await filesUnder(child)));
+      }
+      return found;
+    }
+
     for (const type of ['dragenter', 'dragover'] as const) {
       drop.addEventListener(type, (event) => {
         event.preventDefault();
@@ -850,18 +950,35 @@ import Disclaimer from './Disclaimer.astro';
     }
     drop.addEventListener('drop', (event) => {
       event.preventDefault();
-      const dropped = event.dataTransfer?.files;
-      if (dropped?.length) void take([...dropped]);
+      const transfer = event.dataTransfer;
+      if (!transfer) return;
+
+      // The entries have to be taken synchronously — the DataTransfer is
+      // emptied the moment this handler returns, so reading them after an
+      // await gives nothing.
+      const entries = [...transfer.items]
+        .map((item) => (item.webkitGetAsEntry ? item.webkitGetAsEntry() : null))
+        .filter(Boolean);
+      const plain = [...transfer.files];
+
+      void (async () => {
+        const found = entries.length > 0
+          ? (await Promise.all(entries.map(filesUnder))).flat()
+          : plain;
+        if (found.length > 0) void take(found);
+      })();
     });
 
     async function take(chosen: File[]) {
       say('Reading…');
 
-      // Caches first, always: a data file cannot be decoded without one, and a
-      // reader who selects a whole deployment directory hands over both at
+      // Caches first, always: a data file cannot be decoded without one, and
+      // a reader who hands over a whole deployment directory gives both at
       // once in whatever order the browser lists them.
       const cacheFiles = chosen.filter((f) => familyOf(f.name) === 'cache');
-      const dataFiles = chosen.filter((f) => familyOf(f.name) !== 'cache' && familyOf(f.name) !== 'unknown');
+      const dataFiles = chosen.filter(
+        (f) => familyOf(f.name) !== 'cache' && familyOf(f.name) !== 'unknown',
+      );
       const ignored = chosen.length - cacheFiles.length - dataFiles.length;
 
       for (const file of cacheFiles) {
@@ -874,36 +991,56 @@ import Disclaimer from './Disclaimer.astro';
       }
       showCaches();
 
-      const order = sortFileNames(dataFiles.map((f) => f.name));
-      const byName = new Map(dataFiles.map((f) => [f.name, f]));
-      const fresh: typeof decoded = [];
+      // Everything waiting for a cache, plus whatever just arrived. The
+      // waiting ones are retried on every drop, so caches and data can come
+      // in either order — or in two goes, which is what the file dialog
+      // forces when they live in different directories.
+      const queue = new Map(pending.map((p) => [p.name, p.bytes]));
+      for (const file of dataFiles) queue.set(file.name, new Uint8Array(await file.arrayBuffer()));
+
+      const kept = new Map(decoded.map((d) => [d.name, d]));
       const missing: typeof pending = [];
       const broken: string[] = [];
 
-      for (const name of order) {
-        const file = byName.get(name)!;
-        const bytes = new Uint8Array(await file.arrayBuffer());
+      for (const name of sortFileNames([...queue.keys()])) {
+        const bytes = queue.get(name)!;
+        // Dropping the same file twice is not an error and not a reason to
+        // decode it again.
+        if (kept.has(name) && !dataFiles.some((f) => f.name === name)) continue;
         try {
           const header = describe(bytes, name);
           const crc = header.sensorListCrc.toLowerCase();
           const cache = caches.get(crc);
           if (header.sensorListFactored !== 0 && !cache) {
-            missing.push({ name, crc });
+            missing.push({ name, bytes, crc });
             continue;
           }
           const opened = openDbd(bytes, { name, cache });
-          fresh.push({ name, series: readSeries(opened) });
+          kept.set(name, { name, series: readSeries(opened) });
         } catch (error) {
-          if (error instanceof MissingCacheError) missing.push({ name, crc: error.crc });
-          else broken.push(`${name}: ${(error as Error).message}`);
+          if (error instanceof MissingCacheError) {
+            missing.push({ name, bytes, crc: error.crc });
+          } else {
+            broken.push(`${name}: ${(error as Error).message}`);
+          }
         }
         // Let the page paint between files: a whole deployment is hundreds of
         // them and a single synchronous loop would freeze the tab.
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
 
-      decoded = fresh;
+      // Accumulated across drops rather than replaced. Replacing meant the
+      // second drop — the caches — threw away the first.
+      decoded = sortFileNames([...kept.keys()]).map((name) => kept.get(name)!);
       pending = missing;
+
+      // Two gliders, or one glider's spring and summer deployments, must not
+      // be written into one file: every filename and every sensor matches
+      // across them, so nothing downstream could tell them apart afterwards.
+      const split = splitDeployments(decoded.map((d) => ({ file: d.name, series: d.series })));
+      deployments = split.deployments;
+      drawDeployments(split.undated);
+
       report(broken, ignored);
       if (decoded.length > 0) rebuild(true);
       else results.hidden = true;
@@ -931,6 +1068,55 @@ import Disclaimer from './Disclaimer.astro';
     function say(message: string) {
       problem.textContent = message;
       problem.hidden = false;
+    }
+
+    // ---- deployments -------------------------------------------------------
+
+    function drawDeployments(undated: readonly string[]) {
+      const previous = deploymentSelect.value;
+      deploymentSelect.innerHTML = '';
+      deployments.forEach((deployment, i) => {
+        const option = document.createElement('option');
+        option.value = String(i);
+        const span = `${stamp(deployment.start)} → ${stamp(deployment.end)}`;
+        option.textContent =
+          `${deploymentLabel(deployment)} — ${deployment.segments.length} file(s), ${span}`;
+        deploymentSelect.append(option);
+      });
+      if (previous && Number(previous) < deployments.length) deploymentSelect.value = previous;
+
+      // With one deployment the picker says nothing useful, so it stays out
+      // of the way and the page reads exactly as it did before.
+      const several = deployments.length > 1;
+      deploymentControl.hidden = !several;
+      allButton.hidden = !several;
+      deploymentNote.textContent = several
+        ? `${deployments.length} deployments here — different gliders, or the same one with ` +
+          'three days or more between segments. Each exports as its own file.'
+        : '';
+      if (undated.length > 0) {
+        deploymentNote.textContent +=
+          ` ${undated.length} file(s) had no usable clock and are left out: ${undated.join(', ')}.`;
+      }
+    }
+
+    deploymentSelect.addEventListener('change', () => rebuild(true));
+
+    /** The deployment on screen, or everything when there is only one. */
+    function current(): { series: Series[]; files: string[]; stem: string } {
+      const deployment = deployments[Number(deploymentSelect.value) || 0];
+      if (!deployment) {
+        return {
+          series: decoded.flatMap((d) => d.series),
+          files: decoded.map((d) => d.name),
+          stem: '',
+        };
+      }
+      return {
+        series: deployment.series,
+        files: deployment.segments.map((s) => s.file),
+        stem: deploymentStem(deployment),
+      };
     }
 
     // ---- building the table ------------------------------------------------
@@ -962,7 +1148,7 @@ import Disclaimer from './Disclaimer.astro';
     }
 
     function rebuild(fresh = false) {
-      const all = decoded.flatMap((d) => d.series);
+      const all = current().series;
       if (all.length === 0) return;
 
       // The rows are the union of the *selected* sensors' times, so the table
@@ -976,7 +1162,11 @@ import Disclaimer from './Disclaimer.astro';
       const notes = [...built.notes];
       if (deriveBox.checked) {
         const { columns, notes: why } = deriveSeawater(built, { atlas });
-        built.columns.push(...columns);
+        // Re-ordered rather than appended: the derived columns belong beside
+        // the CTD they came from, not in a clump at the far right past forty
+        // engineering channels. `orderColumns` is the same one `buildTable`
+        // applies, so the two cannot drift.
+        built.columns = orderColumns([...built.columns, ...columns]);
         notes.push(...why);
       }
       built.notes = notes;
@@ -1388,22 +1578,63 @@ import Disclaimer from './Disclaimer.astro';
 
     // ---- downloads ---------------------------------------------------------
 
+    /**
+     * What a deployment's file is called.
+     *
+     * The glider and the day it started when there is more than one on the
+     * page, because two of them would otherwise be named for whichever
+     * segments they happen to hold and a reader could not tell which is
+     * which. With a single deployment the source filenames are more
+     * informative, so nothing changes.
+     */
+    function fileNameFor(files: readonly string[], stem: string, extension: string): string {
+      return deployments.length > 1 && stem
+        ? `${stem}.${extension}`
+        : exportName(files, extension);
+    }
+
     csvButton.addEventListener('click', () => {
       if (!table) return;
-      save(toCsv(exported()), exportName(decoded.map((d) => d.name), 'csv'), 'text/csv');
+      const { files, stem } = current();
+      save(toCsv(exported()), fileNameFor(files, stem, 'csv'), 'text/csv');
     });
 
     ncButton.addEventListener('click', () => {
       if (!table) return;
+      const { files, stem } = current();
       try {
         const bytes = toNetcdf(exported(), {
-          title: `Slocum glider data — ${decoded.map((d) => d.name).join(', ')}`,
-          sources: decoded.map((d) => d.name),
+          title: `Slocum glider data — ${files.join(', ')}`,
+          sources: files,
         });
-        save(bytes, exportName(decoded.map((d) => d.name), 'nc'), 'application/x-netcdf');
+        save(bytes, fileNameFor(files, stem, 'nc'), 'application/x-netcdf');
       } catch (error) {
         downloadNote.textContent = (error as Error).message;
       }
+    });
+
+    // Every deployment at once, one file each. Sequential with a pause
+    // between: a browser blocks a burst of programmatic downloads, and the
+    // reader would get the first and silently lose the rest.
+    allButton.addEventListener('click', async () => {
+      const chosen = [...selected];
+      const wanted = deploymentSelect.value;
+      for (let i = 0; i < deployments.length; i++) {
+        const deployment = deployments[i];
+        const built = buildTable(
+          deployment.series.filter((series) => chosen.includes(columnName(series, deployment.series))),
+          { join: joinSelect.value === 'interpolate' ? 'interpolate' : 'union' },
+        );
+        if (built.rows === 0) continue;
+        save(toCsv(built), `${deploymentStem(deployment)}.csv`, 'text/csv');
+        downloadNote.textContent =
+          `${deploymentStem(deployment)}.csv — ${i + 1} of ${deployments.length}`;
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+      // The picker is left where the reader had it, not on whichever
+      // deployment happened to be written last.
+      deploymentSelect.value = wanted;
+      downloadNote.textContent = `${deployments.length} deployments written.`;
     });
 
     /** The table as the reader has it: their columns, and nothing else. */
@@ -1609,6 +1840,9 @@ import Disclaimer from './Disclaimer.astro';
     });
 
     function withOg1(then: (result: ReturnType<typeof buildOg1>) => void) {
+      // OG1 names its own file from the platform serial and the start time, so
+      // it is already per-deployment — but it takes the table on screen, which
+      // is the selected deployment and not everything decoded.
       if (!table) return;
       try {
         const result = buildOg1(exported(), og1);

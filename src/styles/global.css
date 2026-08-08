@@ -119,6 +119,20 @@ kbd {
   max-width: var(--content-width);
 }
 
+/* A wide page with no figure in it, where the text and the tool *are* the
+   page — the Slocum decoder. Nothing gets the measure re-applied.
+   It lives here rather than in the page, and that is not a preference:
+   Astro scopes a page's own rules by an attribute it stamps on that page's
+   markup, so `.slocum > *` cannot match the root element of a component the
+   page places. The decoder panel would keep the cap while the prose around
+   it lost it — the same scoping trap the Slocum component's own stylesheet
+   has a note about, met from the page side.
+   Written with the same three-class specificity as the rule above and placed
+   after it, so it wins on order. */
+.container.wide.full > * {
+  max-width: none;
+}
+
 /* The topline is the map's caption above the map: an eyebrow on the left and
    the UTC clock on the right. It spans the figure rather than the prose
    measure so those two land on the map's own left and right edges — a clock

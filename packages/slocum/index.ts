@@ -56,6 +56,7 @@ export {
   interpolateOnto,
   interpolateAngleOnto,
   isAngular,
+  orderColumns,
 } from './table.ts';
 export type { BuildOptions, Column, Join, Table } from './table.ts';
 
@@ -79,6 +80,15 @@ export {
 } from './og1.ts';
 export type { Og1Field, Og1Metadata, Og1Result, PhaseResult } from './og1.ts';
 
+export {
+  splitDeployments,
+  spanOf,
+  deploymentLabel,
+  deploymentStem,
+  DEFAULT_GAP_SECONDS,
+} from './deployment.ts';
+export type { Deployment, Segment, SplitOptions } from './deployment.ts';
+
 export { toCdl, quote as cdlQuote } from './cdl.ts';
 export type { CdlOptions } from './cdl.ts';
 
@@ -86,30 +96,17 @@ export { writeNetcdf, packStrings, safeNames } from './netcdf.ts';
 export type { NcAttribute, NcDimension, NcDocument, NcType, NcVariable } from './netcdf.ts';
 export type { DeriveOptions, DeriveResult } from './derive.ts';
 
-export { MissingCacheError, NOTSET, SAME, UPDATED } from './types.ts';
+export {
+  familyOf,
+  gliderOf,
+  homeOf,
+  resolutionOf,
+  MissingCacheError,
+  NOTSET,
+  SAME,
+  UPDATED,
+} from './types.ts';
 export type { DbdFile, FileHeader, Sensor, Series } from './types.ts';
-
-/**
- * Which family a file belongs to, from its name alone.
- *
- * The flight computer writes `sbd`/`mbd`/`dbd` and the science computer
- * `tbd`/`nbd`/`ebd`, in ascending order of how much they hold — the short
- * ones are the decimated subsets sent over Iridium mid-deployment, the long
- * ones are what is recovered from the glider afterwards. `c` in the middle
- * means the same file compressed.
- *
- * This is worth having because a sensor name is not unique across the two:
- * `sci_water_pressure` is written by the science computer and relayed to the
- * flight computer, and the two records are three orders of magnitude apart in
- * sample count.
- */
-export function familyOf(name: string): 'flight' | 'science' | 'cache' | 'unknown' {
-  const ext = name.split('.').pop()?.toLowerCase() ?? '';
-  if (/^[smd](b|c)d$/.test(ext)) return 'flight';
-  if (/^[tne](b|c)d$/.test(ext)) return 'science';
-  if (ext === 'cac' || ext === 'ccc') return 'cache';
-  return 'unknown';
-}
 
 /**
  * Sort file names the way a deployment runs.

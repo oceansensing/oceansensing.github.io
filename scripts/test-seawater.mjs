@@ -405,8 +405,8 @@ type('[data-value="temperature"]', '10');
   const note = q('[data-disclaimer]');
   check('the page carries an under-test disclaimer', note !== null);
   check('and it is showing, not hidden or collapsed', note !== null && note.hidden === false);
-  check('and it says both halves — under test, and at your own risk',
-    /under test/i.test(note?.textContent ?? '') && /own risk/i.test(note?.textContent ?? ''),
+  check('and it says both halves — under testing, and at your own risk',
+    /under testing/i.test(note?.textContent ?? '') && /own risk/i.test(note?.textContent ?? ''),
     (note?.textContent ?? '').slice(0, 60));
   check('and it disclaims warranty rather than only apologising',
     /as-is|no warranty/i.test(note?.textContent ?? ''));

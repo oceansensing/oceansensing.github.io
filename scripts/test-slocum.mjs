@@ -54,11 +54,11 @@ import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
 import { openDbd, describe, readSeries } from '../packages/slocum/dbd.ts';
-import { buildTable, interpolateAngleOnto, interpolateOnto, isAngular } from '../packages/slocum/table.ts';
+import { buildTable, interpolateAngleOnto, interpolateOnto, isAngular, orderColumns } from '../packages/slocum/table.ts';
 import { toCsv, exportName, isoTime } from '../packages/slocum/csv.ts';
 import { toNetcdf } from '../packages/slocum/netcdf.ts';
 import { deriveSeawater } from '../packages/slocum/derive.ts';
-import { familyOf, sortFileNames } from '../packages/slocum/index.ts';
+import { familyOf, gliderOf, homeOf, sortFileNames } from '../packages/slocum/index.ts';
 import {
   buildOg1,
   derivePhase,
@@ -70,6 +70,11 @@ import {
   OG1_FIELDS,
 } from '../packages/slocum/og1.ts';
 import { toCdl } from '../packages/slocum/cdl.ts';
+import {
+  splitDeployments,
+  deploymentLabel,
+  deploymentStem,
+} from '../packages/slocum/deployment.ts';
 import { writeNetcdf } from '../packages/slocum/netcdf.ts';
 import { decodeAtlas } from '../packages/teos10/atlas.ts';
 import { parseSensorList, parseFileopenTime, readHeader } from '../packages/slocum/header.ts';
@@ -490,6 +495,305 @@ const table = buildTable(allSeries);
     buildTable([seg('g-2025-120-1-1.tbd', [10]), seg('g-2025-120-1-1.sbd', [20])])
       .columns.map((c) => c.name).sort(),
     ['sci_water_temp_sbd', 'sci_water_temp_tbd']);
+
+  // The decimated file the glider transmits and the full one recovered from
+  // it are the *same* record at two resolutions, not two records. Keying the
+  // grouping on the extension made them two, so a reader who dropped both
+  // after a recovery got every science sensor twice — with a note claiming
+  // they came from "both computers", which they did not.
+  const shared = buildTable([
+    seg('g-2025-120-1-1.tbd', [10, 30]),          // what came over Iridium
+    seg('g-2025-120-1-1.ebd', [10, 20, 30, 40]),  // what was recovered
+  ]);
+  check('a tbd and the ebd it was decimated from give one column, not two',
+    shared.columns.map((c) => c.name), ['sci_water_temp']);
+  check('and the samples they share are merged rather than repeated',
+    [...shared.columns[0].values], [100, 200, 300, 400]);
+  // ── the glider, which is the level above the computer ──
+  //
+  // A fleet directory holds `m_depth` for every vehicle in it. Leave the
+  // glider out of the key and they merge into one column, interleaved and
+  // looking exactly like data.
+  const vehicle = (name, glider, file, times) => ({
+    name, unit: 'm', glider, from: file,
+    time: Float64Array.from(times), value: Float64Array.from(times, (t) => t * 10),
+  });
+
+  const fleet = buildTable([
+    vehicle('m_depth', 'electa', 'electa-2025-120-1-1.sbd', [10, 20]),
+    vehicle('m_depth', 'unit_507', 'unit_507-2025-120-1-1.sbd', [10, 20]),
+  ]);
+  check('two gliders\' sensors of one name stay two columns',
+    fleet.columns.map((c) => c.name).sort(), ['m_depth_electa', 'm_depth_unit_507']);
+  check('and neither loses samples to the other',
+    fleet.columns.map((c) => [...c.values].filter(Number.isFinite).length), [2, 2]);
+
+  // Both levels at once: glider first, then the file within it.
+  const both3 = buildTable([
+    vehicle('sci_water_pressure', 'electa', 'electa-2025-120-1-1.tbd', [10]),
+    vehicle('sci_water_pressure', 'electa', 'electa-2025-120-1-1.sbd', [10]),
+    vehicle('sci_water_pressure', 'unit_507', 'unit_507-2025-120-1-1.tbd', [10]),
+  ]);
+  check('a name claimed by two gliders and two computers says both',
+    both3.columns.map((c) => c.name).sort(),
+    ['sci_water_pressure_electa_sbd', 'sci_water_pressure_electa_tbd',
+     'sci_water_pressure_unit_507']);
+
+  // The vehicle comes from the header, not the name on disk, so a renamed
+  // file still reports the glider that wrote it.
+  {
+    const renamedFile = openDbd(read(SBD), { name: 'whatever-i-called-it.sbd', cache: text('0f682cb2.cac') });
+    check('the glider is read from the header, not the filename',
+      renamedFile.glider, 'electa');
+  }
+  check('a glider name is the stem before the year and segment', [
+    gliderOf('electa-2025-120-1-169'),
+    gliderOf('unit_507-2025-120-1-169.sbd'),
+    gliderOf('sea076-2023-249-0-0.dbd'),
+  ], ['electa', 'unit_507', 'sea076']);
+
+  // ── the prefix convention, which is what says who owns a sensor ──
+  //
+  // Measured on this glider: the science computer's namespace is 100% `sci_`,
+  // and the flight computer's 2,709 sensors include 1,022 `sci_` ones, which
+  // it knows only because science values are relayed to it.
+  check('the prefix says which computer a sensor belongs to',
+    ['sci_water_temp', 'm_depth', 'c_heading', 'x_low_power_status', 'u_max_altimeter']
+      .map(homeOf),
+    ['science', 'flight', 'flight', 'flight', 'flight']);
+  check('and it is the prefix, not a word inside the name',
+    homeOf('m_leakdetect_voltage_science'), 'flight');
+  {
+    const science = parseSensorList(text('92610b65.cac'), 105).all;
+    const flight = parseSensorList(text('0f682cb2.cac'), 2709).all;
+    check('the science computer\'s namespace is entirely sci_',
+      science.filter((n) => homeOf(n) !== 'science'), []);
+    check('while the flight computer knows the science sensors it can be sent',
+      flight.filter((n) => homeOf(n) === 'science').length, 1022);
+  }
+
+  // The flight computer's three decimations behave the same way as the
+  // science computer's, and their sensor lists are *not* nested: the operator
+  // chooses each with `sbdlist.dat` and `mbdlist.dat` independently. Measured
+  // on segment 171 of the test deployment, the sbd carries 64 sensors and the
+  // mbd 134, sharing 58 — so merging has to be per sensor, and the result is
+  // the union of both rather than the fuller file wholesale.
+  const flightPair = buildTable([
+    vehicle('m_present_time', 'electa', 'electa-2025-120-1-1.sbd', [10, 30]),
+    vehicle('m_iridium_call_num', 'electa', 'electa-2025-120-1-1.sbd', [10]),
+    vehicle('m_present_time', 'electa', 'electa-2025-120-1-1.dbd', [10, 20, 30, 40]),
+    vehicle('m_heading', 'electa', 'electa-2025-120-1-1.dbd', [10, 20]),
+  ]);
+  check('an sbd and a dbd of one segment merge, as a tbd and an ebd do',
+    flightPair.columns.map((c) => c.name).sort(),
+    ['m_heading', 'm_iridium_call_num', 'm_present_time']);
+  check('the shared sensor holds the union of both files\' samples, not double',
+    [...flightPair.columns.find((c) => c.name === 'm_present_time').values]
+      .filter(Number.isFinite), [100, 200, 300, 400]);
+  check('and a sensor only one of them logged survives',
+    [...flightPair.columns.find((c) => c.name === 'm_iridium_call_num').values]
+      .filter(Number.isFinite), [100]);
+
+  // The suffix must be something a real sensor name cannot end in, or the
+  // rules that strip it will take a genuine sensor for a suffixed variant.
+  // `_flight`/`_science` reads better and fails this: two sensors in this
+  // glider's namespace are already called `m_leak_science` and
+  // `m_leakdetect_voltage_science`.
+  {
+    const namespace = [
+      ...parseSensorList(text('0f682cb2.cac'), 2709).all,
+      ...parseSensorList(text('92610b65.cac'), 105).all,
+    ];
+    const collides = (suffix) => namespace.filter((n) => n.endsWith(suffix));
+    check('no sensor name ends in the suffix the columns use',
+      ['_sbd', '_tbd', '_mbd', '_nbd', '_dbd', '_ebd'].flatMap(collides), []);
+    check('unlike the computer names, which is why they are not used',
+      ['_flight', '_science'].flatMap(collides).sort(),
+      ['m_leak_science', 'm_leakdetect_voltage_science']);
+  }
+
+  check('with the merging said out loud',
+    shared.notes.some((n) => /appeared in more than one file from the same computer/.test(n)),
+    true);
+
+  // Where they disagree — which two decimations of one record never should —
+  // the fuller file wins and the reader is told, rather than one of them
+  // silently prevailing.
+  const conflicting = buildTable([
+    { name: 'sci_water_temp', unit: 'degc', from: 'g-2025-120-1-1.tbd',
+      time: Float64Array.from([10]), value: Float64Array.from([99]) },
+    { name: 'sci_water_temp', unit: 'degc', from: 'g-2025-120-1-1.ebd',
+      time: Float64Array.from([10]), value: Float64Array.from([12]) },
+  ]);
+  check('a disagreement between them keeps the fuller file\'s value',
+    [...conflicting.columns[0].values], [12]);
+  check('and says so, because it should not happen',
+    conflicting.notes.some((n) => /disagreed about the value/.test(n)), true);
+}
+
+// ── Column order ─────────────────────────────────────────────────────────────
+
+console.log('\n--- column order ---');
+{
+  // Left alone the columns arrive in the cache file's namespace order, which
+  // is alphabetical over the glider's whole sensor list — so `c_ballast_pumped`
+  // with 3 values of 1,328 led and `sci_water_temp` with 853 was sixty-second.
+  // Nothing chose that, and a reader opening the CSV saw a screen of blanks.
+  const ordered = orderColumns([...table.columns, ...deriveSeawater(table).columns]);
+  const names = ordered.map((c) => c.name);
+  const fill = (c) => {
+    let n = 0;
+    for (const v of c.values) if (Number.isFinite(v)) n++;
+    return n;
+  };
+
+  check('position leads, dead-reckoned track before the GPS fixes',
+    names.slice(0, 4), ['m_lat', 'm_lon', 'm_gps_lat', 'm_gps_lon']);
+  check('then depth, then the CTD, then what is derived from it',
+    names.slice(4, 15),
+    ['sci_water_pressure_tbd', 'm_pressure', 'm_depth', 'sci_water_temp', 'sci_water_cond',
+     'salinity_practical', 'salinity_reference', 'temperature_conservative',
+     'density', 'sigma0', 'sound_speed']);
+
+  // Priority beats fill on purpose: m_lat has four values and m_veh_temp has
+  // sixty-four, and position is still the more useful column.
+  check('a sparse but important column still leads a fuller unimportant one',
+    names.indexOf('m_lat') < names.indexOf('m_veh_temp') &&
+      fill(ordered[names.indexOf('m_lat')]) < fill(ordered[names.indexOf('m_veh_temp')]),
+    true);
+
+  // Past the named quantities it is purely by how much there is, so the
+  // nearly-empty engineering channels end up at the far right where they
+  // belong. The list above is exactly the named block, so the rest starts
+  // where it ends — no separate count to keep in step.
+  const named = new Set([
+    'm_lat', 'm_lon', 'm_gps_lat', 'm_gps_lon',
+    'sci_water_pressure_tbd', 'm_pressure', 'm_depth', 'sci_water_temp', 'sci_water_cond',
+    'salinity_practical', 'salinity_reference', 'temperature_conservative',
+    'density', 'sigma0', 'sound_speed',
+  ]);
+  const tail = ordered.filter((c) => !named.has(c.name));
+  const fills = tail.map(fill);
+  check('every named column comes before every unnamed one',
+    ordered.findIndex((c) => !named.has(c.name)), named.size);
+  check('and past them it is strictly by how populated a column is',
+    fills.every((n, i) => i === 0 || fills[i - 1] >= n), true);
+  check('so the emptiest column is the last one',
+    fills[fills.length - 1], Math.min(...fills));
+  check('and the old alphabetical order is gone',
+    names[0] === 'c_ballast_pumped', false);
+
+  // The relay copy is not the measurement: putting it sixth while m_pressure
+  // with 230 values waited behind it is what this rule exists to stop.
+  check('the sparse relay copy is demoted behind the full-rate one',
+    names.indexOf('sci_water_pressure_sbd') > names.indexOf('m_pressure'), true);
+  check('but it is still there, not dropped',
+    names.includes('sci_water_pressure_sbd'), true);
+
+  check('ordering keeps every column and invents none',
+    ordered.length, table.columns.length + deriveSeawater(table).columns.length);
+  check('and is stable, so two runs give the same file',
+    orderColumns(ordered).map((c) => c.name), names);
+
+  // buildTable applies it, so the CSV, the preview and the netCDF agree
+  // without any of them having to remember to.
+  check('a freshly built table is already ordered',
+    table.columns.map((c) => c.name).slice(0, 2), ['m_lat', 'm_lon']);
+}
+
+// ── Deployments ──────────────────────────────────────────────────────────────
+//
+// A reader drops whatever is in front of them, and two gliders — or one
+// glider's spring and summer deployments — must not be written into one file.
+// Every filename and every sensor matches across those, so nothing downstream
+// could tell them apart afterwards.
+
+console.log('\n--- deployments ---');
+{
+  const DAY = 86400;
+  const T0 = Date.UTC(2025, 4, 1) / 1000;
+  const seg = (file, glider, startDay, hours = 2) => ({
+    file,
+    series: [{
+      name: 'm_present_time', unit: 'timestamp', glider, from: file,
+      time: Float64Array.from([T0 + startDay * DAY, T0 + startDay * DAY + hours * 3600]),
+      value: Float64Array.from([1, 2]),
+    }],
+  });
+  const split = (files, options) => splitDeployments(files, options).deployments;
+  const labels = (files, options) => split(files, options).map(deploymentLabel);
+
+  check('back-to-back segments are one deployment',
+    labels([seg('a.sbd', 'electa', 0), seg('b.sbd', 'electa', 0.2), seg('c.sbd', 'electa', 0.5)]),
+    ['electa 2025-05-01']);
+
+  check('a gap of four days is two deployments',
+    labels([seg('a.sbd', 'electa', 0), seg('b.sbd', 'electa', 5)]),
+    ['electa 2025-05-01', 'electa 2025-05-06']);
+
+  // Two days is a long silence and not a new deployment: a glider can miss
+  // satellite passes, sit under ice, or wait out weather.
+  check('a gap of two days is not',
+    labels([seg('a.sbd', 'electa', 0), seg('b.sbd', 'electa', 2)]), ['electa 2025-05-01']);
+
+  // The boundary itself, from both sides.
+  check('the boundary is at three days exactly',
+    [labels([seg('a.sbd', 'e', 0, 0), seg('b.sbd', 'e', 3, 0)]).length,
+     labels([seg('a.sbd', 'e', 0, 0), seg('b.sbd', 'e', 2.99, 0)]).length],
+    [2, 1]);
+  check('and the caller can move it',
+    labels([seg('a.sbd', 'electa', 0), seg('b.sbd', 'electa', 2)], { gapSeconds: DAY })
+      .length, 2);
+
+  check('two gliders flying at once are two deployments, never one',
+    labels([seg('a.sbd', 'electa', 0), seg('b.sbd', 'unit_507', 0.1)]),
+    ['electa 2025-05-01', 'unit_507 2025-05-01']);
+
+  check('and each glider is split on its own timeline',
+    labels([
+      seg('a.sbd', 'electa', 0), seg('b.sbd', 'electa', 10),
+      seg('c.sbd', 'unit_507', 0), seg('d.sbd', 'unit_507', 20),
+    ]).length, 4);
+
+  // Files arrive in whatever order the picker gave them.
+  check('the order they were dropped in does not matter',
+    labels([seg('c.sbd', 'electa', 5), seg('a.sbd', 'electa', 0), seg('b.sbd', 'electa', 0.5)]),
+    ['electa 2025-05-01', 'electa 2025-05-06']);
+
+  // Measured against the deployment's furthest reach, not the previous
+  // segment's end, so one long segment overlapping a short one is not a gap.
+  check('a long segment enclosing a short one is not a boundary',
+    labels([seg('long.sbd', 'electa', 0, 24 * 8), seg('short.sbd', 'electa', 1, 1),
+            seg('after.sbd', 'electa', 7)]).length, 1);
+
+  check('every segment ends up in exactly one deployment',
+    split([seg('a.sbd', 'electa', 0), seg('b.sbd', 'electa', 5), seg('c.sbd', 'unit_507', 0)])
+      .flatMap((d) => d.segments.map((x) => x.file)).sort(),
+    ['a.sbd', 'b.sbd', 'c.sbd']);
+
+  // A file with no usable clock cannot be placed against a gap. Putting it in
+  // the first deployment would be inventing a fact, so it is set aside and
+  // named rather than quietly included.
+  const clockless = splitDeployments([
+    seg('good.sbd', 'electa', 0),
+    { file: 'noclock.sbd', series: [{ name: 'm_depth', unit: 'm', glider: 'electa',
+      from: 'noclock.sbd', time: Float64Array.from([NaN]), value: Float64Array.from([1]) }] },
+  ]);
+  check('a file with no clock is set aside, not silently included',
+    { deployments: clockless.deployments.length, undated: clockless.undated },
+    { deployments: 1, undated: ['noclock.sbd'] });
+
+  check('a deployment names itself by glider and start day',
+    deploymentStem(split([seg('a.sbd', 'electa', 0)])[0]), 'electa-20250501');
+
+  // The real pair, which is one deployment: two files, minutes apart.
+  const real = splitDeployments([
+    { file: SBD, series: readSeries(flight) },
+    { file: TBD, series: readSeries(science) },
+  ]);
+  check('the fixture pair is one deployment of one glider',
+    real.deployments.map(deploymentLabel), ['electa 2025-05-07']);
+  check('holding both files', real.deployments[0].segments.length, 2);
 }
 
 // ── CSV ──────────────────────────────────────────────────────────────────────

@@ -4737,23 +4737,33 @@ as…". Both convey the limit; only one lectures.
 matches "Reference Salinity", "composition anomaly", "equator", "freezing
 point" and "outside the range"; `test:ballast` matches "cannot surface",
 "cannot dive", "compresses less/more" and "per 100 dbar"; the disclaimer
-checks match "under test", "own risk" and "as-is|no warranty". They are the
+checks match "under testing", "own risk" and "as-is|no warranty". They are the
 load-bearing phrases and are worth keeping through an edit rather than
 loosening the checks around.
 
-### Both calculators say they are under test
+### Every tool page says it is under testing
 
-`src/components/Disclaimer.astro` carries it, one component for both pages so
-the two cannot drift and so each harness has one thing to check. It is the
-only text on either page saying the answers are not warranted, and both
-`test:seawater` and `test:ballast-page` assert it is present, showing, says
-*under test* **and** *at your own risk*, disclaims warranty rather than merely
-apologising, and sits **above** the tool — `compareDocumentPosition`, because
+`src/components/Disclaimer.astro` carries it, one component for all three
+pages so they cannot drift and so each harness has one thing to check. It is
+the only text on any of them saying the answers are not warranted, and
+`test:seawater`, `test:ballast-page` and `test:slocum-page` each assert it is
+present, showing, says *under testing* **and** *at your own risk*, disclaims
+warranty rather than merely apologising, and sits **above** the tool — `compareDocumentPosition`, because
 a disclaimer under a calculator is one the reader meets after the number.
 
 Not dismissible and not a tooltip, for the reasons the ballast page's
 illustrative-numbers caution is neither: a notice that can be closed is absent
 for everyone who closed it, and one that needs a hover is absent on a phone.
+
+**A pattern that is a substring of the new wording sees no change**, and the
+rename from *under test* to *under testing* is where that showed. All three
+gates matched `/under test/i`, which "under testing" satisfies, so every one
+of them would have gone on saying `ok` whichever word was on the page — the
+check-that-cannot-distinguish shape, one step milder than the
+check-that-cannot-fail. They match `/under testing/i` now, and all three fail
+against the old wording. **Mutation-test a wording gate by writing the string
+it replaced**, not by deleting the sentence: deleting fails any pattern, so it
+proves nothing about the one being asserted.
 
 **It found a third form of the whitespace trap.** A `<slot />` leaves no
 element in the output, so a newline before it is eaten with no tag for
@@ -4992,6 +5002,119 @@ that works and forgets — the same bargain the map's KMZ store strikes.
 disagree, so the sensor-list length is checked against the header's
 `sensors_per_cycle` and a mismatch is refused rather than decoded.
 
+**Either order, and the first version silently required one.** A reader
+dropping a whole directory hands over the caches and the data in one gesture,
+and the page refused every data file that arrived before its cache. Two bugs,
+both mine: the decoded set was *replaced* rather than accumulated, so a second
+drop discarded the first; and a file held for a missing cache kept its name
+and dropped its bytes, so there was nothing to retry with. Files are now
+accumulated with their bytes and every held file is retried whenever a cache
+arrives.
+
+**A folder is the one action that supplies both**, which is why it exists as
+an input at all: the file dialog selects within a single directory, and the
+data and the `cache` directory are different ones. Dropping a folder goes
+through `webkitGetAsEntry`, and there is a `webkitdirectory` input beside it
+for readers who would rather pick than drag.
+
+### A deployment is one glider over one continuous stretch of time
+
+`packages/slocum/deployment.ts` — no DOM, so `test:slocum` exercises it
+directly. Files are grouped before anything is written and each deployment
+exports as its own file.
+
+Two gliders are obviously two records. One glider's spring and summer work is
+also two, and that is the case with nothing on screen to give it away: the
+filenames match, the sensor names match, and once the two are written into one
+table there is no way back. **A different glider always splits; a gap of three
+days or more splits one glider's record.**
+
+**The gap is measured between segments, not between samples**, and that
+distinction is the whole correctness of it. A glider logs different sensors on
+wildly different schedules — a position fix only on surfacing, an Iridium
+counter once a segment — so a per-sample gap would split a deployment every
+time a slow channel went quiet over a weekend. A segment is the unit the
+glider actually flies continuously within.
+
+Three days is the caller's number and is exposed as one (`gapSeconds`). What
+it has to clear is the longest a glider can plausibly go dark inside one
+deployment — a missed satellite pass, ice, a comms fault — while staying
+shorter than the shortest turnaround between deployments. Slocum segments are
+hours apart, so anything from about a day upwards separates the two cases;
+three leaves room on both sides.
+
+The gap is measured against the deployment's **furthest reach**, not the
+previous segment's end, so one long segment overlapping a short one does not
+read as a gap. A file with no usable clock anywhere is reported separately
+rather than placed: putting it in the first deployment would be inventing a
+fact.
+
+With one deployment the picker stays hidden and the page reads exactly as it
+did before, which is the ordinary case and should not have to pay for the
+general one.
+
+### Column order
+
+The cache file lists sensors alphabetically over the glider's **whole**
+namespace, which is not an order anybody wants: on one test segment that put a
+channel holding 3 values of 1,328 in the first column and water temperature,
+holding 853, in the sixty-second.
+
+`orderColumns()` puts the named quantities first — position, then depth, then
+the CTD and what is derived from it — and then sorts the rest by how many
+values they hold, which pushes the nearly empty engineering channels to the
+far right. **The two rules disagree for position**, which is recorded only at
+surfacings and so holds very few values; the named list wins, because a table
+whose first column is a position is what an operator is looking for.
+
+One order for the CSV, the on-screen preview and both netCDF exports, from one
+function, so they cannot drift.
+
+### The grouping key is (sensor, glider, computer)
+
+Three levels, and each was added because leaving it out merges records that
+are not the same record.
+
+**Glider** — the vehicle. Two vehicles' `m_depth` are separate measurements of
+separate water; merged, they interleave and look exactly like data. Read from
+the header's own `full_filename` rather than the name on disk, so a renamed
+file or one still under its 8.3 name (`02150008.sbd`) does not become its own
+vehicle.
+
+**Computer** — flight and science, the two inside one glider.
+`sci_water_pressure` is measured by the science computer and *relayed* to the
+flight computer, which logs it at its own much slower rate — 853 samples
+against 4 in the fixture pair. Which one holds the measurement is settled by
+the **prefix**, not by sample counts: `sci_` is the science computer's,
+`m_` is measured on the flight computer and `c_` is commanded on it, `u_` are
+parameters the user sets and `f_` are factory values, with `x_` and a few
+others the derived channels. Measured on this glider's namespaces, the science
+computer's 105 sensors are **100% `sci_`** while the flight computer's 2,709
+include 1,022 `sci_` ones, which it knows about only because science values
+can be relayed to it.
+
+**The suffix is the file extension, and `_flight`/`_science` was tried and
+reverted.** Those read better and collide with real sensor names:
+`m_leak_science` and `m_leakdetect_voltage_science` both end in `_science` and
+are `m_` sensors, measured by the *flight* computer. Measured across the
+namespace, two sensors end in `_science` and none ends in any file extension,
+so `_sbd`/`_tbd` is the suffix that cannot be mistaken for part of a name.
+
+**Within one computer the files merge**, which is the other half. `sbd`, `mbd`
+and `dbd` are three decimations of one flight record, as `tbd`, `nbd` and
+`ebd` are of one science record — the short ones sent over Iridium during the
+deployment, the long ones recovered afterwards — so dropping a `tbd` and its
+`ebd` must not produce two columns per sensor. Samples common to both are
+merged by timestamp and counted; where two files disagree about a value at one
+timestamp, the fuller file wins and the disagreement is reported, because two
+decimations of one record should not disagree at all.
+
+**Merged per sensor, not per file, because the decimation lists are not
+nested.** `sbdlist.dat` and `mbdlist.dat` are set independently: on one
+segment the sbd holds 64 sensors and the mbd 134, of which 58 are common and
+**6 are in the sbd alone**. Taking the fuller file wholesale would drop those
+six.
+
 ### There is no single time base, and that is a choice the reader makes
 
 Every sensor is written on its own subset of cycles — the flight computer logs
@@ -5217,6 +5340,26 @@ overflows its *container*. The first check for it matched `.og1-field input`,
 which sets the same property for its own reasons, and so passed with the
 container's rule deleted. Anchored to `.og1-field{` now. That is the third
 time this masking has appeared here; the other two are in `test:map`.
+
+### The page is full width, and the rule for that cannot live on the page
+
+The text *is* this page — there is no map — so the prose and the tool run the
+whole window rather than sitting in a 72rem column with empty screen either
+side. `.container.wide` already drops the container's cap, but it re-applies
+`--content-width` to every child, which is right for a page built around a
+figure and wrong here.
+
+**The rule that undoes that is in `global.css`, and that is not a preference.**
+Written on the page as `.slocum > *`, Astro scopes it to
+`.slocum > *[data-astro-cid-<page>]` — and the decoder is a component, so its
+root element carries a *different* cid and the selector cannot match it. The
+prose went full width while the tool below it kept the cap, which reads as a
+broken layout rather than a decision. `.container.wide.full > *` lives beside
+the rule it overrides, at the same three-class specificity and after it, so it
+wins on order and reaches across the scope boundary.
+
+Same trap as the section below, met from the page side rather than the
+component side.
 
 ### A stylesheet that could not match what it was written for
 

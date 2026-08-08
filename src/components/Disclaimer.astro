@@ -1,6 +1,6 @@
 ---
 /**
- * The standing "this is under test" notice on the calculator pages.
+ * The standing "this is under testing" notice on the calculator pages.
  *
  * One component rather than a paragraph on each page, so the two cannot drift
  * apart and so the harnesses have one thing to check. It follows the dev
@@ -26,7 +26,7 @@ const { tool } = Astro.props;
 ---
 
 <p class="disclaimer" role="note" data-disclaimer>
-  <strong>Under test.</strong> This {tool} is new and still being checked
+  <strong>Under testing.</strong> This {tool} is new and still being checked
   against use. It is provided as-is, with no warranty of any kind, and is used
   at your own risk. <slot />
 </p>

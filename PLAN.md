@@ -361,6 +361,13 @@ sensor's raw bytes. It can add seawater properties from the CTD through
 `salinity_reference` rather than `salinity_absolute` when the anomaly could
 not be applied.
 
+Files are grouped into deployments before anything is written — a different
+glider always splits, and so does a gap of three days or more in one glider's
+record — so a fleet directory does not become one interleaved table. Columns
+are grouped by (sensor, glider, computer) and ordered with the named
+quantities first, and the three decimations within one computer's family
+(`sbd`/`mbd`/`dbd`, `tbd`/`nbd`/`ebd`) merge into one column per sensor.
+
 ### Open on the calculators
 
 ### Open on the decoder

@@ -143,14 +143,14 @@ globalThis.URL = window.URL;
 globalThis.HTMLElement = window.HTMLElement;
 globalThis.getComputedStyle = window.getComputedStyle.bind(window);
 
-check('the page carries the under-test notice', !!document.querySelector('[data-disclaimer]'), true);
+check('the page carries the under-testing notice', !!document.querySelector('[data-disclaimer]'), true);
 check('and it sits above the tool',
   document.querySelector('[data-disclaimer]').compareDocumentPosition(
     document.querySelector('[data-drop]'),
   ) & 4 ? true : false,
   true);
-check('the notice says it is under test and used at the reader\'s own risk',
-  /under test/i.test(document.querySelector('[data-disclaimer]').textContent) &&
+check('the notice says it is under testing and used at the reader\'s own risk',
+  /under testing/i.test(document.querySelector('[data-disclaimer]').textContent) &&
     /own risk/i.test(document.querySelector('[data-disclaimer]').textContent),
   true);
 // ── OG1: the panel, and the claim it makes ──────────────────────────────────
@@ -168,14 +168,14 @@ check('and a way to carry the metadata between segments', [
 {
   // The wording of this caveat is the whole honesty of the feature. The file
   // has never been through an OG1 validator — the community's own checkers
-  // say they are experimental — so the page must claim the structure and not
-  // certification, and must say what the encoding actually is.
-  const caveat = document.querySelector('.og1-caveat')?.textContent ?? '';
+  // say they are experimental — so the page must say so outright, and must
+  // say what the encoding actually is.
+  const caveat = (document.querySelector('.og1-caveat')?.textContent ?? '').replace(/\s+/g, ' ');
   check('the page says the encoding is netCDF-3, not netCDF-4',
-    /netCDF-3/.test(caveat) && /cannot\s+write\s+netCDF-4/.test(caveat.replace(/\s+/g, ' ')), true);
+    /netCDF-3/.test(caveat) && /cannot write netCDF-4/.test(caveat), true);
   check('and says the CDL is the route to netCDF-4', /ncgen -4/.test(caveat), true);
-  check('and does not claim to be validated',
-    /claims the\s+structure, not certification/.test(caveat.replace(/\s+/g, ' ')), true);
+  check('and says outright that neither file has been validated',
+    /No OG1 validator has checked either file/.test(caveat), true);
   check('nowhere on the page claims compliance outright',
     /OG1[.\s-]*(0\s+)?compliant/i.test(html), false);
 }

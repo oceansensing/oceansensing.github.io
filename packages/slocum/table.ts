@@ -28,7 +28,7 @@
  * without being asked.
  */
 
-import type { Series } from './types.ts';
+import { familyOf, gliderOf, homeOf, resolutionOf, type Series } from './types.ts';
 
 export type Join = 'union' | 'interpolate';
 
@@ -162,61 +162,231 @@ export function interpolateAngleOnto(
   return out;
 }
 
-/** `electa-2025-120-1-169.tbd` → `tbd`. */
-const extensionOf = (file: string | undefined): string =>
-  (file ?? '').split('.').pop()?.toLowerCase() ?? '';
+/**
+ * The order a glider table reads best in.
+ *
+ * Left alone, the columns arrive in the order the *cache file* lists its
+ * sensors, which is alphabetical across the whole of the glider's namespace.
+ * Nothing chose that, and it is close to the worst possible order: on the
+ * test fixture it put `c_ballast_pumped` — three values out of 1,328 — in the
+ * first column and `sci_water_temp`, with 853, in the sixty-second. A reader
+ * opening the CSV in a spreadsheet sees a screen of blanks.
+ *
+ * So the quantities anyone opens a glider file *for* come first, in the order
+ * they are usually read — where it was, how deep, then the CTD and what is
+ * derived from it — and everything else follows by how much of it there is,
+ * which puts the nearly-empty columns last.
+ *
+ * **Priority beats fill, deliberately.** `m_lat` has four values in the
+ * fixture and `m_veh_temp` has sixty-four, and position is still the more
+ * useful column. Sorting by fill alone would bury it.
+ */
+/**
+ * The suffix `groupSeries` adds when both computers wrote a sensor.
+ *
+ * A **file extension**, not the computer's name, and that is not cosmetic:
+ * `_flight`/`_science` reads better and collides with the namespace. Measured
+ * on this glider's 2,709 sensors, two are already called `m_leak_science` and
+ * `m_leakdetect_voltage_science` — so a rule that strips `_science` would take
+ * those for suffixed variants of `m_leak` and `m_leakdetect_voltage`. Nothing
+ * ends in `_sbd`, `_tbd`, `_mbd`, `_nbd`, `_dbd` or `_ebd`.
+ */
+const FAMILY_SUFFIX = /_[smdtne][bc]d$/;
+
+const LEADING: readonly RegExp[] = [
+  // Where it was. The dead-reckoned track first, then the fixes it is drawn
+  // between — which is the same order OG1 puts LATITUDE before LATITUDE_GPS.
+  /^m_lat(_[smdtne][bc]d)?$/,
+  /^m_lon(_[smdtne][bc]d)?$/,
+  /^m_gps_lat(_[smdtne][bc]d)?$/,
+  /^m_gps_lon(_[smdtne][bc]d)?$/,
+
+  // How deep. The science computer's pressure is the measurement; the flight
+  // computer's is a slow relay of it, and `m_depth` is the glider's own idea.
+  /^sci_water_pressure(_[smdtne][bc]d)?$/,
+  /^sci_rbrctd_seapressure_00(_[smdtne][bc]d)?$/,
+  /^m_pressure(_[smdtne][bc]d)?$/,
+  /^m_depth(_[smdtne][bc]d)?$/,
+
+  // The CTD.
+  /^sci_water_temp(_[smdtne][bc]d)?$/,
+  /^sci_rbrctd_temperature_00(_[smdtne][bc]d)?$/,
+  /^sci_water_cond(_[smdtne][bc]d)?$/,
+  /^sci_rbrctd_conductivity_00(_[smdtne][bc]d)?$/,
+
+  // What is derived from it, in the order the derivation runs.
+  /^salinity_practical$/,
+  /^salinity_(absolute|reference)$/,
+  /^temperature_conservative$/,
+  /^density$/,
+  /^sigma0$/,
+  /^sound_speed$/,
+
+];
+
+// Deliberately nothing else. Earlier drafts also grouped "all other science"
+// and "attitude" ahead of the engineering channels, and both produced the
+// anomaly this ordering exists to remove: `sci_flbbcd_timestamp` with one
+// value outranked `m_present_time` with 362, and `m_water_vy` with two
+// outranked `m_veh_temp` with sixty-four. Past the quantities a reader came
+// for, how much of a thing there is *is* the useful ordering.
+
+/** Where a column sits in the list above, or past the end of it. */
+function rank(name: string): number {
+  const at = LEADING.findIndex((pattern) => pattern.test(name));
+  return at === -1 ? LEADING.length : at;
+}
+
+function filled(values: Float64Array): number {
+  let n = 0;
+  for (const v of values) if (Number.isFinite(v)) n++;
+  return n;
+}
+
+/**
+ * Sort columns into that order: the named quantities first, then the rest by
+ * how populated they are, then by name so the result is deterministic.
+ *
+ * Exported because derived columns are appended after the table is built, and
+ * the ordering has to be applied again once they are — one definition, so the
+ * two call sites cannot drift.
+ */
+export function orderColumns(columns: readonly Column[]): Column[] {
+  const fill = new Map(columns.map((c) => [c, filled(c.values)]));
+
+  // Where the same sensor was written by both computers, only the copy on the
+  // computer the sensor *belongs* to keeps its place at the front.
+  // `sci_water_pressure` is measured by the science computer and relayed to
+  // the flight computer, which logs it a handful of times a segment — 853
+  // values against 4 in the fixture. Both are real and both are kept, but the
+  // relay is not the measurement, and putting it sixth while `m_pressure`
+  // with 230 values waits behind it is what this rule exists to stop.
+  //
+  // Decided by the sensor's own prefix rather than by which column has more
+  // in it: `sci_` says the science computer measured it, so a `_sbd` copy is
+  // a relay however many samples it happens to carry. Sample counts only
+  // imply that, and imply it wrongly whenever a decimated science file is
+  // paired with a dense flight one.
+  const relay = (c: Column) => {
+    const match = FAMILY_SUFFIX.exec(c.name);
+    if (!match) return false;
+    const extension = match[0].slice(1);
+    return familyOf(`x.${extension}`) !== homeOf(c.name.replace(FAMILY_SUFFIX, ''));
+  };
+
+  return [...columns].sort((a, b) => {
+    const byRank = (relay(a) ? LEADING.length : rank(a.name))
+      - (relay(b) ? LEADING.length : rank(b.name));
+    if (byRank !== 0) return byRank;
+    const byFill = fill.get(b)! - fill.get(a)!;
+    if (byFill !== 0) return byFill;
+    return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+  });
+}
+
+/** Which computer inside the glider wrote a series. */
+const computerOf = (file: string | undefined): string => familyOf(file ?? '');
+
+/** The vehicle, falling back to the filename when a series carries no glider. */
+const vehicleOf = (s: Series): string => s.glider ?? gliderOf(s.from ?? '');
 
 /**
  * Collapse series that are the same quantity, and keep apart the ones that
  * are not.
  *
- * Two different things look identical at this point and must not be treated
- * alike:
+ * Three different things look identical at this point:
  *
  * - **The same sensor across segments.** A deployment is hundreds of files
  *   and `sci_water_temp` in segment 169 continues `sci_water_temp` in
  *   segment 170. One column, concatenated in time.
+ *
+ * - **The same sensor at two resolutions.** `sbd`, `mbd` and `dbd` are three
+ *   decimations of one flight record, as `tbd`, `nbd` and `ebd` are of one
+ *   science record — the short ones go over Iridium, the long ones come off
+ *   the glider on recovery. Dropping both must give one column per sensor, so
+ *   the samples are merged and **deduplicated by time**.
+ *
+ *   Merged per *sensor*, not per file, because the lists are not nested: the
+ *   operator picks each with `sbdlist.dat` and `mbdlist.dat` independently.
+ *   Measured on segment 171 of the test deployment, the sbd carries 64
+ *   sensors and the mbd 134, sharing 58 — six are in the sbd alone. So the
+ *   result is the union of both, not the fuller file wholesale.
  *
  * - **The same sensor name from the two computers.** `sci_water_pressure` is
  *   measured by the science computer and *relayed* to the flight computer,
  *   which logs it at its own much slower rate — 853 samples against 4 in the
  *   fixture pair. Both are real, they are not the same record, and merging
  *   them would interleave a full-rate profile with a handful of stale relays
- *   under one name. Two columns, distinguished by the file family they came
- *   from.
+ *   under one name. Two columns.
  *
- * The distinction is the *extension*, not the file: flight (`sbd`/`mbd`/
- * `dbd`) and science (`tbd`/`nbd`/`ebd`) are different instruments, while two
- * segments off the same computer are one.
+ * - **The same sensor name from two gliders.** A fleet directory holds
+ *   `m_depth` for every vehicle in it, and they are obviously not one series.
+ *
+ * # The key is (sensor, glider, computer), and both halves were learned late
+ *
+ * The **glider** is the vehicle; flight and science are the two computers
+ * inside it. Leave the glider out of the key and a fleet directory silently
+ * merges two vehicles' `m_depth` into one column, interleaved and looking
+ * exactly like data.
+ *
+ * And the computer, not the *extension*: keying on the extension made `.tbd`
+ * and `.ebd` different records, so a reader who dropped both after a recovery
+ * got every science sensor twice — under a note claiming they came from "both
+ * computers", which they did not. In both cases the rows were right, because
+ * the join keys on the timestamp; it was the columns that were wrong.
  */
-function groupSeries(series: readonly Series[]): { series: Series[]; renamed: string[] } {
+function groupSeries(series: readonly Series[]): {
+  series: Series[];
+  renamed: string[];
+  deduplicated: number;
+  disagreed: number;
+} {
   const renamed: string[] = [];
   const groups = new Map<string, Series[]>();
   for (const s of series) {
-    // A pipe, because Slocum sensor names are `[a-z0-9_]` and extensions are
-    // three letters, so neither can contain one — and unlike the NUL this was
-    // first written with, it survives grep and is visible in an editor.
-    const key = `${s.name}|${extensionOf(s.from)}`;
+    // A pipe, because Slocum sensor names and glider names are `[a-z0-9_]`
+    // and the computer is one of two words, so none can contain one — and
+    // unlike the NUL this was first written with, it survives grep and is
+    // visible in an editor.
+    const key = `${s.name}|${vehicleOf(s)}|${computerOf(s.from)}`;
     const bucket = groups.get(key);
     if (bucket) bucket.push(s);
     else groups.set(key, [s]);
   }
 
-  // A name claimed by more than one family has to say which; a name claimed
-  // by one keeps it, so the ordinary single-pair case reads unchanged.
+  // A name claimed by more than one glider has to say which glider, and one
+  // claimed by both computers has to say which file. A name claimed once
+  // keeps it, so the ordinary single-vehicle case reads unchanged.
+  const vehicles = new Map<string, Set<string>>();
   const families = new Map<string, Set<string>>();
   for (const key of groups.keys()) {
-    const [name, ext] = key.split('|');
-    const seen = families.get(name) ?? new Set<string>();
-    seen.add(ext);
-    families.set(name, seen);
+    const [name, glider, computer] = key.split('|');
+    const byVehicle = vehicles.get(name) ?? new Set<string>();
+    byVehicle.add(glider);
+    vehicles.set(name, byVehicle);
+    const withinVehicle = families.get(`${name}|${glider}`) ?? new Set<string>();
+    withinVehicle.add(computer);
+    families.set(`${name}|${glider}`, withinVehicle);
   }
 
   const merged: Series[] = [];
+  let deduplicated = 0;
+  let disagreed = 0;
+
   for (const [key, bucket] of groups) {
-    const [name, ext] = key.split('|');
-    const ambiguous = (families.get(name)?.size ?? 1) > 1;
-    const label = ambiguous && ext ? `${name}_${ext}` : name;
+    const [name, glider, computer] = key.split('|');
+    // Named for the fullest file that contributed, so the suffix is always an
+    // extension the reader really has in hand.
+    const source = [...bucket].sort(
+      (a, b) => resolutionOf(a.from ?? '') - resolutionOf(b.from ?? ''),
+    )[0];
+    const extension = (source.from ?? '').split('.').pop()?.toLowerCase() ?? '';
+
+    let label = name;
+    if ((vehicles.get(name)?.size ?? 1) > 1 && glider) label += `_${glider}`;
+    if ((families.get(`${name}|${glider}`)?.size ?? 1) > 1 && computer !== 'unknown') {
+      label += `_${extension}`;
+    }
     if (label !== name) renamed.push(label);
 
     if (bucket.length === 1) {
@@ -226,22 +396,42 @@ function groupSeries(series: readonly Series[]): { series: Series[]; renamed: st
 
     // Concatenate, then sort by time: segments arrive in whatever order the
     // reader picked them, and the join below needs ascending time.
-    const total = bucket.reduce((n, s) => n + s.time.length, 0);
-    const pairs = new Array<[number, number]>(total);
-    let at = 0;
+    //
+    // Ties break on how complete the file is, so that where one instant is in
+    // both a `.tbd` and the `.ebd` it was decimated from, the fuller file's
+    // sample is the one kept.
+    const pairs: [number, number, number][] = [];
     for (const s of bucket) {
-      for (let i = 0; i < s.time.length; i++) pairs[at++] = [s.time[i], s.value[i]];
+      const rank = resolutionOf(s.from ?? '');
+      for (let i = 0; i < s.time.length; i++) pairs.push([s.time[i], s.value[i], rank]);
     }
-    pairs.sort((a, b) => a[0] - b[0]);
+    pairs.sort((a, b) => a[0] - b[0] || a[2] - b[2]);
+
+    const time: number[] = [];
+    const value: number[] = [];
+    for (const [t, v] of pairs) {
+      if (time.length > 0 && t === time[time.length - 1]) {
+        // The same instant twice. Between two decimations of one record this
+        // is the ordinary case rather than a fault, so it is counted, not
+        // announced — unless the two disagree about the value, which they
+        // should never do and which the reader is told about.
+        deduplicated++;
+        if (!Object.is(v, value[value.length - 1])) disagreed++;
+        continue;
+      }
+      time.push(t);
+      value.push(v);
+    }
+
     merged.push({
       name: label,
       unit: bucket[0].unit,
-      time: Float64Array.from(pairs, (p) => p[0]),
-      value: Float64Array.from(pairs, (p) => p[1]),
+      time: Float64Array.from(time),
+      value: Float64Array.from(value),
       from: bucket.map((s) => s.from ?? '').join(' '),
     });
   }
-  return { series: merged, renamed: renamed.sort() };
+  return { series: merged, renamed: renamed.sort(), deduplicated, disagreed };
 }
 
 /**
@@ -261,8 +451,22 @@ export function buildTable(series: readonly Series[], options: BuildOptions = {}
   if (grouped.renamed.length > 0) {
     notes.push(
       `${grouped.renamed.join(', ')}: this sensor is written by both computers, so the ` +
-        'columns carry the file family they came from. The science copy is the measurement; ' +
+        'columns say which one they came from. The science copy is the measurement; ' +
         'the flight copy is what was relayed to the flight computer, at its own slower rate.',
+    );
+  }
+  if (grouped.deduplicated > 0) {
+    notes.push(
+      `${grouped.deduplicated.toLocaleString()} sample(s) appeared in more than one file from ` +
+        'the same computer — sbd, mbd and dbd are three decimations of one flight record, as ' +
+        'tbd, nbd and ebd are of one science record — and were merged rather than repeated.',
+    );
+  }
+  if (grouped.disagreed > 0) {
+    notes.push(
+      `${grouped.disagreed.toLocaleString()} of those disagreed about the value, which should ` +
+        'not happen between two decimations of one record. The value from the fuller file was ' +
+        'kept, and the two files differ from each other over those samples.',
     );
   }
   if (usable.length === 0) {
@@ -303,7 +507,7 @@ export function buildTable(series: readonly Series[], options: BuildOptions = {}
   if (rowTime.length > maxRows) {
     notes.push(
       `Truncated to the first ${maxRows.toLocaleString()} of ${rowTime.length.toLocaleString()} rows. ` +
-        'Decode fewer files, or fewer sensors, for the whole span.',
+        'Fewer files, or fewer sensors, would bring the whole span under the limit.',
     );
     rowTime = rowTime.slice(0, maxRows);
   }
@@ -337,5 +541,5 @@ export function buildTable(series: readonly Series[], options: BuildOptions = {}
     );
   }
 
-  return { time: rowTime, columns, rows: rowTime.length, notes };
+  return { time: rowTime, columns: orderColumns(columns), rows: rowTime.length, notes };
 }
