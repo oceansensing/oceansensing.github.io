@@ -46,7 +46,10 @@
  * settle whether a 1-byte sensor is signed.
  */
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { gunzipSync } from 'node:zlib';
 
@@ -56,6 +59,18 @@ import { toCsv, exportName, isoTime } from '../packages/slocum/csv.ts';
 import { toNetcdf } from '../packages/slocum/netcdf.ts';
 import { deriveSeawater } from '../packages/slocum/derive.ts';
 import { familyOf, sortFileNames } from '../packages/slocum/index.ts';
+import {
+  buildOg1,
+  derivePhase,
+  missingFields,
+  og1FileName,
+  sensorVariableName,
+  stampCompact,
+  OG1_DEFAULTS,
+  OG1_FIELDS,
+} from '../packages/slocum/og1.ts';
+import { toCdl } from '../packages/slocum/cdl.ts';
+import { writeNetcdf } from '../packages/slocum/netcdf.ts';
 import { decodeAtlas } from '../packages/teos10/atlas.ts';
 import { parseSensorList, parseFileopenTime, readHeader } from '../packages/slocum/header.ts';
 import { decompressStream, isCompressedName } from '../packages/slocum/lz4.ts';
@@ -662,6 +677,367 @@ console.log('\n--- file names ---');
     ['g-2025-120-1-400.sbd', 'g-2025-121-1-1.sbd']);
 }
 
+// ── OG1.0 ───────────────────────────────────────────────────────────────────
+//
+// The structure is checked against the spec's own tables rather than against
+// its example file, which is looser than the document it illustrates — it
+// writes `DEPLOYMENT_LATITUDE = "nan"` into a double and leaves most
+// vocabulary attributes empty.
+//
+// Spec: https://oceangliderscommunity.github.io/OG-format-user-manual/OG_Format.html
+
+console.log('\n--- OG1.0 ---');
+
+const OG1_META = {
+  ...OG1_DEFAULTS,
+  platformSerial: 'electa',
+  platformModel: 'G3',
+  wmoIdentifier: '4802960',
+  deploymentTime: '2025-05-01T14:00:00',
+  deploymentLatitude: '38.21',
+  deploymentLongitude: '-73.74',
+  contributorName: 'A Person',
+  contributorEmail: 'person@example.org',
+  contributingInstitutions: 'Virginia Institute of Marine Science',
+  ctdSerial: '0221',
+  ctdModel: 'RBRlegato3',
+};
+
+{
+  // Nothing that identifies a glider, a person or an institution may be
+  // guessed: a plausible wrong WMO number is worse than an empty box.
+  const missing = missingFields(OG1_DEFAULTS).map((f) => f.key).sort();
+  check('the defaults leave every identifying field to be filled in', missing, [
+    'contributingInstitutions', 'contributorEmail', 'contributorName',
+    'deploymentLatitude', 'deploymentLongitude', 'deploymentTime',
+    'platformModel', 'platformSerial', 'wmoIdentifier',
+  ]);
+  check('and a filled form is complete', missingFields(OG1_META).length, 0);
+
+  // Writing a near-OG1 file is worse than refusing: it is the near-miss this
+  // whole package exists to avoid.
+  let refused = '';
+  try {
+    buildOg1(table, OG1_DEFAULTS);
+  } catch (error) {
+    refused = error.message;
+  }
+  check('an incomplete form is refused, and says what is missing',
+    /needs 9 more field\(s\)/.test(refused) && /WMO identifier/.test(refused), true);
+
+  check('every field the form declares exists on the metadata object',
+    OG1_FIELDS.filter((f) => !(f.key in OG1_DEFAULTS)).map((f) => f.key), []);
+}
+
+const og1 = buildOg1(table, OG1_META);
+const og1Bytes = writeNetcdf(og1.document);
+const og1File = readNetcdf(og1Bytes);
+const og1Var = (name) => og1File.variables.find((v) => v.name === name);
+const og1Global = (name) => og1File.globals[name];
+
+{
+  // ── the naming convention ──
+  check('the id follows <platform_serial>_<start_date>_<data_mode>',
+    og1.id, 'electa_20250507T221614_R');
+  check('and the file is named for it', og1FileName(og1.id), 'electa_20250507T221614_R.nc');
+  check('the start date is the compact form the spec asks for, not ISO with separators',
+    /^\d{8}T\d{6}$/.test(og1.id.split('_')[1]), true);
+  check('a time stamps compactly', stampCompact(Date.UTC(2024, 3, 25, 14, 58, 5) / 1000),
+    '20240425T145805');
+
+  // ── dimensions ──
+  check('N_MEASUREMENTS is the number of measurements',
+    og1File.dims.find((d) => d.name === 'N_MEASUREMENTS')?.length, table.rows);
+  check('and N_PARAM counts the geophysical parameters',
+    og1File.dims.find((d) => d.name === 'N_PARAM')?.length,
+    og1Var('PARAMETER').size / og1Var('PARAMETER').size * 6);
+
+  // ── mandatory global attributes ──
+  const mandatory = ['title', 'platform', 'platform_vocabulary', 'id', 'featureType',
+    'Conventions', 'start_date', 'date_created', 'rtqc_method'];
+  check('every mandatory global attribute is present',
+    mandatory.filter((name) => !(name in og1File.globals)), []);
+  check('featureType is the fixed value the spec gives', og1Global('featureType'), 'trajectory');
+  check('and Conventions names all three', og1Global('Conventions'),
+    'CF-1.10, ACDD-1.3, OG-1.0');
+
+  // The PI and the operating institution are mandatory in the spec's own
+  // wording even though they sit in the "highly desirable" rows.
+  check('the PI and the operator reach the file', {
+    name: og1Global('contributor_name'),
+    role: og1Global('contributor_role'),
+    institution: og1Global('contributing_institutions'),
+  }, {
+    name: 'A Person',
+    role: 'PI',
+    institution: 'Virginia Institute of Marine Science',
+  });
+
+  // ── mandatory variables ──
+  const required = ['TIME', 'LATITUDE', 'LONGITUDE', 'DEPTH', 'TIME_GPS', 'LATITUDE_GPS',
+    'LONGITUDE_GPS', 'TRAJECTORY', 'PLATFORM_MODEL', 'WMO_IDENTIFIER',
+    'DEPLOYMENT_TIME', 'DEPLOYMENT_LATITUDE', 'DEPLOYMENT_LONGITUDE'];
+  check('every mandatory variable is present',
+    required.filter((name) => !og1Var(name)), []);
+
+  // ── the coordinate variables say what the spec says they say ──
+  check('TIME carries its standard name, units and calendar', {
+    standard_name: og1File.attrOf('TIME', 'standard_name'),
+    units: og1File.attrOf('TIME', 'units'),
+    calendar: og1File.attrOf('TIME', 'calendar'),
+  }, {
+    standard_name: 'time',
+    units: 'seconds since 1970-01-01T00:00:00Z',
+    calendar: 'gregorian',
+  });
+  check('LATITUDE and LONGITUDE are in degrees, named as CF names them', {
+    lat: [og1File.attrOf('LATITUDE', 'standard_name'), og1File.attrOf('LATITUDE', 'units')],
+    lon: [og1File.attrOf('LONGITUDE', 'standard_name'), og1File.attrOf('LONGITUDE', 'units')],
+  }, {
+    lat: ['latitude', 'degrees_north'],
+    lon: ['longitude', 'degrees_east'],
+  });
+  check('DEPTH is metres, positive down', {
+    standard_name: og1File.attrOf('DEPTH', 'standard_name'),
+    units: og1File.attrOf('DEPTH', 'units'),
+    positive: og1File.attrOf('DEPTH', 'positive'),
+  }, { standard_name: 'depth', units: 'm', positive: 'down' });
+
+  // ── the geophysical parameters, and the units question the spec and its
+  //    own example disagree about ──
+  check('CNDC is in the units the spec\'s table gives, not the example file\'s',
+    og1File.attrOf('CNDC', 'units'), 'mS cm-1');
+  check('TEMP and PRES likewise',
+    [og1File.attrOf('TEMP', 'units'), og1File.attrOf('PRES', 'units')],
+    ['degree_Celsius', 'decibar']);
+  check('each parameter points at the OG1 vocabulary',
+    ['CNDC', 'TEMP', 'PRES', 'PSAL'].map((n) => og1File.attrOf(n, 'vocabulary')),
+    ['CNDC', 'TEMP', 'PRES', 'PSAL'].map(
+      (n) => `http://vocab.nerc.ac.uk/collection/OG1/current/${n}/`));
+  check('and names its coordinates and its sensor',
+    [og1File.attrOf('TEMP', 'coordinates'), og1File.attrOf('TEMP', 'sensor')],
+    ['TIME LONGITUDE LATITUDE DEPTH', 'SENSOR_CTD_0221']);
+  check('the sensor variable it points at exists', !!og1Var('SENSOR_CTD_0221'), true);
+  check('and its name follows OG1\'s upper-case underscore rule',
+    sensorVariableName({ ...OG1_META, ctdSensorType: 'dissolved gas sensors', ctdSerial: '2025-0123' }),
+    'SENSOR_DISSOLVED_GAS_SENSORS_2025_0123');
+
+  // ── a QC companion for everything, all zero: no QC has been applied ──
+  const wantsQc = ['TIME', 'LATITUDE', 'LONGITUDE', 'DEPTH', 'PRES', 'TEMP', 'CNDC', 'PSAL', 'PHASE'];
+  check('every measured variable has a QC companion',
+    wantsQc.filter((name) => !og1Var(`${name}_QC`)), []);
+  check('and the flags say no QC has been applied, which is true',
+    [...og1File.read('TEMP_QC')].every((v) => v === 0), true);
+  check('the flag meanings are the IODE scheme',
+    og1File.attrOf('TEMP_QC', 'flag_values'), [0, 1, 2, 3, 4]);
+
+  // ── the values themselves ──
+  const finite = (a) => [...a].filter(Number.isFinite);
+  const pres = finite(og1File.read('PRES'));
+  const depth = finite(og1File.read('DEPTH'));
+  const cndc = finite(og1File.read('CNDC'));
+  const psal = finite(og1File.read('PSAL'));
+
+  check('PRES is the recorded pressure in decibar, not the bar the glider wrote',
+    Math.round(Math.max(...pres) * 100) / 100, 125.24);
+  // Depth is *less* than pressure in dbar, by the local gravity and the
+  // compressibility of the water column — about 0.8% at this latitude. Equal
+  // would mean the 1 dbar = 1 m approximation had crept in.
+  const ratio = Math.max(...depth) / Math.max(...pres);
+  check('DEPTH is computed from pressure and latitude, not assumed equal to it',
+    ratio > 0.985 && ratio < 0.998, true);
+  check('CNDC is ten times the S/m the glider recorded',
+    Math.round(Math.max(...cndc) * 10) / 10, 42.6);
+  check('PSAL is shelf water', Math.min(...psal) > 30 && Math.max(...psal) < 36, true);
+
+  // LATITUDE is filled at every measurement where LATITUDE_GPS is not: that
+  // difference is the whole reason OG1 defines both.
+  const lat = og1File.read('LATITUDE');
+  const gpsLat = og1File.read('LATITUDE_GPS');
+  check('LATITUDE is filled at every measurement, as OG1 requires',
+    finite(lat).length, table.rows);
+  check('while LATITUDE_GPS holds only the fixes',
+    finite(gpsLat).length < finite(lat).length && finite(gpsLat).length > 0, true);
+  check('and both are off New Jersey',
+    Math.round(Math.max(...finite(lat)) * 10) / 10, 38.2);
+
+  // ── PHASE and the numbering ──
+  check('PHASE uses the published vocabulary',
+    og1File.attrOf('PHASE', 'phase_vocabulary').includes('vocabularyCollection/phase.md'), true);
+  check('and says how it was arrived at, because it was not recorded',
+    /Inferred from the rate of change of pressure/.test(
+      og1File.attrOf('PHASE', 'phase_calculation_method')), true);
+
+  const phase = [...og1File.read('PHASE')];
+  const seen = new Set(phase);
+  check('every phase value is in the vocabulary',
+    [...seen].filter((v) => ![0, 1, 2, 3, 4, 5, 6, 7].includes(v)), []);
+  check('the glider dives, climbs and surfaces',
+    [1, 2, 3].every((v) => seen.has(v)), true);
+
+  // This segment surfaces at each end and yo-yos at 3.5 dbar in between, so
+  // there are two surfacings and four complete dive-climb cycles. A threshold
+  // that took a 3.5 dbar inflection for a surfacing would give six.
+  check('SEGMENT_NUMBER counts surfacings, not shallow inflections',
+    Math.max(...og1File.read('SEGMENT_NUMBER')), 2);
+  check('and PROFILE_NUMBER counts the dives and climbs',
+    Math.max(...og1File.read('PROFILE_NUMBER')), 8);
+  check('PROFILE_DIRECTION is 1 descending, -1 ascending, 0 elsewhere',
+    [...new Set(og1File.read('PROFILE_DIRECTION'))].sort(), [-1, 0, 1]);
+
+  // ── the scalar metadata ──
+  const chars = (name) => new TextDecoder().decode(
+    Uint8Array.from(og1File.read(name, 'char'))).replace(/\0+$/, '').trim();
+  check('the platform variables carry what the form was given', {
+    trajectory: chars('TRAJECTORY'),
+    type: chars('PLATFORM_TYPE'),
+    model: chars('PLATFORM_MODEL'),
+    wmo: chars('WMO_IDENTIFIER'),
+  }, {
+    trajectory: 'electa_20250507T221614_R',
+    type: 'slocum',
+    model: 'G3',
+    wmo: '4802960',
+  });
+  check('and the deployment position is where the form said',
+    [og1File.read('DEPLOYMENT_LATITUDE')[0], og1File.read('DEPLOYMENT_LONGITUDE')[0]],
+    [38.21, -73.74]);
+
+  check('the file says how it was encoded, rather than implying conformance',
+    /netCDF-3 classic/.test(og1Global('format_note')), true);
+}
+
+// ── PHASE, on data built to have a known answer ──────────────────────────────
+
+{
+  // The fixture cannot exercise the branch that uses the glider's own state,
+  // because these files do not log it — which is itself the reason the
+  // inference exists. Synthetic, because what is being checked is the
+  // translation table rather than the decode.
+  const time = Float64Array.from({ length: 6 }, (_, i) => i * 10);
+  // A Column, which is what derivePhase takes — `values`, not a Series' `value`.
+  const state = { name: 'cc_final_behavior_state', unit: 'enum', source: 'recorded',
+    values: Float64Array.from([1, 1, 2, 2, 5, 5]) };
+  const flat = new Float64Array(6).fill(50);
+  const fromState = derivePhase(time, flat, state);
+  check('the glider\'s own behaviour state is translated, when it is logged',
+    [...fromState.phase], [2, 2, 1, 1, 3, 3]);
+  check('and the file says that is what happened',
+    /own cc_final_behavior_state/.test(fromState.method), true);
+
+  // A clean dive and climb, with no state logged.
+  const t = Float64Array.from({ length: 40 }, (_, i) => i * 10);
+  const p = Float64Array.from(t, (_, i) => (i < 20 ? i * 5 : (39 - i) * 5));
+  const inferred = derivePhase(t, p);
+  check('without it, a descent then an ascent is inferred from the pressure',
+    [inferred.phase[5], inferred.phase[30]], [2, 1]);
+  check('the surface is where the pressure is', inferred.phase[0], 3);
+  check('and one dive and one climb is two profiles',
+    Math.max(...inferred.profile), 2);
+}
+
+// ── CDL ──────────────────────────────────────────────────────────────────────
+
+console.log('\n--- CDL ---');
+{
+  const cdl = toCdl(og1.document, { name: og1.id });
+  const lines = cdl.split('\n');
+
+  check('it opens as a netCDF CDL named for the id', lines[0], `netcdf ${og1.id} {`);
+  check('and closes', lines[lines.length - 2], '}');
+
+  // The point of the CDL is that `ncgen -4` can make what a browser cannot:
+  // OG1's string variables as real NC_STRINGs rather than char arrays.
+  check('the metadata variables are declared as strings, which classic cannot hold',
+    ['TRAJECTORY', 'PLATFORM_TYPE', 'PLATFORM_MODEL', 'WMO_IDENTIFIER']
+      .filter((n) => !cdl.includes(`\tstring ${n} ;`)), []);
+  check('and the parameter lists are string arrays',
+    cdl.includes('\tstring PARAMETER(N_PARAM) ;'), true);
+  check('so the char-array dimensions they needed are not declared',
+    /^\tSTRING\d+ = /m.test(cdl), false);
+
+  // A numeric literal without its type suffix is read by ncgen as an int, so
+  // a byte _FillValue would silently become an int attribute.
+  check('byte attributes carry their suffix', cdl.includes('TEMP_QC:_FillValue = 0b ;'), true);
+  check('float fill values carry theirs', cdl.includes('TEMP:_FillValue = NaNf ;'), true);
+  check('and doubles look like doubles rather than integers',
+    cdl.includes('TIME:valid_min = 1000000000. ;'), true);
+
+  check('the data section is there', cdl.includes('\ndata:\n'), true);
+  check('with the trajectory written as text',
+    cdl.includes(` TRAJECTORY = "${og1.id}" ;`), true);
+  check('and the parameter names as a list',
+    /PARAMETER = "PRES", "CNDC", "TEMP", "PSAL"/.test(cdl), true);
+
+  // Every declaration in the CDL must describe the same file the netCDF
+  // writer produced. Checked against the netCDF read back by the reader
+  // below, not against the document both were built from.
+  const declared = [...cdl.matchAll(/^\t(?:byte|char|short|int|float|double|string) (\w+)/gm)]
+    .map((m) => m[1]);
+  check('the CDL declares exactly the variables the netCDF holds',
+    declared.slice().sort(), og1File.variables.map((v) => v.name).sort());
+
+  const headerOnly = toCdl(og1.document, { name: og1.id, data: false });
+  check('a header-only CDL omits the data', headerOnly.includes('\ndata:\n'), false);
+
+  // ── and the claim the CDL export exists to make ──
+  //
+  // Everything above checks the text against what this repository believes.
+  // Only `ncgen` can say whether it is valid CDL, and `ncgen` ships with
+  // netCDF rather than with Node, so this runs where it is installed and
+  // says `skip` where it is not. Never `ok` when skipped: a check that goes
+  // quiet and keeps passing is the shape this project has paid for before.
+  const ncgen = findNcgen();
+  if (!ncgen) {
+    console.log('skip  ncgen is not installed, so the CDL is unproven here ' +
+      '(conda create -p env -c conda-forge libnetcdf)');
+  } else {
+    const dir = mkdtempSync(join(tmpdir(), 'slocum-cdl-'));
+    const cdlPath = join(dir, `${og1.id}.cdl`);
+    const ncPath = join(dir, `${og1.id}.nc`);
+    writeFileSync(cdlPath, cdl);
+
+    let status = 0;
+    let output = '';
+    try {
+      output = execFileSync(ncgen, ['-4', '-o', ncPath, cdlPath], { encoding: 'utf8', stdio: 'pipe' });
+    } catch (error) {
+      status = error.status ?? 1;
+      output = `${error.stdout ?? ''}${error.stderr ?? ''}`;
+    }
+    check('ncgen -4 compiles the CDL', { status, output: output.trim() }, { status: 0, output: '' });
+    check('and produces a netCDF-4 file', existsSync(ncPath) && readFileSync(ncPath).length > 1000, true);
+
+    // netCDF-3 has no NC_STRING, so a CDL that declares one must be refused
+    // rather than quietly downgraded — which is the whole reason this export
+    // is worth having alongside the .nc.
+    let classic = 0;
+    try {
+      execFileSync(ncgen, ['-3', '-o', join(dir, 'classic.nc'), cdlPath], { stdio: 'pipe' });
+    } catch (error) {
+      classic = error.status ?? 1;
+    }
+    check('while ncgen -3 refuses it, because classic has no string type',
+      classic !== 0, true);
+
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** `ncgen`, wherever this machine happens to keep it. */
+function findNcgen() {
+  const candidates = [
+    process.env.NCGEN,
+    ...(process.env.PATH ?? '').split(':').filter(Boolean).map((d) => join(d, 'ncgen')),
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    try {
+      if (existsSync(candidate)) return candidate;
+    } catch { /* an unreadable PATH entry is not this check's problem */ }
+  }
+  return null;
+}
+
 /**
  * A minimal netCDF-3 classic reader, so the writer is checked by walking the
  * file the way any other reader would rather than by trusting it.
@@ -691,12 +1067,25 @@ function readNetcdf(bytes) {
         out[name] = new TextDecoder().decode(bytes.subarray(at, at + count));
         at += count;
         pad();
-      } else if (type === 6) {
-        const values = [];
-        for (let k = 0; k < count; k++) { values.push(view.getFloat64(at, false)); at += 8; }
-        out[name] = values;
       } else {
-        throw new Error(`netCDF reader: unexpected attribute type ${type}`);
+        // 1 byte, 3 short, 4 int, 5 float, 6 double. All of these appear in an
+        // OG1 file: the QC flag values are bytes and the fill values follow
+        // their variable's own type.
+        const width = { 1: 1, 3: 2, 4: 4, 5: 4, 6: 8 }[type];
+        if (!width) throw new Error(`netCDF reader: unexpected attribute type ${type}`);
+        const values = [];
+        for (let k = 0; k < count; k++) {
+          values.push(
+            type === 6 ? view.getFloat64(at, false)
+              : type === 5 ? view.getFloat32(at, false)
+              : type === 4 ? view.getInt32(at, false)
+              : type === 3 ? view.getInt16(at, false)
+              : view.getInt8(at),
+          );
+          at += width;
+        }
+        pad();
+        out[name] = values;
       }
     }
     return out;
@@ -735,12 +1124,22 @@ function readNetcdf(bytes) {
     attrOf(name, key) {
       return variables.find((v) => v.name === name)?.attributes[key];
     },
-    read(name) {
+    read(name, as) {
       const v = variables.find((x) => x.name === name);
       if (!v) return null;
-      const count = v.size / 8;
-      const out = new Float64Array(count);
-      for (let i = 0; i < count; i++) out[i] = view.getFloat64(v.begin + i * 8, false);
+      // 1 byte, 2 char, 3 short, 4 int, 5 float, 6 double.
+      const width = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 4, 6: 8 }[v.type];
+      const count = Math.floor(v.size / width);
+      const out = v.type === 6 || v.type === 5 ? new Float64Array(count) : new Int32Array(count);
+      for (let i = 0; i < count; i++) {
+        const at = v.begin + i * width;
+        out[i] = v.type === 6 ? view.getFloat64(at, false)
+          : v.type === 5 ? view.getFloat32(at, false)
+          : v.type === 4 ? view.getInt32(at, false)
+          : v.type === 3 ? view.getInt16(at, false)
+          : as === 'char' ? view.getUint8(at)
+          : view.getInt8(at);
+      }
       return out;
     },
   };

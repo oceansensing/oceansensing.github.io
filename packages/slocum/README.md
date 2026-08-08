@@ -63,6 +63,36 @@ computer at full rate and *relayed* to the flight computer at a much slower
 one — 853 samples against 4 in the test fixture. The same sensor across
 segments is one column, concatenated.
 
+## OceanGliders OG1.0
+
+`og1.ts` maps a decoded table onto
+[OG1.0](https://oceangliderscommunity.github.io/OG-format-user-manual/OG_Format.html),
+the community trajectory format. It needs deployment metadata a Slocum file
+does not carry — `OG1_FIELDS` declares the thirty-eight fields and
+`missingFields` says which mandatory ones are still empty:
+
+```ts
+import { buildOg1, missingFields, toCdl, writeNetcdf } from '@c4po/slocum';
+
+if (missingFields(metadata).length === 0) {
+  const { document, id } = buildOg1(table, metadata);
+  const nc = writeNetcdf(document);        // OG1 structure, netCDF-3 encoding
+  const cdl = toCdl(document, { name: id }); // `ncgen -4` makes netCDF-4 of this
+}
+```
+
+**OG1.0 structure, netCDF-3 encoding** — not "OG1.0 compliant". OG1 declares
+its metadata variables as `NC_STRING`, which classic does not have, so they
+are fixed-width `char` arrays here; the CDL declares them as `string`, which
+is the exact route to a conformant netCDF-4 file — checked with `ncgen`,
+which compiles it cleanly and preserves every value. What has *not* been done
+is an OG1 validator run; the community's own checkers are experimental.
+
+Four things OG1 wants at every measurement are computed rather than recorded —
+position between fixes, `DEPTH` from pressure and latitude via TEOS-10, `PSAL`
+via PSS-78, and `PHASE` with its segment and profile numbering. Each says so
+in its own attributes.
+
 ## Files
 
 | file | what it is |
@@ -73,7 +103,8 @@ segments is one column, concatenated.
 | `nmea.ts` | `DDDMM.MMMM` positions, and whether one is real |
 | `table.ts` | series → a rectangular table |
 | `derive.ts` | seawater properties, via `@c4po/teos10` |
-| `csv.ts`, `netcdf.ts` | the two outputs |
+| `csv.ts`, `netcdf.ts` | CSV, and a netCDF-3 classic document writer |
+| `og1.ts`, `cdl.ts` | the OceanGliders OG1.0 mapping, and its text form |
 | `types.ts`, `index.ts` | shapes, and the public surface |
 
 ## What it does not do

@@ -8,7 +8,10 @@
     ".": "./index.ts",
     "./dbd": "./dbd.ts",
     "./lz4": "./lz4.ts",
-    "./netcdf": "./netcdf.ts"
+    "./netcdf": "./netcdf.ts",
+    "./og1": "./og1.ts",
+    "./cdl": "./cdl.ts",
+    "./table": "./table.ts"
   },
   "dependencies": {
     "@c4po/teos10": "*"

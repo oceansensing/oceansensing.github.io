@@ -5089,6 +5089,135 @@ different thing from interpolating a measurement: it is an input to a
 4°-lattice lookup rather than a column anybody reads, and a whole dive sits
 well inside one cell. It is said in the notes anyway.
 
+### OceanGliders OG1.0
+
+`packages/slocum/og1.ts` maps a decoded table onto
+[OG1.0](https://oceangliderscommunity.github.io/OG-format-user-manual/OG_Format.html),
+the OceanGliders community's trajectory format (v1.0.0, June 2024). The
+spec's own reference examples include `unit_345_20231112T000000_R`, which is a
+**Slocum G2** — so this mapping had a worked example of exactly this case to
+follow.
+
+**What it claims, and what it does not.** The structure, variables, units and
+attributes are OG1.0. The *encoding* is netCDF-3 classic, because a browser
+cannot write HDF5 without shipping a megabyte of WASM. So the page says
+"OG1.0 structure, netCDF-3 encoding" and not "OG1.0 compliant" — and
+`test:slocum-page` fails on any wording that claims compliance outright, which
+is the sort of label this project has paid for before. Nothing here has been
+through an OG1 validator; the community's own checkers say they are
+experimental.
+
+**The CDL export is not the same file in a text wrapper.** OG1 declares its
+metadata variables as `NC_STRING`, which classic does not have; the netCDF
+export writes them as fixed-width `char` arrays. The CDL declares them as
+`string`, which is what OG1 actually specifies, so `ncgen -4 file.cdl -o
+file.nc` produces the real thing — **verified**, not argued: `ncgen -4`
+compiles it with no output and exit 0, the result is `netCDF-4` with eight
+real `NC_STRING` variables and no leftover `STRING<n>` dimensions, and every
+value survives the trip (35 numeric variables, 8 string variables and all 36
+global attributes identical to the direct netCDF-3 write). `ncgen -3`
+refuses it, which is the correct refusal rather than a silent downgrade.
+
+`test:slocum` runs all three of those whenever `ncgen` is on `PATH`, and
+prints **`skip`** — never `ok` — where it is not, which is the case in CI.
+A check that goes quiet and keeps passing is the shape this repository has
+paid for twice. That is why `NcVariable` carries an optional
+`strings` alongside its `data`: the semantic content and the classic encoding
+of it, so the two serialisers differ in exactly the way the formats do rather
+than by accident. It is also the form the spec ships its own examples in, so a
+diff against them is meaningful.
+
+**Where the spec and its own example disagree, follow the spec.** The
+geophysical table gives `CNDC:units = "mS cm-1"`; the Slocum example file
+writes `"mhos/m"`, which is S/m and ten times smaller. The normative document
+wins — that example also writes `DEPLOYMENT_LATITUDE = "nan"` into a double
+and leaves most vocabulary attributes empty. Slocum records S/m, so the
+conversion is the ×10 `derive.ts` already makes.
+
+#### What the glider does not record
+
+OG1 wants a value at every measurement for four things a Slocum file has
+sparsely or not at all. Each is computed and each says so in its own
+attributes:
+
+- **LATITUDE/LONGITUDE** — interpolated between the glider's own fixes; the
+  fixes themselves go to `LATITUDE_GPS`/`LONGITUDE_GPS`/`TIME_GPS`, which is
+  the split OG1 defines those variables for. `test:slocum` holds that
+  LATITUDE is filled at every row while LATITUDE_GPS is not, because that
+  difference *is* the distinction.
+- **DEPTH** — TEOS-10's exact depth-from-pressure, not 1 dbar ≈ 1 m. The gate
+  checks the ratio is 0.985–0.998 rather than 1, since equal would mean the
+  approximation had crept back in.
+- **PSAL** — PSS-78 from the recorded conductivity, temperature and pressure.
+- **PHASE**, and the segment and profile numbering that follows from it.
+
+#### PHASE, and why the published translation table was not usable here
+
+OceanGliders publishes a table translating Slocum's `cc_final_behavior_state`
+into the OG PHASE vocabulary, and using it would be far better than inferring
+anything: it is what the glider was *commanded* to do rather than what it
+appears to have done. **It is not in these files.** The sensor is in the
+cache's namespace and inactive, which is ordinary for the decimated files sent
+over Iridium — so the translation is implemented and exercised by a synthetic
+case, and the fixture takes the fallback.
+
+The fallback infers from the rate of change of pressure, with the threshold
+taken from the data — a quarter of the median absolute rate — rather than
+fixed in dbar/s, which would be wrong for a shallow flight and wrong again for
+a deep one. `phase_calculation_method` says which route was taken, which is
+what that attribute is for.
+
+**The surface threshold is 1 dbar and it is load-bearing.** The fixture
+segment surfaces at each end and yo-yos at **3.5 dbar** in between — a glider
+dives repeatedly between surfacings to save Iridium time — so the record has
+two surfacings and four complete dive-climb cycles, not six of each. A
+threshold of 5 dbar takes those inflections for surfacings and triples the
+segment count. `test:slocum` pins `SEGMENT_NUMBER` at 2 and `PROFILE_NUMBER`
+at 8 for exactly that reason; the dive plot is no help here, since 3.5 dbar of
+125 is eight pixels from the top and looks like the surface.
+
+#### The metadata, and the form that collects it
+
+Thirty-eight fields, nine of them mandatory. They are declared as **data** in
+`OG1_FIELDS` rather than written out as markup, so the form, the validation,
+the saved profile and the file all read one list — a field added to the
+package appears in the page with no change to the component.
+
+**Nothing identifying is defaulted.** The vocabularies OG1 itself names are
+filled in, and the QC statement is one that is true of this decoder; the
+glider, the people and the institution are left empty, because a plausible
+wrong WMO number is worse than an empty box. `buildOg1` refuses an incomplete
+form rather than writing a near-OG1 file, which is the near-miss this package
+exists to avoid.
+
+The answers are kept in `localStorage` and can be saved as a JSON profile,
+because a deployment's segments share every one of them and retyping thirty
+fields per segment is how a metadata standard stops being used. A loaded
+profile is filtered to the keys the package declares, so a hand-edited or
+older one cannot introduce a field the exporter does not understand.
+
+#### Three things the gates had to learn
+
+**The netCDF writer became a document model.** It wrote one fixed dimension of
+doubles; OG1 needs several dimensions, scalar variables, and byte, int, float
+and char types. `toNetcdf(table)` is built on the new primitive, so the CSV
+path is unchanged and `test:slocum` proved it.
+
+**The harness's own netCDF reader only understood char and double
+attributes.** OG1 files carry byte flag values and fill values that follow
+their variable's type, so the reader threw on the first one — a check that
+crashes is at least loud, but it had to learn the other four types before it
+could see anything.
+
+**`min-inline-size: 0` was checked by the wrong rule.** The OG1 form rows are
+a grid, and a grid item's min-width defaults to the twenty characters an
+`<input>`'s `size` implies, so without an explicit zero the last field hangs
+out of the panel — and a viewport-overflow scan misses it, because it
+overflows its *container*. The first check for it matched `.og1-field input`,
+which sets the same property for its own reasons, and so passed with the
+container's rule deleted. Anchored to `.og1-field{` now. That is the third
+time this masking has appeared here; the other two are in `test:map`.
+
 ### A stylesheet that could not match what it was written for
 
 **The worst bug this page shipped, and it is a new shape for this file.**

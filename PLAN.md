@@ -384,6 +384,25 @@ not be applied.
   no quality control, no gridding, and it does not write the IOOS Glider DAC's
   trajectory format. Each of those is a separate piece of work and only the
   DAC format has an obvious specification to follow.
+- **The OG1.0 output has never been through an OG1 validator.** The
+  community's checkers — `conventions.castelao.net/OG/validate` and
+  `ioos/cc-plugin-og` — are experimental and say so, and neither has been run
+  against a file from this page. Doing so is the single most valuable check
+  left, and it needs no code: export one and upload it.
+- **The CDL is proven; the check that proves it does not run in CI.**
+  `ncgen -4` compiles it cleanly and produces a genuine netCDF-4 file with
+  real `NC_STRING` variables, and `ncgen -3` refuses it — verified, and
+  `test:slocum` now runs both whenever `ncgen` is on `PATH`. CI has no
+  netCDF installation, so there it prints `skip` rather than `ok`: the claim
+  is checked wherever someone has the tooling and never silently assumed.
+  Installing it is `conda create -p env -c conda-forge libnetcdf`; Homebrew
+  could not, on this machine, for want of write permission under
+  `/opt/homebrew/share/zsh`.
+- **PHASE is inferred, not read.** The published Slocum translation table
+  keys off `cc_final_behavior_state`, which these files do not log. The
+  translation is implemented and exercised synthetically; a file that *does*
+  carry the sensor would exercise it for real, and would also show whether the
+  pressure-rate fallback agrees with the glider's own account of itself.
 - **Whole-deployment performance is untested.** Files are decoded one at a
   time with a yield between them, and the table is a dense matrix capped at
   500,000 rows with a note when it truncates. Hundreds of files at once has

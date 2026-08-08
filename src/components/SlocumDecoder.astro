@@ -116,6 +116,49 @@ import Disclaimer from './Disclaimer.astro';
       <button type="button" data-netcdf>Download netCDF</button>
       <span class="download-note" data-download-note></span>
     </div>
+
+    <details class="og1" data-og1-panel>
+      <summary>
+        OceanGliders OG1.0 export <span class="og1-state" data-og1-state></span>
+      </summary>
+
+      <p class="og1-intro">
+        <a href="https://oceangliderscommunity.github.io/OG-format-user-manual/OG_Format.html">OG1.0</a> is the OceanGliders community's trajectory format. It needs a
+        deal of metadata a Slocum file does not carry — who flew the glider,
+        its WMO number, where it went in the water — so it is asked for here.
+        What you enter is kept in this browser and can be saved as a profile,
+        since a deployment's second segment needs the same answers as its
+        first.
+      </p>
+
+      <div class="og1-profile">
+        <button type="button" data-og1-save>Save profile</button>
+        <label class="og1-load">
+          <input type="file" accept=".json,application/json" data-og1-load /> <span>Load profile</span>
+        </label>
+        <button type="button" data-og1-clear>Reset fields</button>
+      </div>
+
+      <div class="og1-fields" data-og1-fields></div>
+
+      <p class="og1-missing" data-og1-missing hidden></p>
+
+      <div class="download">
+        <button type="button" data-og1-nc>Download OG1 netCDF</button>
+        <button type="button" data-og1-cdl>Download OG1 CDL</button>
+        <span class="download-note" data-og1-note></span>
+      </div>
+
+      <p class="og1-caveat">
+        <strong>OG1.0 structure, netCDF-3 encoding.</strong> A browser cannot
+        write netCDF-4, which is HDF5, so the variables OG1 declares as
+        strings are fixed-width character arrays here. The CDL export declares
+        them as <code>string</code>: <code>ncgen -4 file.cdl -o file.nc</code> turns it into a
+        netCDF-4 file. Neither has been through an OG1 validator — the
+        community's own checkers are still experimental — so this claims the
+        structure, not certification.
+      </p>
+    </details>
   </div>
 </section>
 
@@ -404,6 +447,74 @@ import Disclaimer from './Disclaimer.astro';
     color: var(--text-muted);
   }
 
+  /* ---- the OG1 panel ----------------------------------------------------- */
+
+  .og1 {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-xs) var(--space-sm);
+    margin-block-start: var(--space-md);
+    font-size: var(--text-sm);
+  }
+
+  .og1 summary {
+    cursor: pointer;
+  }
+
+  .og1-state {
+    color: var(--text-muted);
+  }
+
+  .og1-intro,
+  .og1-caveat {
+    color: var(--text-muted);
+    max-inline-size: var(--prose-width);
+    margin-block: var(--space-sm);
+  }
+
+  .og1-caveat code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+
+  .og1-profile {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-block-end: var(--space-sm);
+  }
+
+  .og1-profile button,
+  .og1-load {
+    appearance: none;
+    font: inherit;
+    font-size: var(--text-sm);
+    padding: var(--space-2xs) var(--space-sm);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-subtle);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .og1-load input {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .og1-missing {
+    color: var(--text-muted);
+    margin-block: var(--space-sm);
+  }
+
+  .og1-missing[hidden] {
+    display: none;
+  }
+
   /* `[hidden]` is one selector and so is any class rule that sets `display`,
      so author order decides and the element stays on screen. Everything the
      script hides needs this stated. */
@@ -525,6 +636,63 @@ import Disclaimer from './Disclaimer.astro';
     color: var(--accent);
   }
 
+  [data-slocum] .og1-group {
+    margin-block: var(--space-sm) var(--space-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.8em;
+  }
+
+  [data-slocum] .og1-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+    gap: var(--space-xs) var(--space-md);
+  }
+
+  [data-slocum] .og1-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    /* A grid item's min-width defaults to auto, which for an <input> is the
+       twenty characters its `size` attribute implies — about 184px whatever
+       the column is worth. Without this the last field hangs out of the
+       panel, and a viewport-overflow check does not see it because it
+       overflows its container rather than the window. */
+    min-inline-size: 0;
+  }
+
+  [data-slocum] .og1-field label {
+    color: var(--text-muted);
+  }
+
+  [data-slocum] .og1-field .required {
+    color: var(--accent);
+  }
+
+  [data-slocum] .og1-field input,
+  [data-slocum] .og1-field select {
+    font: inherit;
+    font-size: var(--text-sm);
+    padding: var(--space-2xs) var(--space-xs);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    min-inline-size: 0;
+    inline-size: 100%;
+  }
+
+  [data-slocum] .og1-field input:invalid {
+    border-color: var(--accent);
+  }
+
+  [data-slocum] .og1-field .help {
+    color: var(--text-muted);
+    font-size: 0.85em;
+  }
+
   [data-slocum] td.blank {
     color: var(--border);
   }
@@ -548,6 +716,17 @@ import Disclaimer from './Disclaimer.astro';
     type Column,
     type Series,
     type Table,
+  } from '@c4po/slocum';
+  import {
+    buildOg1,
+    missingFields,
+    og1FileName,
+    toCdl,
+    writeNetcdf,
+    OG1_DEFAULTS,
+    OG1_FIELDS,
+    type Og1Field,
+    type Og1Metadata,
   } from '@c4po/slocum';
   import { ATLAS_URL, loadAtlas, type SalinityAtlas } from '@c4po/teos10';
 
@@ -817,6 +996,7 @@ import Disclaimer from './Disclaimer.astro';
       drawNotes();
       fillProfileOptions();
       drawCharts();
+      syncOg1();
       results.hidden = false;
     }
 
@@ -1245,6 +1425,214 @@ import Disclaimer from './Disclaimer.astro';
       downloadNote.textContent = `${name} — ${(blob.size / 1024).toFixed(0)} KB`;
     }
 
+    // ---- the OG1.0 export --------------------------------------------------
+    //
+    // The form is built from OG1_FIELDS rather than written out in markup, so
+    // the field list, the validation, the saved profile and the file all read
+    // one declaration. A field added to the package appears here with no
+    // change to this component.
+
+    const og1State = find('[data-og1-state]');
+    const og1Fields = find('[data-og1-fields]');
+    const og1Missing = find('[data-og1-missing]');
+    const og1Note = find('[data-og1-note]');
+    const og1NcButton = find<HTMLButtonElement>('[data-og1-nc]');
+    const og1CdlButton = find<HTMLButtonElement>('[data-og1-cdl]');
+
+    const OG1_STORE = 'c4po-slocum-og1';
+    let og1: Og1Metadata = { ...OG1_DEFAULTS };
+
+    const GROUPS: Record<string, string> = {
+      platform: 'Platform',
+      deployment: 'Deployment',
+      people: 'People and institutions',
+      programme: 'Programme and publication',
+      quality: 'Quality control',
+      sensor: 'CTD sensor',
+    };
+
+    function loadOg1() {
+      try {
+        const held = localStorage.getItem(OG1_STORE);
+        if (held) og1 = { ...OG1_DEFAULTS, ...JSON.parse(held) };
+      } catch {
+        // Private browsing, or a state written by an older version of this
+        // page. Either way the defaults are a working starting point.
+      }
+    }
+
+    function rememberOg1() {
+      try {
+        localStorage.setItem(OG1_STORE, JSON.stringify(og1));
+      } catch {
+        /* nothing to do: the form still works, it just will not be there next time */
+      }
+    }
+
+    function drawOg1Form() {
+      og1Fields.innerHTML = '';
+      for (const [group, heading] of Object.entries(GROUPS)) {
+        const fields = OG1_FIELDS.filter((f) => f.group === group);
+        if (fields.length === 0) continue;
+
+        const title = document.createElement('p');
+        title.className = 'og1-group';
+        title.textContent = heading;
+        og1Fields.append(title);
+
+        const grid = document.createElement('div');
+        grid.className = 'og1-grid';
+        for (const field of fields) grid.append(og1Row(field));
+        og1Fields.append(grid);
+      }
+      syncOg1();
+    }
+
+    function og1Row(field: Og1Field): HTMLElement {
+      const wrap = document.createElement('div');
+      wrap.className = 'og1-field';
+      const id = `og1-${field.key}`;
+
+      const label = document.createElement('label');
+      label.htmlFor = id;
+      label.textContent = field.label;
+      if (field.required) {
+        const star = document.createElement('span');
+        star.className = 'required';
+        star.textContent = ' *';
+        // The asterisk is decoration; the requirement is stated to a screen
+        // reader by the control's own `required`, not by a character.
+        star.setAttribute('aria-hidden', 'true');
+        label.append(star);
+      }
+
+      let input: HTMLInputElement | HTMLSelectElement;
+      if (field.kind === 'select') {
+        const select = document.createElement('select');
+        for (const option of field.options ?? []) {
+          const el = document.createElement('option');
+          el.value = option;
+          el.textContent = option;
+          select.append(el);
+        }
+        input = select;
+      } else {
+        const box = document.createElement('input');
+        box.type = field.kind === 'datetime' ? 'datetime-local'
+          : field.kind === 'number' ? 'number' : 'text';
+        if (field.kind === 'number') box.step = 'any';
+        if (field.placeholder) box.placeholder = field.placeholder;
+        input = box;
+      }
+      input.id = id;
+      input.required = field.required;
+      input.value = String(og1[field.key] ?? '');
+      input.addEventListener('input', () => {
+        og1 = { ...og1, [field.key]: input.value };
+        rememberOg1();
+        syncOg1();
+      });
+
+      wrap.append(label, input);
+      if (field.help) {
+        const help = document.createElement('span');
+        help.className = 'help';
+        help.textContent = field.help;
+        wrap.append(help);
+      }
+      return wrap;
+    }
+
+    /** Reflect the form's state: what is missing, and whether it can export. */
+    function syncOg1() {
+      const missing = missingFields(og1);
+      const ready = missing.length === 0 && table !== null;
+      og1NcButton.disabled = !ready;
+      og1CdlButton.disabled = !ready;
+      og1State.textContent = missing.length === 0
+        ? '— ready'
+        : `— ${missing.length} required field${missing.length === 1 ? '' : 's'} to go`;
+      og1Missing.hidden = missing.length === 0;
+      if (missing.length > 0) {
+        og1Missing.textContent =
+          `OG1 needs: ${missing.map((f) => f.label).join(', ')}.`;
+      }
+    }
+
+    find('[data-og1-save]').addEventListener('click', () => {
+      // A profile rather than the whole state: a deployment's segments share
+      // every one of these answers, and retyping thirty fields per segment is
+      // how a metadata standard stops being used.
+      save(JSON.stringify(og1, null, 1),
+        `${og1.platformSerial || 'glider'}-og1-profile.json`, 'application/json');
+    });
+
+    find<HTMLInputElement>('[data-og1-load]').addEventListener('change', async (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      try {
+        const loaded = JSON.parse(await file.text());
+        // Only keys the package declares, so a hand-edited or older profile
+        // cannot introduce a field the exporter does not know what to do with.
+        const known = new Set(OG1_FIELDS.map((f) => f.key as string));
+        const clean: Record<string, string> = {};
+        for (const [key, value] of Object.entries(loaded)) {
+          if (known.has(key) && typeof value === 'string') clean[key] = value;
+        }
+        og1 = { ...OG1_DEFAULTS, ...clean };
+        rememberOg1();
+        drawOg1Form();
+        og1Note.textContent = `Loaded ${Object.keys(clean).length} field(s) from ${file.name}.`;
+      } catch {
+        og1Note.textContent = `${file.name} is not a profile this page wrote.`;
+      }
+    });
+
+    find('[data-og1-clear]').addEventListener('click', () => {
+      og1 = { ...OG1_DEFAULTS };
+      rememberOg1();
+      drawOg1Form();
+      og1Note.textContent = '';
+    });
+
+    og1NcButton.addEventListener('click', () => {
+      withOg1((result) => {
+        save(writeNetcdf(result.document), og1FileName(result.id, 'nc'), 'application/x-netcdf');
+      });
+    });
+
+    og1CdlButton.addEventListener('click', () => {
+      withOg1((result) => {
+        save(toCdl(result.document, { name: result.id }),
+          og1FileName(result.id, 'cdl'), 'text/plain');
+      });
+    });
+
+    function withOg1(then: (result: ReturnType<typeof buildOg1>) => void) {
+      if (!table) return;
+      try {
+        const result = buildOg1(exported(), og1);
+        then(result);
+        // The notes belong on screen, not only in the file: every one of them
+        // is something computed rather than recorded.
+        //
+        // Replaced rather than appended, and tagged so the table's own notes
+        // survive. Appending looked right until both export buttons were
+        // pressed, which is the ordinary thing to do — the list then said
+        // everything twice.
+        for (const stale of notesList.querySelectorAll('[data-og1-note-item]')) stale.remove();
+        for (const note of result.notes) {
+          const item = document.createElement('li');
+          item.dataset.og1NoteItem = '';
+          item.textContent = note;
+          notesList.append(item);
+        }
+        notesList.hidden = false;
+      } catch (error) {
+        og1Note.textContent = (error as Error).message;
+      }
+    }
+
     // ---- small helpers -----------------------------------------------------
 
     function countFinite(values: Float64Array): number {
@@ -1281,6 +1669,8 @@ import Disclaimer from './Disclaimer.astro';
       return String(Math.round(v * 1e4) / 1e4);
     }
 
+    loadOg1();
+    drawOg1Form();
     void recallCaches();
   }
 </script>

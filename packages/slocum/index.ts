@@ -66,6 +66,24 @@ export { toNetcdf, TYPES } from './netcdf.ts';
 export type { NetcdfOptions } from './netcdf.ts';
 
 export { deriveSeawater } from './derive.ts';
+export {
+  buildOg1,
+  derivePhase,
+  missingFields,
+  og1FileName,
+  parseWhen,
+  sensorVariableName,
+  stampCompact,
+  OG1_DEFAULTS,
+  OG1_FIELDS,
+} from './og1.ts';
+export type { Og1Field, Og1Metadata, Og1Result, PhaseResult } from './og1.ts';
+
+export { toCdl, quote as cdlQuote } from './cdl.ts';
+export type { CdlOptions } from './cdl.ts';
+
+export { writeNetcdf, packStrings, safeNames } from './netcdf.ts';
+export type { NcAttribute, NcDimension, NcDocument, NcType, NcVariable } from './netcdf.ts';
 export type { DeriveOptions, DeriveResult } from './derive.ts';
 
 export { MissingCacheError, NOTSET, SAME, UPDATED } from './types.ts';

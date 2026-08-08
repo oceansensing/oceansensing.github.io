@@ -59,8 +59,9 @@ There is also a
 [**Slocum glider decoder**](https://oceansensing.org/data/slocum/): the
 binary files a Slocum logs — `sbd`, `tbd`, `mbd`, `nbd`, `dbd`, `ebd` and
 their compressed forms — read in the browser and written out as CSV or
-netCDF, with seawater properties from the CTD if you want them. Nothing is
-uploaded, which matters while a deployment is under embargo. The decoder is
+netCDF, with seawater properties from the CTD if you want them, and an
+**OceanGliders OG1.0** export for anyone submitting to the community format.
+Nothing is uploaded, which matters while a deployment is under embargo. The decoder is
 **[`packages/slocum`](packages/slocum/)**, a port of
 [SlocumIO.jl](https://github.com/oceansensing/SlocumIO.jl) checked against
 `dbdreader` value for value.

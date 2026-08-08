@@ -65,6 +65,8 @@ console.log('--- styling the chrome that is built at runtime ---');
     ['.notes li', 'a note'],
     ['td.blank', 'an unrecorded cell'],
     ['th.derived', 'a derived column heading'],
+    ['.og1-field', 'an OG1 metadata field'],
+    ['.og1-grid', 'the OG1 field grid'],
   ];
   const scoped = [];
   for (const [selector] of runtime) {
@@ -79,7 +81,19 @@ console.log('--- styling the chrome that is built at runtime ---');
   // And that anchoring is what stops them leaking: a bare `.trace { }` would
   // restyle any element with that class anywhere on the site.
   check('and none of them is written bare, so nothing leaks to other pages',
-    /(^|[},])\s*\.(trace|axis|tick)\s*[,{]/.test(builtCss), false);
+    /(^|[},])\s*\.(trace|axis|tick|og1-field)\s*[,{]/.test(builtCss), false);
+
+  // A grid item's min-width defaults to `auto`, which for an <input> is the
+  // twenty characters its `size` implies. Without an explicit 0 the last
+  // metadata field hangs out of the panel — and a viewport-overflow scan does
+  // not see it, because it overflows its container rather than the window.
+  //
+  // Anchored to the *container* rule — `.og1-field{`, with nothing after it —
+  // because `.og1-field input` also sets `min-inline-size: 0` and a looser
+  // pattern is satisfied by that one while the container's is deleted. The
+  // same masking `test:map` has a note about, met for the third time.
+  check('the OG1 field boxes may shrink below an input\'s intrinsic width',
+    /\.og1-field\s*\{[^}]*min-inline-size:\s*0/.test(builtCss), true);
 
   // `[hidden]` is one selector and so is `display: flex`, so author order
   // decides — without an explicit rule the sensor filter would hide nothing.
@@ -139,6 +153,33 @@ check('the notice says it is under test and used at the reader\'s own risk',
   /under test/i.test(document.querySelector('[data-disclaimer]').textContent) &&
     /own risk/i.test(document.querySelector('[data-disclaimer]').textContent),
   true);
+// ── OG1: the panel, and the claim it makes ──────────────────────────────────
+
+check('the page offers an OG1.0 export', !!document.querySelector('[data-og1-panel]'), true);
+check('with both encodings', [
+  !!document.querySelector('[data-og1-nc]'),
+  !!document.querySelector('[data-og1-cdl]'),
+], [true, true]);
+check('and a way to carry the metadata between segments', [
+  !!document.querySelector('[data-og1-save]'),
+  !!document.querySelector('[data-og1-load]'),
+], [true, true]);
+
+{
+  // The wording of this caveat is the whole honesty of the feature. The file
+  // has never been through an OG1 validator — the community's own checkers
+  // say they are experimental — so the page must claim the structure and not
+  // certification, and must say what the encoding actually is.
+  const caveat = document.querySelector('.og1-caveat')?.textContent ?? '';
+  check('the page says the encoding is netCDF-3, not netCDF-4',
+    /netCDF-3/.test(caveat) && /cannot\s+write\s+netCDF-4/.test(caveat.replace(/\s+/g, ' ')), true);
+  check('and says the CDL is the route to netCDF-4', /ncgen -4/.test(caveat), true);
+  check('and does not claim to be validated',
+    /claims the\s+structure, not certification/.test(caveat.replace(/\s+/g, ' ')), true);
+  check('nowhere on the page claims compliance outright',
+    /OG1[.\s-]*(0\s+)?compliant/i.test(html), false);
+}
+
 check('the results are hidden until there is something to show',
   document.querySelector('[data-results]').hasAttribute('hidden'), true);
 check('the file input takes several files at once',
@@ -208,6 +249,14 @@ console.log('\n--- the page\'s own pipeline, on the fixtures ---');
   check('an export carries exactly the columns that were selected',
     head, ['time', 'time_utc', 'sci_water_temp (degc)', 'salinity_practical (PSU)']);
   check('and one row per table row', csv.trimEnd().split('\n').length - 1, table.rows);
+
+  // The form is built from the package's field list, so the two cannot drift.
+  const { OG1_FIELDS, OG1_DEFAULTS, missingFields } = await import('../packages/slocum/og1.ts');
+  check('every declared field has a group the form knows how to render',
+    [...new Set(OG1_FIELDS.map((f) => f.group))].sort(),
+    ['deployment', 'people', 'platform', 'programme', 'quality', 'sensor']);
+  check('and the mandatory ones are what gate the export',
+    missingFields(OG1_DEFAULTS).length > 0, true);
 
   const nc = toNetcdf(narrowed, { sources: ['electa-2025-120-1-169.sbd'] });
   check('the netCDF export is a classic netCDF file',

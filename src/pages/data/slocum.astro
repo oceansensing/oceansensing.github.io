@@ -79,6 +79,38 @@ import SlocumDecoder from '../../components/SlocumDecoder.astro';
         salinity column is named <code>salinity_reference</code> rather than <code>salinity_absolute</code>, because that is what it is.
       </p>
 
+      <h3>OceanGliders OG1.0</h3>
+      <p>
+        There is an <a href="https://oceangliderscommunity.github.io/OG-format-user-manual/OG_Format.html">OG1.0</a> export for anyone submitting to the community
+        format. It needs metadata a Slocum file does not carry — the glider's
+        WMO number, who flew it, where it went in the water — so the panel
+        asks for it, keeps it in this browser, and will save it as a profile,
+        since a deployment's second segment needs the same answers as its
+        first.
+      </p>
+      <p>
+        <strong>It claims the structure, not certification.</strong> The
+        variables, units and attributes are OG1.0, but the encoding is
+        netCDF-3 classic, because a browser cannot write netCDF-4 — that is
+        HDF5 — without shipping a great deal of code to do it. Where OG1
+        declares a string variable, the netCDF export writes a fixed-width
+        character array. The <strong>CDL</strong> export declares it as a real <code>string</code>, so <code>ncgen -4 file.cdl -o file.nc</code> produces the netCDF-4
+        form; that is the exact route to a conformant file, and it is checked —
+        <code>ncgen</code> compiles the CDL and every value survives the trip. What
+        neither has been through is an OG1 <em>validator</em>: the community's
+        own checkers describe themselves as experimental.
+      </p>
+      <p>
+        Four things OG1 wants at every measurement are computed rather than
+        recorded, and each says so in its own attributes: position between the
+        glider's fixes, depth from pressure and latitude, practical salinity
+        from the CTD, and the dive phase with its segment and profile
+        numbering. Where the glider logs its own behaviour state the published
+        OceanGliders translation is used; where it does not — which is usual
+        for files sent over Iridium — the phase is inferred from the rate of
+        change of pressure, and the file records which of the two happened.
+      </p>
+
       <h3>CSV and netCDF</h3>
       <p>
         The CSV carries data alone, with no comment lines, so it opens
@@ -95,7 +127,9 @@ import SlocumDecoder from '../../components/SlocumDecoder.astro';
       <p>
         It reads files; it does not process them. There is no thermal-lag
         correction, no despiking, no quality control and no gridding, and it
-        does not write the IOOS Glider DAC's trajectory format. Position is
+        does not write the IOOS Glider DAC's trajectory format. The OG1 quality
+        flags are all zero — <em>no QC has been applied</em> — which is the
+        honest value rather than a placeholder. Position is
         converted from NMEA and otherwise left as the glider dead-reckoned it.
       </p>
 
