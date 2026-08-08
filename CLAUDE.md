@@ -390,6 +390,33 @@ The remaining seams, in order of what they unlock:
   invisible however useful it looks in the source. The detail goes in the
   name.
 
+  **`status-line.ts` is the fourth out**, and it was taken first of the
+  remaining seams because it was the clearest instance of the problem rather
+  than the largest: `statusParts` was written at line 2912 and declared at
+  line 4421 — legal, since the write sits in the Argo fetch's `.then` and
+  cannot run during setup, and invisible to `astro check`. The same shape as
+  `measure.ts` being declared 700 lines below one of its callers.
+
+  It is **not** a portable module — it builds DOM. What it is instead is a
+  signature: `boxes`, `summary`, `isShown` and `onRendered` are parameters,
+  so the ordering question has an answer a reader can see. It is constructed
+  where `overlays` is already in scope, which is what lets the layer lookup
+  have no forward reference of its own.
+
+  **The net is 27 lines, and that is the honest number**: 102 lines left,
+  ~75 came back as the construction call, the moved `rewire` declaration and
+  the comments explaining both. Size was never the point — the file is 4,677
+  against 4,704 — and anyone measuring this refactor by line count will
+  conclude it is not worth doing.
+
+  **It nearly shipped a double-bind.** The old code called `rewire?.()` from
+  the caller after `renderStormStatus`; the module reports that it rebuilt,
+  via `onRendered`. Keeping both would have run `wireZoomButtons` twice over
+  the same fresh buttons — and it uses `addEventListener` with no guard, so
+  one click would have flown the map twice. Caught by reading what the
+  callback did rather than by any check: `test:map` asserts a zoom button
+  works, not that it fires once.
+
   The rule that has held: **behaviour moves, the reader's state stays.**
   `choices` and `particleTint` are per map, and a module-level copy of either
   would put two maps on a page back to sharing one — the singleton bug this

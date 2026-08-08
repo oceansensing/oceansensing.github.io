@@ -128,10 +128,15 @@ Done, one at a time with `verify` and a browser check between each:
 - `measure.ts` — distance and bearing. Had been declared *700 lines below*
   one of its callers.
 - `scalar-layer.ts` — the field raster, `FIELDS` and `FieldDescriptor`.
+- `status-line.ts` — the storm list and the one-line summary. Taken first of
+  the remaining seams for being the clearest instance of the problem rather
+  than the biggest: its state was written 1,500 lines above its declaration.
+  Net 27 lines off the file, which is the honest measure of what a seam is
+  worth by size — and not why it was taken.
 
 That was ~500 lines out, leaving ~4,030 at the time.
 
-**It is 4,704 today**, which is the number that matters and the one this
+**It is 4,677 today**, which is the number that matters and the one this
 entry kept getting wrong. The split's gain has been more than repaid by what
 landed after it — the share codec, the PNG export, the place and interest
 menus, the particle colour pickers and the speed sliders each left a

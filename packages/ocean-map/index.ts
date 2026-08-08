@@ -142,7 +142,7 @@ export interface OceanMapOptions {
    blue-green, and magenta stays separable from the orange USVs and the red
    storms under the common forms of colour blindness. */
 import { palette } from './palette';
-import { stormLines, stormLabel, NO_STORMS } from './storm-status';
+import { createStatusLine } from './status-line';
 const {
   storm: STORM, usv: USV, glider: GLIDER,
   argo: ARGO, argoEdge: ARGO_EDGE, measure: MEASURE,
@@ -2909,8 +2909,8 @@ export async function createOceanMap(
       }
       const count = (data.floats ?? []).length;
       if (count) {
-        statusParts.argo = `${count} Argo floats`;
-        showStatus();
+        statusLine.set('argo', `${count} Argo floats`);
+        statusLine.show();
       }
       // The reader may already have panned away from the primary copy
       // before this arrived.
@@ -3087,6 +3087,35 @@ export async function createOceanMap(
   const DEFAULT_OVERLAYS = new Set(
     Object.keys(overlays).filter((name) => map.hasLayer(overlays[name]!))
   );
+
+  /* Re-attaches the storm zoom buttons after the line is rebuilt. Assigned
+     far below, once the storms layer exists — a hole this extraction narrows
+     rather than closes, and the one piece of the old arrangement that is
+     genuinely about the layer and not about the line. */
+  let rewire: (() => void) | null = null;
+
+  /* The status line above the map — the storm list and the one-line summary.
+     Built here rather than 1,300 lines further down because that is where
+     `overlays` becomes available, and the layer lookup below is the only
+     thing it needs that is not already in scope. Its state used to be a bare
+     `statusParts` record declared at the very bottom of this closure and
+     written to from the Argo fetch 1,500 lines above it: legal, since the
+     write is deferred, and exactly the ordering the split exists to remove.
+
+     `rewire` is still the host's, because the zoom buttons it re-attaches
+     belong to the storms layer rather than to the line. */
+  const statusLine = createStatusLine({
+    boxes: stormStatusBoxes,
+    summary: status,
+    isShown: (name) => Boolean(overlays[name] && map.hasLayer(overlays[name]!)),
+    onRendered: () => rewire?.(),
+  });
+
+  /* Redrawn when a layer is toggled, not only when data arrives — the counts
+     were written once and never revisited, which is exactly why they went on
+     naming platforms that had been switched off. */
+  map.on('overlayadd overlayremove', statusLine.show);
+  chromeSyncs.push(statusLine.show);
 
   const layerControl = L.control.layers(bases, overlays).addTo(map);
 
@@ -4334,8 +4363,12 @@ export async function createOceanMap(
              line of text, so replacing it interrupts nobody, and it is the
              part a reader is most likely to be relying on. The map's own
              markers catch up when the reload happens. */
-          renderStormStatus(fresh.storms ?? []);
-          rewire?.();
+          /* No `rewire()` here: `renderStorms` reports that it rebuilt, and
+             the zoom buttons are re-attached from that. Calling both would
+             bind two listeners to each fresh button — `wireZoomButtons` uses
+             `addEventListener` and is not idempotent — so one click would fly
+             the map twice. */
+          statusLine.renderStorms(fresh.storms ?? []);
         }
       } catch {
         // Offline or mid-deploy; just try again on the next tick.
@@ -4350,119 +4383,6 @@ export async function createOceanMap(
     document.addEventListener('visibilitychange', reloadIfUnobtrusive);
   };
 
-  /* Rebuilds the storm line in place. Mirrors StormStatus.astro's markup
-     exactly — same classes, same order — because the stylesheet is written
-     against that structure and this replaces it wholesale. */
-  let rewire: (() => void) | null = null;
-
-  const renderStormStatus = (raw: unknown[]) => {
-    const box = stormStatusBoxes()[0];
-    if (!box) return;
-    const lines = stormLines(raw as Parameters<typeof stormLines>[0]);
-
-    box.textContent = '';
-    const label = document.createElement('span');
-    label.className = 'label';
-    label.textContent = stormLabel(lines.length);
-    box.append(label);
-
-    if (!lines.length) {
-      const none = document.createElement('p');
-      none.className = 'none';
-      none.textContent = NO_STORMS;
-      box.append(none);
-      return;
-    }
-
-    const list = document.createElement('ul');
-    for (const line of lines) {
-      const item = document.createElement('li');
-
-      let name: HTMLElement;
-      if (line.url) {
-        const link = document.createElement('a');
-        link.href = line.url;
-        /* Same treatment as the popup links: the advisory is another site,
-           and a reader sent there loses the map. Kept in step with the
-           build-time markup in StormStatus.astro — this line exists twice
-           on purpose, and the two silently diverging is the failure that
-           arrangement is meant to avoid. */
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.setAttribute('aria-label', `${line.name} advisory (opens in a new tab)`);
-        name = link;
-      } else {
-        name = document.createElement('strong');
-      }
-      name.textContent = line.name;
-
-      const zoom = document.createElement('button');
-      zoom.type = 'button';
-      zoom.className = 'zoom';
-      if (line.id) zoom.dataset.stormZoom = line.id;
-      zoom.title = `Zoom the map to ${line.name}`;
-      zoom.setAttribute('aria-label', zoom.title);
-      zoom.hidden = true;
-      zoom.textContent = '🔍';
-
-      const facts = document.createElement('span');
-      facts.className = 'facts';
-      facts.textContent = line.facts.join(' · ');
-
-      item.append(name, zoom, facts);
-      list.append(item);
-    }
-    box.append(list);
-  };
-
-  /* The asset feed and the Argo fleet arrive separately, so the status
-     line is assembled from whichever parts have landed rather than
-     written once by whoever finishes last. */
-  const statusParts: Record<string, string> = {};
-
-  /* **Each fact is shown only while a layer it describes is on**, the same
-     rule the legend keys and the particle controls follow. A count of
-     something the reader cannot see is worse than no count: "63 assets
-     reporting" beside a map with no platforms on it reads as the map having
-     lost them.
-
-     `assets` covers gliders *and* saildrones, so it survives while either is
-     on — the number is their sum and dropping it when only one is off would
-     understate what is drawn. `updated` has no layer: it is about the fetch
-     rather than about anything on the map, so it always shows. */
-  const STATUS_LAYERS: Record<string, string[]> = {
-    storms: ['Hurricanes'],
-    assets: ['Ocean gliders', 'NOAA USVs'],
-    argo: ['Argo floats'],
-  };
-
-  const showStatus = () => {
-    if (!status) return;
-    const order = ['storms', 'assets', 'argo', 'updated'];
-    const line = order
-      .filter((k) => {
-        const names = STATUS_LAYERS[k];
-        if (!names) return true;                  // `updated` — not about a layer
-        /* A layer the host's preset never registered cannot be switched on,
-           so its fact stays hidden rather than showing permanently. */
-        return names.some((name) => overlays[name] && map.hasLayer(overlays[name]!));
-      })
-      .map((k) => statusParts[k])
-      .filter(Boolean)
-      .join(' · ');
-    /* Assigned even when empty, unlike before: the parts are filled in
-       asynchronously and the old guard existed to avoid blanking the line
-       before the data landed. It now also has to be able to *clear* the
-       line when every layer behind it goes off, so the guard moved to the
-       thing it was actually protecting — whether anything has arrived. */
-    if (line || Object.keys(statusParts).length) status.textContent = line;
-  };
-
-  /* Redrawn when a layer is toggled, not only when data arrives — the counts
-     were written once and never revisited, which is exactly why they went on
-     naming platforms that had been switched off. */
-  map.on('overlayadd overlayremove', showStatus);
-  chromeSyncs.push(showStatus);
 
   const rad = Math.PI / 180;
 
@@ -4647,7 +4567,7 @@ export async function createOceanMap(
        waits for the reader to be idle, which an engaged reader never is.
        So it is rebuilt here from whatever was just fetched, through the
        same formatter the build uses. */
-    renderStormStatus(data.storms ?? []);
+    statusLine.renderStorms(data.storms ?? []);
 
     /* Each storm gets a zoom button. They ship hidden and are revealed
        only here, so one never sits on the page as a dead control when the
@@ -4746,10 +4666,10 @@ export async function createOceanMap(
       // Start watching for the next hourly rebuild.
       scheduleRefresh(data.updated);
       const when = (data.updated ?? '').slice(0, 16).replace('T', ' ');
-      statusParts.storms = `${s} active storm${s === 1 ? '' : 's'}`;
-      statusParts.assets = `${n} assets reporting within ${data.historyDays} days`;
-      statusParts.updated = `updated ${when}Z`;
-      showStatus();
+      statusLine.set('storms', `${s} active storm${s === 1 ? '' : 's'}`);
+      statusLine.set('assets', `${n} assets reporting within ${data.historyDays} days`);
+      statusLine.set('updated', `updated ${when}Z`);
+      statusLine.show();
     }
   } catch {
     if (status) status.textContent = 'Asset data unavailable.';
