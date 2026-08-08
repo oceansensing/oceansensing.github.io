@@ -49,6 +49,11 @@ import {
   readKmz,
   summarise,
 } from '../packages/ocean-map/kmz.ts';
+import { readGeoJson } from '../packages/ocean-map/geojson.ts';
+import { readShapefile, geographic } from '../packages/ocean-map/shapefile.ts';
+import { openVector, bundleParts, fetchVector } from '../packages/ocean-map/open.ts';
+import { foldLongitudes } from '../packages/ocean-map/vector.ts';
+import { writeZip, listEntries, readEntry, isZip } from '../packages/ocean-map/zip.ts';
 import fs from 'node:fs';
 import { JSDOM } from 'jsdom';
 
@@ -753,6 +758,222 @@ check('auto clears the background by more than a forced hue does',
   check('a southern, eastern view is named correctly',
     figureName({ lat: -33.9, lng: 18.4, zoom: 8 }, '2026-01-02T00:00:00Z'),
     'c4po-ocean-33.9S-18.4E-z8-2026-01-02-00-00Z.png');
+}
+
+// ---- importing a vector file ------------------------------------------
+
+/* One button, four formats, and the format is decided from the bytes rather
+   than the extension — so these read real files rather than constructing the
+   shapes the readers expect. The shapefile fixture is Natural Earth's own
+   `ne_110m_geography_marine_polys`, which matters: a fixture written by the
+   writer that matches this reader would agree with it by construction, and
+   this reader shipped an off-by-four in the polygon header that only a file
+   somebody else wrote could catch. */
+{
+  const bytes = (f) => new Uint8Array(fs.readFileSync(`scripts/fixtures/${f}`));
+  const parseXml = (xml) => new JSDOM(xml, { contentType: 'application/xml' }).window.document;
+
+  // ---- longitude, which is the one thing this changes about a file --------
+
+  /* ERDDAP publishes 0-360 longitudes, which RFC 7946 does not allow and
+     which Leaflet draws a whole world copy east — so the buoy is simply not
+     on the map. Folded per geometry, never per coordinate. */
+  const east = [[350, 0], [355, 1]];
+  check('a geometry wholly past 180 is folded west', foldLongitudes(east), true);
+  check('and every vertex moves together', east, [[-10, 0], [-5, 1]]);
+
+  const crossing = [[170, 10], [185, 10]];
+  check('a geometry that straddles 180 is left alone', foldLongitudes(crossing), false);
+  check('so a line across the date line is not torn', crossing, [[170, 10], [185, 10]]);
+
+  const conforming = [[-70, 40], [-60, 41]];
+  check('a conforming geometry is untouched', foldLongitudes(conforming), false);
+
+  // ---- GeoJSON ------------------------------------------------------------
+
+  const shapes = readGeoJson(bytes('shapes.geojson'), 'shapes.geojson');
+  const kinds = (doc) => doc.features.map((f) => f.kind).join(',');
+  check('every GeoJSON geometry type is read',
+    kinds(shapes),
+    'point,point,point,line,line,line,polygon,polygon,polygon,point,line,line,line');
+  check('and a Multi* is expanded into one feature per part',
+    shapes.features.filter((f) => f.name === 'Two boxes').length, 2);
+  check('and a polygon keeps its hole as a second ring',
+    shapes.features.find((f) => f.name === 'A box with a hole')?.coordinates.length, 2);
+  check('a feature with no geometry is counted, not dropped',
+    shapes.skipped['feature without geometry'], 1);
+  check('and so is a geometry type the reader does not know',
+    shapes.skipped['unsupported Circle geometry'], 1);
+  check('and so is a line of one point', shapes.skipped['degenerate line'], 1);
+  check('simplestyle is read where a file carries it',
+    shapes.features.find((f) => f.name === 'A line')?.style,
+    { stroke: '#ff8800', strokeOpacity: 0.5, strokeWidth: 3 });
+  check('a name is taken from whichever property carries it',
+    shapes.features[1].name, 'two dots');
+  check('markup in a property is flattened, never passed through',
+    /[<>]/.test(shapes.features[0].description ?? ''), false);
+  check('and the styling keys are not repeated in the description',
+    /stroke/.test(shapes.features.find((f) => f.name === 'A line')?.description ?? ''), false);
+  check('the fold is reported rather than done silently',
+    (shapes.notes ?? []).some((n) => /folded 1 0–360 longitude/.test(n)), true);
+
+  /* A real ERDDAP extract: six of its ten stations are east of 180 in the
+     0-360 convention, and every one of them is in the Atlantic or the eastern
+     Pacific once folded. */
+  const stations = readGeoJson(bytes('stations.geojson'), 'stations.geojson');
+  check('a real ERDDAP table reads as points', stations.features.length, 10);
+  check('and its 0–360 longitudes are folded',
+    (stations.notes ?? []).some((n) => /folded 6 0–360 longitudes/.test(n)), true);
+  check('so every station lands inside the valid range',
+    stations.features.every((f) => f.coordinates[0][0] >= -180 && f.coordinates[0][0] <= 180),
+    true);
+  check('and the station id becomes the name',
+    typeof stations.features[0].name, 'string');
+
+  let broke = '';
+  try { readGeoJson(new TextEncoder().encode('{oh no'), 'bad.json'); }
+  catch (error) { broke = error.message; }
+  check('malformed JSON is refused by name', /bad\.json is not valid JSON/.test(broke), true);
+
+  // ---- shapefile ----------------------------------------------------------
+
+  /* Reconciled against the producer's own `.shx` index, which is written by
+     Natural Earth and read by nothing here: 29 records carrying 222 rings and
+     21,816 points. The 32 features are those 29 records with the three
+     multi-outer-ring ones split, which is what the ring-orientation rule is
+     for. */
+  const marine = await openVector(bytes('marine.zip'), 'marine.zip', parseXml);
+  check('a zipped shapefile is recognised from its contents', marine.features.length, 32);
+  check('and every ring survives the read',
+    marine.features.reduce((n, f) => n + f.coordinates.length, 0), 222);
+  check('and every point',
+    marine.features.reduce((n, f) => n + f.coordinates.reduce((m, r) => m + r.length, 0), 0),
+    21816);
+  check('names come from the .dbf', marine.features[0].name, 'Arctic Ocean');
+  check('and every feature has one', marine.features.every((f) => f.name), true);
+  check('a marine polygon is a polygon', kinds(marine).split(',').every((k) => k === 'polygon'), true);
+
+  /* A projected shapefile is refused rather than drawn in the wrong ocean.
+     Metres read as degrees put a survey of the Chesapeake off West Africa. */
+  check('geographic WKT is accepted',
+    geographic('GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984"]]').ok, true);
+  check('projected WKT is refused',
+    geographic('PROJCS["NAD83 / UTM zone 18N",GEOGCS["GCS_North_American_1983"]]').ok, false);
+  check('and the refusal names the projection',
+    /NAD83 \/ UTM zone 18N/.test(
+      geographic('PROJCS["NAD83 / UTM zone 18N",GEOGCS["x"]]').reason ?? ''), true);
+  check('a missing .prj is not a refusal', geographic(undefined).ok, true);
+
+  // ---- grouping and dispatch ---------------------------------------------
+
+  /* A shapefile is three files that are one layer. Bundled into a store-only
+     ZIP so one stored record is still one blob. */
+  const parts = [
+    { name: 'survey.shp', bytes: new Uint8Array([1, 2, 3]) },
+    { name: 'survey.dbf', bytes: new Uint8Array([4, 5]) },
+    { name: 'survey.prj', bytes: new TextEncoder().encode('GEOGCS["x"]') },
+    { name: 'survey.shx', bytes: new Uint8Array([9]) },
+    { name: 'notes.geojson', bytes: new TextEncoder().encode('{}') },
+  ];
+  const grouped = bundleParts(parts);
+  check('a loose shapefile set becomes one thing to store',
+    grouped.map((g) => g.name), ['survey.zip', 'notes.geojson']);
+  check('and the bundle is a readable ZIP', isZip(grouped[0].bytes), true);
+  check('holding only the parts that carry anything',
+    listEntries(grouped[0].bytes).map((e) => e.name).sort(),
+    ['survey.dbf', 'survey.prj', 'survey.shp']);
+  check('and the bytes survive the round trip',
+    [...(await readEntry(grouped[0].bytes, listEntries(grouped[0].bytes)
+      .find((e) => e.name === 'survey.shp')))],
+    [1, 2, 3]);
+
+  let orphan = '';
+  try { bundleParts([{ name: 'survey.dbf', bytes: new Uint8Array([1]) }]); }
+  catch (error) { orphan = error.message; }
+  check('a .dbf with no .shp is named rather than ignored',
+    /a shapefile needs its \.shp too/.test(orphan), true);
+
+  check('a lone .shp is still a layer',
+    bundleParts([{ name: 'a.shp', bytes: new Uint8Array([1]) }]).map((g) => g.name), ['a.shp']);
+
+  /* The extension does not decide. ERDDAP serves GeoJSON from a `.geoJson`
+     query and portals serve shapefiles as `.zip`. */
+  const misnamed = await openVector(bytes('shapes.geojson'), 'anything.txt', parseXml);
+  check('the format comes from the bytes, not the name', misnamed.features.length > 0, true);
+
+  const kmz = await openVector(bytes('survey.kmz'), 'survey.kmz', parseXml);
+  check('and KMZ still goes through the same door', kmz.features.length, 5);
+
+  let unknown = '';
+  try { await openVector(new TextEncoder().encode('nothing useful'), 'x.bin', parseXml); }
+  catch (error) { unknown = error.message; }
+  check('something unreadable says so, and says what it takes',
+    /KML, KMZ, GeoJSON and shapefiles/.test(unknown), true);
+
+  let empty = '';
+  try { await openVector(new Uint8Array(0), 'empty.geojson', parseXml); }
+  catch (error) { empty = error.message; }
+  check('an empty file is refused', /empty\.geojson is empty/.test(empty), true);
+
+  // ---- from a link -------------------------------------------------------
+
+  /* `fetch` is injected, so these need no network. What they pin is the part
+     that cannot be inferred from a live request: that a blocked host produces
+     a message which does not claim to know *why* it was blocked. A browser
+     reports every cross-origin refusal as an opaque TypeError by design. */
+  const respond = (body, headers = {}) => async () =>
+    new Response(body, { status: 200, headers });
+
+  const linked = await fetchVector(
+    'https://example.org/data/stations.geojson', parseXml,
+    respond(bytes('stations.geojson')));
+  check('a linked file is fetched and read', linked.doc.features.length, 10);
+  check('and named from the URL, not the host', linked.name, 'stations.geojson');
+  check('and the bytes come back for storage', linked.bytes.byteLength > 0, true);
+
+  const dir = await fetchVector('https://example.org/erddap/', parseXml,
+    respond(bytes('shapes.geojson')));
+  check('a URL with no filename falls back to the host', dir.name, 'example.org');
+
+  const refused = async () => { throw new TypeError('Failed to fetch'); };
+  let blocked = '';
+  try { await fetchVector('https://data.pmel.noaa.gov/x.geoJson', parseXml, refused); }
+  catch (error) { blocked = error.message; }
+  check('a blocked host names the host', /data\.pmel\.noaa\.gov/.test(blocked), true);
+  check('and offers the way round it', /Downloading the file/.test(blocked), true);
+  check('and does not claim to know why it failed, because the browser does not say',
+    /may not allow it/.test(blocked) && /unreachable/.test(blocked), true);
+
+  let notUrl = '';
+  try { await fetchVector('not a url', parseXml, refused); }
+  catch (error) { notUrl = error.message; }
+  check('something that is not a URL is refused as one', /is not a URL/.test(notUrl), true);
+
+  let scheme = '';
+  try { await fetchVector('file:///etc/passwd', parseXml, refused); }
+  catch (error) { scheme = error.message; }
+  check('a file: link is refused rather than read off the disk',
+    /file: links are not fetched/.test(scheme), true);
+
+  let status = '';
+  try {
+    await fetchVector('https://example.org/gone.geojson', parseXml,
+      async () => new Response('', { status: 404, statusText: 'Not Found' }));
+  } catch (error) { status = error.message; }
+  check('an HTTP error is reported with its status', /answered 404/.test(status), true);
+
+  let big = '';
+  try {
+    await fetchVector('https://example.org/huge.geojson', parseXml,
+      respond('{}', { 'content-length': String(100 * 1024 * 1024) }));
+  } catch (error) { big = error.message; }
+  check('a declared size past the ceiling is refused before it is read',
+    /past the 64 MB limit/.test(big), true);
+
+  check('a ZIP with neither .kml nor .shp says what is in it',
+    await openVector(writeZip([{ name: 'readme.txt', bytes: new Uint8Array([1]) }]), 'z.zip', parseXml)
+      .then(() => '', (e) => /ZIP with no \.kml and no \.shp/.test(e.message)),
+    true);
 }
 
 console.log(

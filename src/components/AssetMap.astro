@@ -188,16 +188,48 @@ const dataHref = dataBase.endsWith('/') ? dataBase : `${dataBase}/`;
            one drops the "2". -->
       <button class="om-share" type="button" data-export-png="2">Save PNG</button>
       <span class="om-kmz-controls" data-kmz-controls>
+        <!-- One button for every format the map reads, which is the whole
+             design: a reader has a file, not a format, and the module decides
+             what it is from the bytes rather than from the extension. The
+             `accept` list is a filter in the picker and nothing more — it is
+             deliberately generous, and `.json` is in it because ERDDAP and
+             most APIs serve GeoJSON under that name.
+
+             `multiple` matters more than it used to. A shapefile is three
+             files that are one layer, so selecting `x.shp`, `x.dbf` and
+             `x.prj` together is the ordinary way to add one — the module
+             groups them by base name. A zipped shapefile is one file and
+             works the same way. -->
         <label class="om-kmz-add">
-          <span>Add KML or KMZ…</span>
+          <span>Add map file…</span>
           <input
             class="om-vh"
             type="file"
             data-kmz-file
-            accept=".kmz,.kml,application/vnd.google-earth.kmz,application/vnd.google-earth.kml+xml"
+            accept=".kmz,.kml,.geojson,.json,.zip,.shp,.dbf,.prj,application/geo+json,application/json,application/zip,application/vnd.google-earth.kmz,application/vnd.google-earth.kml+xml"
             multiple
           />
         </label>
+        <!-- The other way in. A reader with a link should not have to
+             download it first — and services that build a layer from a query
+             (ERDDAP, an ArcGIS export) only ever give you a URL.
+
+             A form rather than a bare input, so Enter submits it the way a
+             reader expects and the button is a real submit. It is separate
+             from the file button rather than folded into it because the two
+             gestures are different: one opens a picker, the other takes a
+             paste. "One button" was about not having to know the format,
+             which still holds — this reads the same four. -->
+        <form class="om-kmz-url" data-kmz-url-form>
+          <input
+            type="url"
+            data-kmz-url
+            placeholder="…or paste a link"
+            aria-label="Link to a KML, KMZ, GeoJSON or shapefile"
+            spellcheck="false"
+          />
+          <button type="submit">Add</button>
+        </form>
         <span class="om-kmz-list" data-kmz-list hidden></span>
       </span>
     </span>

@@ -14,129 +14,28 @@
  */
 
 import type { LonLat } from './schema';
+import { isZip, listEntries, readEntry } from './zip.ts';
+import { type VectorDocument, type VectorFeature, type VectorOverlay, type VectorStyle }
+  from './vector.ts';
 
-/** What a placemark's own style asks for, already converted from KML's forms. */
-export interface KmzStyle {
-  /** `#rrggbb`, from KML's `aabbggrr`. */
-  stroke?: string;
-  strokeOpacity?: number;
-  strokeWidth?: number;
-  fill?: string;
-  fillOpacity?: number;
-  /** PolyStyle can switch either off independently. */
-  filled?: boolean;
-  outlined?: boolean;
-}
-
-export interface KmzFeature {
-  kind: 'point' | 'line' | 'polygon';
-  /** A point is one position; a line is a path; a polygon is rings, outer first. */
-  coordinates: LonLat[] | LonLat[][];
-  name?: string;
-  /** Plain text. KML descriptions carry arbitrary HTML and this deliberately
-      does not pass it through — see `describe()`. */
-  description?: string;
-  /** The enclosing Folder, if any, so the map can group by it. */
-  folder?: string;
-  style?: KmzStyle;
-}
-
-/* A georeferenced image — a scanned chart, a satellite grab, a model figure.
-   Placed either on a north/south/east/west box or, with gx:LatLonQuad, on
-   four arbitrary corners. Exactly one of `bounds` and `corners` is set. */
-export interface KmzOverlay {
-  name?: string;
-  /** North, south, east, west edges in degrees, from LatLonBox. */
-  bounds?: { north: number; south: number; east: number; west: number };
-  /** Four corners from gx:LatLonQuad, counterclockwise from the south-west —
-      so SW, SE, NE, NW, which is the order KML writes them in. Opposite edges
-      need not be parallel, which is why this needs a projective warp rather
-      than a box. */
-  corners?: [LonLat, LonLat, LonLat, LonLat];
-  /** Degrees counterclockwise about the centre, from LatLonBox. */
-  rotation: number;
-  /** From the overlay's own `color`, whose alpha is the opacity. */
-  opacity: number;
-  /** Higher draws on top. */
-  drawOrder: number;
-  /** The image, lifted out of the archive. */
-  image: Uint8Array;
-  mediaType: string;
-}
-
-export interface KmzDocument {
-  name?: string;
-  features: KmzFeature[];
-  overlays: KmzOverlay[];
-  /** What was present and not drawn, counted by kind. A partial render that
-      says nothing is the failure mode this project keeps meeting; this is what
-      lets the map report "drew 412, skipped 3 NetworkLinks" instead. */
-  skipped: Record<string, number>;
-}
+/* The feature model lives in `vector.ts` now, because GeoJSON and shapefiles
+   produce the same shapes and a type called `Kmz*` that three formats build
+   is a name that has outlived what it describes. The old names are kept as
+   aliases so every existing importer — `index.ts`, the harnesses — went on
+   working without being dragged into that rename. */
+export type KmzStyle = VectorStyle;
+export type KmzFeature = VectorFeature;
+export type KmzOverlay = VectorOverlay;
+export type KmzDocument = VectorDocument;
+export { summarise } from './vector.ts';
 
 export class KmzError extends Error {}
 
 // ---- the ZIP half -----------------------------------------------------
 
-interface ZipEntry {
-  name: string;
-  method: number;
-  compressedSize: number;
-  offset: number;
-}
-
-/* The End Of Central Directory record is at the end, after a comment of
-   unknown length, so it is found by scanning backwards for its signature. */
-function endOfCentralDirectory(view: DataView, length: number): number {
-  for (let i = length - 22; i >= 0; i--) {
-    if (view.getUint32(i, true) === 0x06054b50) return i;
-  }
-  throw new KmzError('not a ZIP archive — no end-of-central-directory record');
-}
-
-function listEntries(bytes: Uint8Array): ZipEntry[] {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const eocd = endOfCentralDirectory(view, bytes.length);
-  const count = view.getUint16(eocd + 10, true);
-  let at = view.getUint32(eocd + 16, true);
-  const entries: ZipEntry[] = [];
-  const text = new TextDecoder();
-  for (let i = 0; i < count; i++) {
-    if (view.getUint32(at, true) !== 0x02014b50) {
-      throw new KmzError('corrupt ZIP central directory');
-    }
-    const nameLength = view.getUint16(at + 28, true);
-    const extraLength = view.getUint16(at + 30, true);
-    const commentLength = view.getUint16(at + 32, true);
-    entries.push({
-      name: text.decode(bytes.subarray(at + 46, at + 46 + nameLength)),
-      method: view.getUint16(at + 10, true),
-      compressedSize: view.getUint32(at + 20, true),
-      offset: view.getUint32(at + 42, true),
-    });
-    at += 46 + nameLength + extraLength + commentLength;
-  }
-  return entries;
-}
-
-async function read(bytes: Uint8Array, entry: ZipEntry): Promise<Uint8Array> {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  /* The local header repeats the name and extra fields, and its extra field
-     length may differ from the central directory's — so it has to be read
-     here rather than reused. */
-  const nameLength = view.getUint16(entry.offset + 26, true);
-  const extraLength = view.getUint16(entry.offset + 28, true);
-  const start = entry.offset + 30 + nameLength + extraLength;
-  const body = bytes.subarray(start, start + entry.compressedSize);
-  if (entry.method === 0) return body;
-  if (entry.method !== 8) {
-    throw new KmzError(`unsupported ZIP compression method ${entry.method}`);
-  }
-  const stream = new Blob([body as BlobPart]).stream().pipeThrough(
-    new DecompressionStream('deflate-raw')
-  );
-  return new Uint8Array(await new Response(stream).arrayBuffer());
-}
+/* The ZIP half moved to `zip.ts` when shapefiles arrived, since those are
+   handed over zipped too and one reader is better than two. Nothing about it
+   changed on the way out. */
 
 // ---- colours ----------------------------------------------------------
 
@@ -413,8 +312,7 @@ export async function readKmz(
   bytes: Uint8Array,
   parseXml: (xml: string) => Document
 ): Promise<KmzDocument> {
-  const zipped = bytes[0] === 0x50 && bytes[1] === 0x4b;
-  if (!zipped) {
+  if (!isZip(bytes)) {
     // A bare .kml, which readers hand over just as often as a .kmz. Its
     // overlays name images that travelled with it and are not here.
     const plain = parseKml(parseXml(new TextDecoder().decode(bytes)));
@@ -426,7 +324,7 @@ export async function readKmz(
     entries.find((e) => e.name.toLowerCase() === 'doc.kml') ??
     entries.find((e) => e.name.toLowerCase().endsWith('.kml'));
   if (!kml) throw new KmzError('no .kml inside the archive');
-  const parsed = parseKml(parseXml(new TextDecoder().decode(await read(bytes, kml))));
+  const parsed = parseKml(parseXml(new TextDecoder().decode(await readEntry(bytes, kml))));
 
   /* Overlay images, lifted out of the archive. Matched case-insensitively and
      without any leading "./" — a KMZ written on Windows will happily refer to
@@ -444,7 +342,7 @@ export async function readKmz(
     }
     used.add(entry.name);
     const { href, ...rest } = overlay;
-    parsed.overlays.push({ ...rest, image: await read(bytes, entry), mediaType });
+    parsed.overlays.push({ ...rest, image: await readEntry(bytes, entry), mediaType });
   }
   /* Draw order is the file's to decide, and Leaflet stacks within a pane by
      insertion, so it is applied here rather than left to chance. */
@@ -457,16 +355,4 @@ export async function readKmz(
   );
   if (spare.length) parsed.skipped['embedded resource'] = spare.length;
   return parsed;
-}
-
-/** "412 features · skipped 3 NetworkLinks" — for the map to show. */
-export function summarise(doc: KmzDocument): string {
-  const parts = [`${doc.features.length} feature${doc.features.length === 1 ? '' : 's'}`];
-  if (doc.overlays.length) {
-    parts.push(`${doc.overlays.length} image${doc.overlays.length === 1 ? '' : 's'}`);
-  }
-  for (const [what, n] of Object.entries(doc.skipped)) {
-    parts.push(`skipped ${n} ${what}${n === 1 ? '' : 's'}`);
-  }
-  return parts.join(' · ');
 }

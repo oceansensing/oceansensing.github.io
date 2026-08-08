@@ -21,7 +21,14 @@ import { figureName } from './figure';
 import { drawFigure, saveCanvas } from './export';
 import { REGIONS, INTERESTS, type Interest, type Region } from './places';
 import { createPlaceMenus } from './place-menu';
-import { readKmz, summarise, type KmzDocument, type KmzFeature, type KmzOverlay } from './kmz';
+import { summarise, type KmzDocument, type KmzFeature, type KmzOverlay } from './kmz';
+/* One button, four formats. `openVector` decides what a file is from its
+   bytes, and `bundleParts` turns a loose `.shp`/`.dbf`/`.prj` selection into
+   one thing to draw and one blob to store. The DOM hooks below are still
+   named `kmz` — they were the contract with the markup and with `test:map`
+   before there was anything else to open, and renaming them is a mechanical
+   sweep worth doing on its own rather than inside a feature. */
+import { bundleParts, fetchVector, openVector, type NamedBytes } from './open';
 import { matrix3d, type Pixel } from './warp';
 import { listOverlays, removeOverlay, saveOverlay } from './store';
 import type {
@@ -3293,7 +3300,7 @@ export async function createOceanMap(
   };
 
   const addKmz = async (id: string, name: string, bytes: ArrayBuffer) => {
-    const doc: KmzDocument = await readKmz(new Uint8Array(bytes), parseXml);
+    const doc: KmzDocument = await openVector(new Uint8Array(bytes), name, parseXml);
     if (!doc.features.length && !doc.overlays.length) {
       throw new Error(`${name} has nothing this map can draw — ${summarise(doc)}`);
     }
@@ -3321,12 +3328,38 @@ export async function createOceanMap(
   });
 
   kmzInput?.addEventListener('change', async () => {
-    const files = [...(kmzInput.files ?? [])];
+    const picked = [...(kmzInput.files ?? [])];
     kmzInput.value = '';
+
+    /* Grouped before anything is drawn, because a shapefile is three files
+       that are one layer — and the grouping has to see the whole selection to
+       know that. Everything else passes through one-for-one, so the loop
+       below is unchanged for the formats that were already supported. */
+    let files: NamedBytes[];
+    try {
+      const read = await Promise.all(
+        picked.map(async (file) => ({
+          name: file.name,
+          bytes: new Uint8Array(await file.arrayBuffer()),
+        }))
+      );
+      files = bundleParts(read);
+    } catch (error) {
+      showKmzNote(error instanceof Error ? error.message : 'those files could not be read');
+      return;
+    }
+
     for (const file of files) {
       const id = `kmz:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
       try {
-        const bytes = await file.arrayBuffer();
+        /* Copied out of its view rather than handed `.buffer` straight: a
+           bundled shapefile is built into an exactly-sized array, but a
+           `subarray` anywhere upstream would otherwise put the *whole*
+           archive into storage under one part's name. */
+        const bytes = file.bytes.buffer.slice(
+          file.bytes.byteOffset,
+          file.bytes.byteOffset + file.bytes.byteLength
+        ) as ArrayBuffer;
         const drew = await addKmz(id, file.name, bytes);
         const stored = await saveOverlay({
           id,
@@ -3347,6 +3380,59 @@ export async function createOceanMap(
     }
   });
 
+
+  /* The other way a file arrives: a link the reader pasted. Same drawing and
+     same storage as a picked file — only the getting differs, and that is
+     `fetchVector`'s. Deliberately not routed through `dataBase`: that option
+     governs where the *map's* data comes from, and this is the reader's.
+
+     A URL the reader typed is not a URL a file chose, which is why this is
+     allowed while KML's NetworkLink is still refused. */
+  const urlForm = kmzControls?.querySelector<HTMLFormElement>('[data-kmz-url-form]');
+  const urlInput = kmzControls?.querySelector<HTMLInputElement>('[data-kmz-url]');
+  urlForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const href = urlInput?.value.trim();
+    if (!href) return;
+    const submit = urlForm.querySelector('button');
+    /* Disabled while it is in flight, because a slow or unreachable host can
+       take a while to fail and a second press would draw the layer twice. */
+    if (submit) submit.disabled = true;
+    showKmzNote(`Fetching ${href}…`);
+    const id = `kmz:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      const { doc, bytes, name } = await fetchVector(href, parseXml);
+      if (!doc.features.length && !doc.overlays.length) {
+        throw new Error(`${name} has nothing this map can draw — ${summarise(doc)}`);
+      }
+      const group = drawKmz(doc.features);
+      drawOverlays(group, id, doc.overlays);
+      (group as unknown as { _kmzName?: string })._kmzName = name;
+      loadedOverlays.set(id, group);
+      layerControl.addOverlay(group, name);
+      group.addTo(map);
+      listKmz();
+      const buffer = bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength
+      ) as ArrayBuffer;
+      const stored = await saveOverlay({
+        id,
+        mapKey: CONFIG.storageKey,
+        name,
+        bytes: buffer,
+        added: Date.now(),
+      });
+      showKmzNote(
+        `${name}: ${summarise(doc)}${stored ? '' : ' · not kept — this browser refused storage'}`
+      );
+      if (urlInput) urlInput.value = '';
+    } catch (error) {
+      showKmzNote(error instanceof Error ? error.message : `${href} could not be read`);
+    } finally {
+      if (submit) submit.disabled = false;
+    }
+  });
 
   /* The two animated fields are exclusive. Both at once is two sets of
      drifting lines over the same water with nothing to tell them apart,

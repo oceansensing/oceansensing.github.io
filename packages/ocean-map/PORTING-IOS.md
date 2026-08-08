@@ -36,11 +36,16 @@ what make this port possible, and the same rules apply to whatever you add.
 | `warp.ts` | the homography behind `gx:LatLonQuad` image overlays | pure; falls back to affine when the quad is a parallelogram |
 | `kmz.ts` | KMZ/KML decode — ZIP, geometry, styles, ground overlays | pure; **inject** an XML parser, do not import one |
 | `particles.ts` | u/v sampling and the particle pool behind the animated fields | pure; the whole of the animation bar the canvas |
+| `open.ts` | one button, four formats: sniffs bytes and dispatches | the extension is never trusted |
+| `zip.ts` | ZIP reading, and a store-only writer | KMZ and zipped shapefiles both |
+| `geojson.ts` | GeoJSON, including the 0–360 longitude fold | do not reach for a GeoJSON library instead |
+| `shapefile.ts` | `.shp` geometry, `.dbf` attributes, `.prj` refusal | ring orientation separates holes from polygons |
+| `vector.ts` | what all three produce, and `foldLongitudes` | |
 | `data/map-palette.json` | every colour, 25 colour scales, and every conceded clash | with the reasoning in `_`-prefixed keys |
 | `data/basemap-ocean.json` | sampled water colours the palette is gated against | |
 | `../../scripts/*.py` | the six data pipelines | run unchanged, or read the same output |
 
-`scripts/test-units.mjs` is the specification for all of those — **212
+`scripts/test-units.mjs` is the specification for all of those — **265
 assertions**, each pinning a case a comment claims to handle. Port the tests
 and you will know your Swift matches. Re-count with
 `node scripts/test-units.mjs | grep -c '^ok'`; this figure was 126 for long

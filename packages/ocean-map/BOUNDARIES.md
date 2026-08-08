@@ -12,14 +12,18 @@ behind it, and every one was learned by breaking it.
 
 ## Structural
 
-### S1. `geo`, `ramp`, `tiles`, `schema`, `warp`, `kmz` and `particles` never import Leaflet or the DOM
+### S1. The reading half never imports Leaflet or the DOM
+
+`geo`, `ramp`, `tiles`, `schema`, `warp`, `kmz`, `particles`, and — since the
+map learned to open GeoJSON and shapefiles — `zip`, `vector`, `geojson`,
+`shapefile` and `open`.
 
 They typecheck standalone:
 
 ```sh
 npx tsc --noEmit --ignoreConfig --strict --target es2022 \
-  --moduleResolution bundler --module esnext \
-  packages/ocean-map/{geo,ramp,tiles,schema,warp,kmz,particles}.ts
+  --moduleResolution bundler --module esnext --allowImportingTsExtensions \
+  packages/ocean-map/{geo,ramp,tiles,schema,warp,kmz,particles,zip,vector,geojson,shapefile,open}.ts
 ```
 
 That command proves they *compile* alone and not that they are free of the
@@ -31,33 +35,48 @@ below with:
 ```sh
 cd packages/ocean-map && grep -L "from 'leaflet'" *.ts | grep -v store.ts |
   xargs wc -l | tail -1        # store.ts is Leaflet-free but built on IndexedDB
+cd packages/ocean-map && cat *.ts | wc -l                    # the denominator
 ```
+
+**A runtime import between these modules must carry its `.ts` extension.**
+Everywhere else in the package the specifier is bare, because Vite resolves it
+— but these are the files `test:units` loads *directly* through Node's type
+stripping, and Node's resolver requires the extension. Nothing caught this
+before `zip.ts`, because until then every intra-module import here was
+`import type`, which is erased and never resolved at all. The symptom is
+`ERR_MODULE_NOT_FOUND` from a suite that had been passing, and `astro check`
+is happy either way.
 
 **Why:** these are what a native port keeps verbatim. Everything that moves
 into them is work an iOS app does not repeat; everything left in `index.ts` is
-work it rewrites. Measured today: **1,335 lines in these seven against 4,671
-in `index.ts` and 361 in `velocity-layer.ts`**, so about 21% is portable by
-that count.
+work it rewrites. Measured today: **3,264 lines import neither Leaflet nor the
+DOM, of 9,848 in the package — about 33%.** `store.ts` is deliberately not in
+that count, being free of Leaflet but built on IndexedDB.
 
-**That is down from 24%, and the direction is the point of the number.** It
-went 11% → 24% → 21%. Nothing moved back: the seven grew 60 lines while
-`index.ts` grew about 1,100, because the share codec, the PNG export, the
-place and interest menus and the two particle controls each landed a
-renderer-bound half. A share that falls while the package grows is the
-signal this measurement exists to give, so re-measure it when adding a
-feature rather than only when moving one.
+**It went 11% → 24% → 21% → 33%, and the dip is as instructive as the jump.**
+The fall to 21% was not something moving back: the renderer-free files grew 60
+lines while `index.ts` grew about 1,100, because the share codec, the PNG
+export, the place and interest menus and the two particle controls each landed
+a renderer-bound half. A share that falls while the package grows is exactly
+the signal this measurement exists to give, so re-measure when adding a
+feature and not only when moving one.
 
-Counted across the whole package it reads better, and both numbers are worth
-keeping. Thirteen files now import neither Leaflet nor the DOM — `contrast`,
-`figure`, `places`, `share`, `storm-status` and `palette` on top of the seven
-— which is **2,260 lines of 8,808, about 26%**. `test:units` imports nine of
-them with no Leaflet and no jsdom at all, which is what makes any of this
-checkable rather than argued; `store.ts` is deliberately not in the count,
-being free of Leaflet but built on IndexedDB.
+The jump to 33% is what a feature looks like when it is built on the right
+side of the line from the start. Opening GeoJSON and shapefiles added 1,118
+lines and **every one of them is portable** — `zip`, `vector`, `geojson`,
+`shapefile` and `open` — against 33 lines in `index.ts`, which does nothing
+but hand over bytes and draw what comes back. Leaflet has `L.geoJSON` and
+using it would have put the validation, the property flattening and the
+longitude fold on the wrong side, for a feature a native port would then have
+to write from scratch.
 
-The newest of the seven, `particles.ts`, is the advection maths behind the
-animated fields; it arrived by *replacing a dependency*, which is still the
-cheapest way this share has ever moved.
+`test:units` imports these with no Leaflet and no jsdom at all, which is what
+makes any of this checkable rather than argued.
+
+`particles.ts` — the advection maths behind the animated fields — arrived by
+*replacing a dependency*, which is still the cheapest way this share has ever
+moved: `zip.ts` did the same for jszip, and `shapefile.ts` for shpjs and the
+projection library it drags in.
 
 `kmz.ts` is the pattern to copy when something *seems* to need the DOM: it
 parses XML, which in a browser means `DOMParser`, so the parser is **injected**
@@ -84,6 +103,12 @@ the Python writers** and must be passed through `fromData()`.
 
 **Why:** a deployment reading from another origin otherwise fetches half its
 data from its own, and the failure is silent — the layer simply stays coarse.
+
+**One deliberate exception: a URL the reader pastes.** `fetchVector` fetches
+what the reader asked for, and routing that through `dataBase` would mean they
+could only load from the host the map already reads. The rule is about *the
+map's own data*, which is what the check measures — it looks for `/map/`
+literals, and a reader's URL contains none.
 
 *Enforced by* the `every data fetch goes through the configured dataBase` check
 in `test:map`, which reads the module source with comments stripped.
@@ -212,5 +237,5 @@ Before adding anything, ask:
 6. Does it change a measured constant? Then re-measure and rewrite the reason.
 
 `npm run verify` is the gate — a build, a type-check, a docs check and eleven
-test suites, 1,236 assertions. CI runs exactly it, and the deploy will not run
+test suites, 1,300 assertions. CI runs exactly it, and the deploy will not run
 unless it passes.

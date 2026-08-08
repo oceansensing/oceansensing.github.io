@@ -2140,7 +2140,157 @@ saved view like the colour scales, and resets with everything else. The floor
 is 10% rather than 0: a layer switched on but completely invisible reads as
 broken, and the layer switcher is already the way to turn it off.
 
-### A reader's own KMZ or KML overlay
+### A reader's own file: KMZ, KML, GeoJSON or shapefile
+
+**One button, four formats, and the bytes decide which.** `open.ts` sniffs and
+dispatches, `kmz.ts` / `geojson.ts` / `shapefile.ts` decode, `zip.ts` unpacks,
+`vector.ts` is the shape they all produce, `store.ts` keeps and `index.ts`
+draws. The whole of that is renderer-free — 1,118 lines against 33 in
+`index.ts`, which does nothing but hand over bytes and draw what comes back.
+
+**The extension is not consulted**, except to group a shapefile's parts, where
+nothing else can. It cannot be trusted: ERDDAP serves GeoJSON from a
+`.geoJson` query string, portals serve shapefiles as `.zip`, and a `.json` is
+anything at all. So a magic number decides first (ZIP's `PK`, the shapefile's
+big-endian 9994), then the first non-space character (`{` is GeoJSON, `<` is
+KML). A ZIP is opened and asked what is *in* it — a `.kml` makes it a KMZ, a
+`.shp` makes it a shapefile.
+
+**`L.geoJSON` exists and is deliberately not used.** Going through Leaflet
+would put the validation, the property flattening and the longitude fold on
+the renderer's side of BOUNDARIES S1, for a feature a native port would then
+write from scratch — and it would hand a popup arbitrary HTML out of a
+stranger's file.
+
+#### Longitude is the thing this changes about a file
+
+**0–360 longitudes are real and the very first file tested against had
+them.** ERDDAP's `.geoJson` publishes a PIRATA buoy at 10°W as `[350, 0]`,
+which RFC 7946 does not allow. Drawn as given, Leaflet puts it a whole world
+copy east — and vector markers exist in one copy of the world, so the buoy is
+simply not on the map. Measured on that file: **273 of 326 stations, 84% of
+it**, would have been off screen with nothing to say so.
+
+**Folded per geometry, never per coordinate.** Per-coordinate is the obvious
+version and it tears anything that legitimately crosses the antimeridian: a
+line running 170 → 190 becomes 170 → −170 and is drawn the long way round the
+world. So a geometry moves only when *all* of it is at or past 180 — exactly
+the rule `rehomeBathy()` follows for a contour, for the same reason. Safe to
+apply to a conforming file, since valid GeoJSON has nothing above 180 but a
+point on the antimeridian, and moving 180 to −180 names the same meridian.
+
+**It is reported, not silent.** `VectorDocument.notes` is separate from
+`skipped` because they are different claims — sharing the field made the map
+say "skipped 326 longitude folded from 0–360s", which is the wrong word, the
+wrong grammar and the wrong reassurance. The reader is told their data moved
+360°, because an unannounced correction is indistinguishable from the map
+being wrong about where something is.
+
+#### A link, not only a file
+
+A second way in, beside the file button: a URL the reader pastes. Services
+that build a layer from a query — ERDDAP, an ArcGIS export — only ever give
+you a URL, and downloading it first to hand it back is a step with no purpose.
+Same reader, same draw path, same storage; only the getting differs.
+
+**A URL the reader typed is not a URL a file chose**, and that distinction is
+the whole reason this is allowed while KML's `NetworkLink` is still refused.
+`NetworkLink` has a document fetch a host *it* names, leaking where the reader
+is and when, to somebody they never agreed to talk to. This is the reader
+asking for a specific thing. `http`/`https` only — `file:` would read their
+own disk through a typed path, which is what the picker is for.
+
+**Deliberately not routed through `dataBase`.** BOUNDARIES S3 governs where
+the *map's* data comes from; this is the reader's, and forcing it through the
+option would mean a reader could only load from the host the map already
+reads.
+
+**The failure is opaque and the message must not pretend otherwise.** A
+browser reports a blocked cross-origin fetch as a bare `TypeError` with no
+reason attached — by design, so a page cannot use fetch failures to probe a
+private network. So the map cannot tell "this host forbids browsers" from
+"this host is down" from "you are offline", and it says so, plus the way
+round it: download the file and add it.
+
+**Which hosts work is not a property of the software, and it is worth knowing
+before promising anything.** Measured 2026-08-07 with an `Origin` header:
+
+| host | `access-control-allow-origin` |
+| --- | --- |
+| `oceansensing.org` (the map's own data), Marine Regions, GitHub raw, Natural Earth S3 | `*` |
+| **`gliders.ioos.us`** ERDDAP | `*` |
+| `data.pmel.noaa.gov` / `coastwatch.pfeg.noaa.gov` ERDDAP | none |
+| `erddap.ifremer.fr` ERDDAP | none |
+
+**ERDDAP is not uniformly one or the other** — CORS is per-deployment
+configuration, so IOOS's works and PMEL's does not. An earlier note here
+implied ERDDAP as a family could not be read from a browser, which is what
+`fetch-ocean-assets.py`'s own comment says about PMEL and is not true of
+IOOS. The PMEL URL also 302s to `coastwatch.pfeg.noaa.gov`, and it is the
+*final* response whose headers decide.
+
+A ceiling of 64 MiB, checked against `content-length` before reading and
+against the body after, since that header is optional. A file the reader
+picked, they can see the size of; a link they pasted may be a gigabyte of
+GeoJSON that locks the tab up while it parses.
+
+#### A shapefile is three files, and one of them decides everything
+
+`.shp` is geometry, `.dbf` is the attributes, `.prj` is the coordinate
+system. All three are handled, and a set can arrive either zipped or as a
+multi-select — the input has always been `multiple`, and `bundleParts` groups
+by base name.
+
+**A projected shapefile is refused by name rather than drawn.** The map takes
+degrees; State Plane, UTM and Web Mercator carry metres, and metres read as
+degrees put a survey of Chesapeake Bay off West Africa — a plausible-looking
+layer in the wrong ocean, which is this project's oldest failure shape.
+Reprojecting properly means a projection library and a datum transform, which
+is a far larger thing than this module. So `PROJCS` is refused with the
+projection quoted back. A *missing* `.prj` is not refused: it is extremely
+common and the geometry settles it, since degrees fit in ±180/±90 and
+projected coordinates miss by orders of magnitude.
+
+**A loose set is bundled into a store-only ZIP on the way into storage.**
+`StoredOverlay` holds one blob per record, so without that a reloaded page
+would come back with geometry and no attributes. Widening the record to hold
+several parts was the alternative — a schema change to data already in
+readers' browsers, needing a migration, for a case this handles in forty
+lines. That is what `writeZip` is for, and it computes a real CRC-32: this
+reader never checks one, and every other tool does.
+
+**Ring orientation is the only thing separating a polygon with a hole from
+two polygons.** A shapefile record carries a flat list of parts and nothing
+else to tell them apart; the spec says outer rings run clockwise and holes
+run counter-clockwise. So rings accumulate into a polygon until the next
+clockwise ring starts a new one — which is why Natural Earth's 29 marine
+records become 32 features.
+
+#### What the fixture had to be
+
+**Not a file written by this code.** A shapefile written by the writer that
+matches this reader agrees with it by construction — the trap PLAN.md already
+names. The fixture is Natural Earth's own `ne_110m_geography_marine_polys`,
+from the S3 bucket `fetch-coastline.py` already trusts, and it earned its
+keep immediately: **the polygon header offsets were four bytes wrong** —
+NumParts read out of the middle of the bounding box — and no self-written
+fixture would ever have shown it.
+
+It is checked against the producer's own `.shx` index, which nothing here
+reads: 29 records, **222 rings and 21,816 points**, and the reader reconciles
+to both exactly.
+
+#### The old names
+
+`kmz.ts` still holds `KmzStyle`, `KmzFeature`, `KmzOverlay` and
+`KmzDocument` as aliases of the `Vector*` types, and the DOM hooks are still
+`data-kmz-*`. The types moved because three formats now produce them; the
+hooks did not, because renaming them touches the markup, the module, the
+stylesheet, `test:map` and the sandbox fork, and that is a mechanical sweep
+worth doing on its own rather than inside a feature. It is the
+label-outliving-its-thing shape, knowingly left for one commit.
+
+#### The original KMZ half
 
 `packages/ocean-map/kmz.ts` decodes, `store.ts` keeps, and `index.ts` draws.
 It is deliberately **inert**: it joins no exclusivity group, feeds no readout

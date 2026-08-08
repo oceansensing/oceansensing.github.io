@@ -891,6 +891,58 @@
   outline-offset: 2px;
 }
 
+/* The link field, beside the file button. Sized in `ch` so it holds a
+   recognisable amount of a URL without taking the row: a link is usually far
+   longer than the box and a reader pastes rather than reads it back.
+
+   `min-inline-size: 0` is load-bearing. A flex item defaults to
+   `min-width: auto`, and for an `<input>` that is the `size` attribute's
+   default of twenty characters — so without it this refuses to shrink and
+   pushes the row past the map's right edge on a phone, which is the exact
+   overflow the particle controls already have a note about. */
+.om-kmz-url {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs, 0.25rem);
+  min-inline-size: 0;
+}
+
+.om-kmz-url input {
+  inline-size: 14ch;
+  min-inline-size: 0;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--border, #d6dbe0);
+  border-radius: var(--radius, 4px);
+  background: var(--bg, #ffffff);
+  color: var(--text, #12181f);
+  font: inherit;
+}
+
+/* `appearance: none` because iOS Safari otherwise draws its own grey rounded
+   rect over `background` and `border-radius` both — the trap every button in
+   this chrome has already paid for, and one that shows on a real phone and
+   not in any harness. */
+.om-kmz-url button {
+  appearance: none;
+  cursor: pointer;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--border, #d6dbe0);
+  border-radius: var(--radius, 4px);
+  background: var(--bg, #ffffff);
+  color: var(--text, #12181f);
+  font: inherit;
+  white-space: nowrap;
+}
+
+.om-kmz-url button:hover {
+  background: var(--bg-subtle, #f4f6f8);
+}
+
+.om-kmz-url button:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
 .om-kmz-list[hidden] {
   display: none;
 }
@@ -1157,6 +1209,23 @@
  * line, and the fixed footprints then line the two up under each other.
  */
 @media (max-width: 47.999rem) {
+  /* One control per line below this width. The file button and the link
+     field together want more than a phone's content column, and what
+     wrapping does instead is worse — the break lands inside the field. Same
+     call, and the same reason, as the particle rows just below. */
+  .om-kmz-controls {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .om-kmz-url {
+    inline-size: 100%;
+  }
+
+  .om-kmz-url input {
+    flex: 1 1 auto;
+  }
+
   .om-tints,
   .om-particle-speed label {
     flex: 1 0 100%;

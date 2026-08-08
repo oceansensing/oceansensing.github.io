@@ -24,7 +24,10 @@ export interface StoredOverlay {
   mapKey: string;
   /** The file's own name, shown in the layer switcher. */
   name: string;
-  /** The raw .kmz or .kml, exactly as it was handed over. */
+  /** The file exactly as it was handed over — .kmz, .kml, .geojson, .shp,
+      or a .zip. A loose shapefile set is bundled into a ZIP on the way in
+      (see `bundleParts`), so one record is still one blob and this field
+      did not have to grow into a list. */
   bytes: ArrayBuffer;
   added: number;
 }

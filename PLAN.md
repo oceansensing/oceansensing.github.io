@@ -51,7 +51,13 @@ outranks whatever view you last left behind; pasting one into a map you
 already have open works too. One button beside it saves the figure as a PNG,
 doubled for print, with the colour bar, the particle keys and the credit line
 in a band underneath, so a figure that ends up in a talk or a paper carries
-its own provenance.
+its own provenance. One button takes a reader's own data over the top — KML,
+KMZ, GeoJSON or a shapefile, zipped or as loose `.shp`/`.dbf`/`.prj` parts —
+with the format decided from the bytes rather than the file name, 0–360
+longitudes folded (and the fold reported), and a projected shapefile refused
+by name rather than drawn in the wrong ocean. A pasted link works the same
+way where the host sends CORS — measured, IOOS's ERDDAP does and PMEL's does
+not, which is per-deployment configuration rather than a property of ERDDAP.
 Above the map, an active-storm status line that updates without a reload;
 beside that, a server-synchronised UTC clock. The page refreshes itself when
 a new build lands, keeping your basemap, layers and position.
@@ -91,7 +97,7 @@ website, `PORTING-IOS.md` for the iOS app, and `BOUNDARIES.md` for anyone
 adding to it — those separations are what keep the other two possible, and
 they are easy to breach by accident.
 
-`npm run verify` stands at **1,236 printed `ok` lines** across fourteen
+`npm run verify` stands at **1,300 printed `ok` lines** across fourteen
 steps: build, type-check, docs, then eleven test suites — the
 renderer-independent units, TEOS-10 against GSW, the ballast arithmetic, the
 published data contract, colour contrast, the rendered map, two maps on a
@@ -125,7 +131,7 @@ Done, one at a time with `verify` and a browser check between each:
 
 That was ~500 lines out, leaving ~4,030 at the time.
 
-**It is 4,671 today**, which is the number that matters and the one this
+**It is 4,704 today**, which is the number that matters and the one this
 entry kept getting wrong. The split's gain has been more than repaid by what
 landed after it — the share codec, the PNG export, the place and interest
 menus, the particle colour pickers and the speed sliders each left a

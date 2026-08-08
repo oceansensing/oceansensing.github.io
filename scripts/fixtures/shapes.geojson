@@ -1,0 +1,87 @@
+{
+  "type": "FeatureCollection",
+  "name": "every geometry the reader claims to handle",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "A point", "depth_m": 4200, "note": "<b>markup</b> that must be flattened" },
+      "geometry": { "type": "Point", "coordinates": [-70.5, 37.25] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "station": "two dots" },
+      "geometry": { "type": "MultiPoint", "coordinates": [[-71, 38], [-72, 38.5]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "A line", "stroke": "#ff8800", "stroke-width": 3, "stroke-opacity": 0.5 },
+      "geometry": { "type": "LineString", "coordinates": [[-70, 36], [-69, 36.5], [-68, 37]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Two lines" },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [[[-74, 35], [-73, 35]], [[-74, 34], [-73, 34]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "A box with a hole", "fill": "#0088ff", "fill-opacity": 0.25 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [[-76, 39], [-75, 39], [-75, 40], [-76, 40], [-76, 39]],
+          [[-75.8, 39.2], [-75.2, 39.2], [-75.2, 39.8], [-75.8, 39.8], [-75.8, 39.2]]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Two boxes" },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [[[-78, 41], [-77, 41], [-77, 42], [-78, 42], [-78, 41]]],
+          [[[-80, 41], [-79, 41], [-79, 42], [-80, 42], [-80, 41]]]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Attributes but nowhere to draw them" },
+      "geometry": null
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "A line of one point" },
+      "geometry": { "type": "LineString", "coordinates": [[-60, 30]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Something from the future" },
+      "geometry": { "type": "Circle", "coordinates": [-60, 30], "radius": 100 }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "A collection" },
+      "geometry": {
+        "type": "GeometryCollection",
+        "geometries": [
+          { "type": "Point", "coordinates": [-65, 32] },
+          { "type": "LineString", "coordinates": [[-65, 32], [-64, 33]] }
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Crosses the date line and must not be folded" },
+      "geometry": { "type": "LineString", "coordinates": [[170, 10], [185, 10]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Wholly past the date line and must be folded" },
+      "geometry": { "type": "LineString", "coordinates": [[350, 5], [355, 5]] }
+    }
+  ]
+}

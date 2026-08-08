@@ -1,0 +1,171 @@
+{
+ "type": "FeatureCollection",
+ "propertyNames": [
+  "array",
+  "station",
+  "wmo_platform_code",
+  "time"
+ ],
+ "features": [
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     350.0,
+     0.0
+    ]
+   },
+   "properties": {
+    "array": "PIRATA",
+    "station": "0n10w",
+    "wmo_platform_code": 15002,
+    "time": "2026-06-26T12:00:00Z"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     350.0,
+     0.0
+    ]
+   },
+   "properties": {
+    "array": "PIRATA",
+    "station": "0n10w",
+    "wmo_platform_code": 15002,
+    "time": "2026-06-27T12:00:00Z"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     350.0,
+     0.0
+    ]
+   },
+   "properties": {
+    "array": "PIRATA",
+    "station": "0n10w",
+    "wmo_platform_code": 15002,
+    "time": "2026-06-28T12:00:00Z"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     350.0,
+     0.0
+    ]
+   },
+   "properties": {
+    "array": "PIRATA",
+    "station": "0n10w",
+    "wmo_platform_code": 15002,
+    "time": "2026-06-29T12:00:00Z"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     350.0,
+     0.0
+    ]
+   },
+   "properties": {
+    "array": "PIRATA",
+    "station": "0n10w",
+    "wmo_platform_code": 15002,
+    "time": "2026-06-30T12:00:00Z"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     350.0,
+     0.0
+    ]
+   },
+   "properties": {
+    "array": "PIRATA",
+    "station": "0n10w",
+    "wmo_platform_code": 15002,
+    "time": "2026-07-01T12:00:00Z"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     165.0,
+     0.0
+    ]
+   },
+   "properties": {
+    "array": "TAO/TRITON",
+    "station": "0n165e",
+    "wmo_platform_code": 52321,
+    "time": "2026-06-26T12:00:00Z"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     165.0,
+     0.0
+    ]
+   },
+   "properties": {
+    "array": "TAO/TRITON",
+    "station": "0n165e",
+    "wmo_platform_code": 52321,
+    "time": "2026-06-27T12:00:00Z"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     165.0,
+     0.0
+    ]
+   },
+   "properties": {
+    "array": "TAO/TRITON",
+    "station": "0n165e",
+    "wmo_platform_code": 52321,
+    "time": "2026-06-28T12:00:00Z"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     165.0,
+     0.0
+    ]
+   },
+   "properties": {
+    "array": "TAO/TRITON",
+    "station": "0n165e",
+    "wmo_platform_code": 52321,
+    "time": "2026-06-29T12:00:00Z"
+   }
+  }
+ ]
+}

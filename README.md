@@ -12,7 +12,10 @@ NOAA saildrones, the Argo array, animated currents at two depths,
 sea-surface temperature and salinity, isobaths, a detailed coastline and EEZ
 boundaries, and ECMWF 10 m wind and 2 m air temperature — with the colour
 scale, its range, the isobath opacity and every layer under the reader's
-control. The ESPC fields show the step nearest the reader's own clock rather
+control. One button takes a reader's own data over the top of it — KML, KMZ,
+GeoJSON or a shapefile, zipped or as loose parts — with the format worked out
+from the bytes rather than the file name — from a file or from a pasted link,
+where the host allows it. The ESPC fields show the step nearest the reader's own clock rather
 than a fixed offset from the model run, the currents publishing the two
 steps that span a six-hour window so the tide in that model can be stepped
 through, and the map's attribution says which hour is drawn and how far from

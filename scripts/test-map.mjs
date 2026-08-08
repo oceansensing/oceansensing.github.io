@@ -83,6 +83,7 @@ const dom = new JSDOM(
      fail against. */
   '<button type="button" data-export-png="2">Save PNG</button>' +
   '<span class="om-kmz-controls" data-kmz-controls><input type="file" data-kmz-file />' +
+  '<form data-kmz-url-form><input type="url" data-kmz-url /><button type="submit">Add</button></form>' +
   '<span data-kmz-list hidden></span></span>' +
   '<span data-kmz-note></span>' +
   '<span class="status" id="map-status" data-map-status></span>' +
@@ -2099,6 +2100,83 @@ const kmzQuad = await (async () => {
   };
 })();
 
+/* One button, four formats. These two go through the same `<input>` as the
+   KMZ above, because the point of the feature is that a reader hands over a
+   file and the map works out what it is — so testing the readers directly
+   (which `test:units` does) would not show that the button reaches them. */
+const importFile = async (path, name) => {
+  const input = document.querySelector('[data-kmz-file]');
+  if (!input) return null;
+  const bytes = new Uint8Array(fs.readFileSync(path));
+  const file = new window.File([bytes], name, {});
+  Object.defineProperty(input, 'files', {
+    value: Object.assign([file], { item: (i) => [file][i], length: 1 }),
+    configurable: true,
+  });
+  const before = new Set();
+  host._map.eachLayer((l) => before.add(l));
+  input.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 1500));
+  /* Leaves only. The group Leaflet wraps the file in is also new and also in
+     the user pane, so counting everything added reports one feature more than
+     the file holds — which is the sort of off-by-one that looks like a real
+     discrepancy in the reader and is not. */
+  const added = [];
+  host._map.eachLayer((l) => {
+    if (!before.has(l) && l.options?.pane === 'user' && typeof l.eachLayer !== 'function') {
+      added.push(l);
+    }
+  });
+  return {
+    added,
+    note: document.querySelector('[data-kmz-note]')?.textContent ?? '',
+    inSwitcher: [...document.querySelectorAll('.leaflet-control-layers-overlays label')]
+      .filter((l) => new RegExp(name.split('.')[0], 'i').test(l.textContent)).length,
+  };
+};
+
+const geojsonUpload = await importFile('scripts/fixtures/stations.geojson', 'stations.geojson');
+const shapefileUpload = await importFile('scripts/fixtures/marine.zip', 'marine.zip');
+
+/* The other way in: a link. `fetch` is stubbed on the realm, because what is
+   being checked is the wiring — that a pasted URL reaches the same reader and
+   the same draw path a picked file does — not that the network works.
+
+   The blocked case matters more than the happy one. Measured against real
+   hosts: `gliders.ioos.us` sends CORS and works, `data.pmel.noaa.gov` sends
+   none and cannot be read from a browser at all. A browser reports that as an
+   opaque TypeError with no reason, so the map must not claim to know why. */
+const submitUrl = async (href, impl) => {
+  const form = document.querySelector('[data-kmz-url-form]');
+  const field = document.querySelector('[data-kmz-url]');
+  if (!form || !field) return null;
+  const before = globalThis.fetch;
+  globalThis.fetch = impl;
+  field.value = href;
+  const seen = new Set();
+  host._map.eachLayer((l) => seen.add(l));
+  form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await new Promise((r) => setTimeout(r, 800));
+  globalThis.fetch = before;
+  const added = [];
+  host._map.eachLayer((l) => {
+    if (!seen.has(l) && l.options?.pane === 'user' && typeof l.eachLayer !== 'function') added.push(l);
+  });
+  return {
+    added,
+    note: document.querySelector('[data-kmz-note]')?.textContent ?? '',
+    fieldCleared: field.value === '',
+    inSwitcher: [...document.querySelectorAll('.leaflet-control-layers-overlays label')]
+      .filter((l) => /stations\.geojson/i.test(l.textContent)).length,
+  };
+};
+
+const urlOk = await submitUrl('https://example.org/data/stations.geojson', async () =>
+  new Response(fs.readFileSync('scripts/fixtures/stations.geojson'), { status: 200 }));
+const urlBlocked = await submitUrl('https://data.pmel.noaa.gov/x.geoJson', async () => {
+  throw new TypeError('Failed to fetch');
+});
+
 /* ---- isobaths -------------------------------------------------------------
 
    The layer is off by default and neither tier is fetched until it is
@@ -2969,6 +3047,32 @@ const checks = [
     !!kmzUpload && kmzUpload.inSwitcher === 1 && kmzUpload.listed === 1],
   ['and reports what it drew and skipped',
     !!kmzUpload && /5 features/.test(kmzUpload.note) && /skipped/.test(kmzUpload.note)],
+  // ---- a link rather than a file
+  ['a pasted link is fetched, read and drawn',
+    !!urlOk && urlOk.added.length === 10],
+  ['it joins the switcher under the name in the URL',
+    !!urlOk && urlOk.inSwitcher >= 1],
+  ['and the field is cleared so the next paste is not appended to it',
+    !!urlOk && urlOk.fieldCleared],
+  ['a host that refuses the browser names the host and the way round it',
+    !!urlBlocked && /data\.pmel\.noaa\.gov/.test(urlBlocked.note) &&
+      /Downloading the file/.test(urlBlocked.note)],
+  ['and does not claim to know why, because the browser does not say',
+    !!urlBlocked && /may not allow it/.test(urlBlocked.note) &&
+      /unreachable/.test(urlBlocked.note)],
+  ['a refused link draws nothing',
+    !!urlBlocked && urlBlocked.added.length === 0],
+  // ---- the same button, the other three formats
+  ['a GeoJSON goes in through the same button and draws',
+    !!geojsonUpload && geojsonUpload.added.length === 10],
+  ['it joins the switcher under its own name',
+    !!geojsonUpload && geojsonUpload.inSwitcher === 1],
+  ['and the 0-360 longitude fold is reported to the reader, not done silently',
+    !!geojsonUpload && /folded 6 0–360 longitudes/.test(geojsonUpload.note)],
+  ['a zipped shapefile goes in through the same button and draws',
+    !!shapefileUpload && shapefileUpload.added.length === 32],
+  ['and it reports what it drew',
+    !!shapefileUpload && /32 features/.test(shapefileUpload.note)],
   ['the file\'s own colours and widths reach the map',
     !!kmzUpload && kmzUpload.drawn.some((o) => o.color === '#ff0000' && o.weight === 3)],
   /* PolyStyle's `outline` governs a polygon's edge only. Applied to
