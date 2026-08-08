@@ -213,6 +213,29 @@ UA = {'User-Agent': 'oceansensing.org current map (github.com/oceansensing)'}
 # the published headers.
 REFRESH_HOURS = 6
 
+# How far a chosen frame may sit from the hour it was asked for.
+#
+# **This exists because "the nearest step in this run" is not the same claim
+# as "a step about now", and the difference is a day and a half.** When the
+# newest run's probe failed, `pick_nearest` walked back to the previous run —
+# and a "best" aggregation gives the newer run precedence for every hour it
+# covers, so the older one owns only the hours *before* the newer run starts.
+# Its nearest step to the anchor was therefore its own last hour, 43 hours in
+# the past, and it was published: internally consistent, same run throughout,
+# grid matching its tiles, and useless. Nothing in the contract objected,
+# because the contract checks consistency and had nothing to say about
+# currency.
+#
+# Six hours because the steps are 3-hourly and the window is six: a genuine
+# nearest-step answer lands within 1.5 h of its target, and the second frame
+# falls back to the first when a run stops short, which is 3 h. Anything
+# beyond that is a different day rather than a near miss.
+#
+# A run with nothing near the anchor is skipped, and when no run has one the
+# caller keeps the previous file — stale, and saying so, rather than stale
+# and claiming to be current.
+MAX_FROM_ANCHOR = 6.0
+
 # How many consecutive steps to publish, starting at the one nearest the
 # anchor. Two, so the pair spans the refresh window: a reader is a mean 1.1
 # hours from the nearer of them and at worst 3, against the 19 the fixed
@@ -456,9 +479,26 @@ def serves(index: int) -> bool:
     test rather than assume. Probed with a deliberately tiny slab rather
     than the real fetch: a broken step fails on any read, so 3x3 cells at
     the middle of the grid settle it in about a second against a minute for
-    the global grid. `backoff=(0,)` — a dead step should be rejected
-    quickly, and the retry inside `component` is for transient faults,
-    which is a different question from whether this step exists.
+    the global grid.
+
+    **It retries, and the reasoning it used not to was wrong.** This asked
+    once, on the argument that "a dead step should be rejected quickly, and
+    the retry inside `component` is for transient faults, which is a
+    different question from whether this step exists". The probe cannot
+    tell those apart — that is the whole difficulty — so with one attempt
+    it read every transient 500 as a dead step.
+
+    Measured 2026-08-08, three identical runs minutes apart: step 77 failed
+    and 76 answered; then 76 failed; then both answered. **The same step
+    gave opposite answers within minutes.** The cost of believing the first
+    reading is not a slower run — it is `pick_nearest` walking back to an
+    older run, which in a "best" aggregation holds no hours near the
+    present, and publishing a field **43 hours stale** in place of one four
+    hours old.
+
+    Three spaced tries rather than the full `BACKOFF`: a genuinely dead step
+    should still be rejected in seconds, and this runs once per candidate
+    frame rather than per tile.
 
     Surface only. The levels share a time axis, so a step that serves 0 m
     serves 60 m; probing each depth would multiply the cost of answering
@@ -468,7 +508,7 @@ def serves(index: int) -> bool:
     x = NLON // 2
     try:
         component('water_u', index, LEVELS[0]['index'],
-                  y, y + 4, x, x + 4, 2, 2, backoff=(0,))
+                  y, y + 4, x, x + 4, 2, 2, backoff=PROBE_BACKOFF)
         return True
     except (urllib.error.URLError, TimeoutError, RuntimeError,
             ValueError, OSError) as exc:
@@ -522,12 +562,21 @@ def pick_nearest(offsets: list[float]) -> list[tuple[int, int, str, str]]:
     the ocean.
 
     The newest run wins, and a run that cannot serve its own step is walked
-    past. Note what that degrades: the *valid time* is unchanged, because
-    the step grid is absolute and an older run carries the same hours —
-    only the run stamp moves, and that is published in every header and
-    shown in the map's attribution. The fixed-lead selection below degrades
-    the other way, a whole day of valid time per run, which is what made a
-    probe worth having in the first place.
+    past.
+
+    **What that degrades was stated wrongly here, and the wrong version was
+    the one the code followed.** It said the valid time is unchanged because
+    "the step grid is absolute and an older run carries the same hours".
+    That is true of the model and false of this aggregation: `best` gives the
+    newest run precedence for every hour it covers, so an older run owns only
+    the hours before the newer one begins — a fact recorded elsewhere in
+    CLAUDE.md and contradicted here. Walking back a run does not buy the
+    present; it loses it. Measured 2026-08-08: the fallback published a field
+    43 hours old in place of one four hours old.
+
+    So a candidate frame is now held to `MAX_FROM_ANCHOR` as well as to the
+    probe, and a run with nothing near the anchor is skipped rather than
+    mined for its least-bad step.
 
     Two offsets landing on one step publish one frame rather than the same
     hour twice, which is the honest answer for a model whose steps are
@@ -547,8 +596,18 @@ def pick_nearest(offsets: list[float]) -> list[tuple[int, int, str, str]]:
         chosen: list[int] = []
         for offset in offsets:
             i = min(own, key=lambda k: abs(hours[k] - (anchor + offset)))
+            drift = abs(hours[i] - (anchor + offset))
+            if drift > MAX_FROM_ANCHOR:
+                print(f'  ! {stamp(epoch, run)} run: nearest step to '
+                      f'{stamp(epoch, anchor + offset)} is '
+                      f'{stamp(epoch, hours[i])}, {drift:.0f} h away — '
+                      f'that is a different day, not a near miss',
+                      file=sys.stderr)
+                continue
             if i not in chosen:
                 chosen.append(i)
+        if not chosen:
+            continue
         # Probed in order, and a broken tail is kept rather than rejecting
         # the run: one frame publishes cleanly — the map builds its control
         # from what the data advertises, so a single frame simply offers no
@@ -640,6 +699,12 @@ def pick_leads(leads: list[int]) -> list[tuple[int, int, str, str]]:
 # tiles, because a transient fault is still there a millisecond later. The
 # waiting is the point.
 BACKOFF = (0, 3, 8, 20)
+
+# What `serves()` uses. Shorter than BACKOFF because it runs per candidate
+# frame rather than per tile, and long enough that one transient 500 does not
+# condemn a step — see the note there for what believing a single reading
+# actually cost.
+PROBE_BACKOFF = (0, 2, 5)
 
 
 def component(name: str, t: int, z: int, y0: int, y1: int, x0: int, x1: int,

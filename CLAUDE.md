@@ -3482,10 +3482,52 @@ independently by valid time could straddle two runs, since the same hour
 exists in every run that reaches it, and a reader stepping between those
 two frames would cross from one model state into another and see a
 discontinuity that is not the ocean. A run that cannot serve its step is
-walked past — and note what that degrades now: the *valid time* is
-unchanged, because the 3-hourly grid is absolute and an older run carries
-the same hours, so only the run stamp moves. The fixed-lead selection
-degraded the other way, a whole day of valid time per run.
+walked past.
+
+**What that degrades was stated wrongly here, and the code followed the
+wrong version.** This said the valid time is unchanged because "the
+3-hourly grid is absolute and an older run carries the same hours, so only
+the run stamp moves". Flatly contradicted by the note further down: a
+`best` aggregation gives the newest run precedence for every hour it
+covers, so an older run owns only the hours *before* the newer one begins,
+and its nearest step to the anchor is its own last hour. Measured
+2026-08-08, asked for 08-08 00Z: the 08-05 run offered 08-06 09Z, the
+08-03 run 08-04 09Z, the 08-02 run 08-03 09Z — each a day further back.
+The 08-05 answer was published, **43 hours stale**.
+
+**The cause was the probe, not the fallback.** `serves()` asked once, on
+the argument that a dead step should be rejected quickly and transient
+faults are `component`'s problem — but a probe cannot tell those apart,
+which is the whole difficulty. Measured across three identical runs minutes
+apart: step 77 failed and 76 answered; then 76 failed; then both answered.
+**The same step gave opposite answers within minutes.** One 500 was enough
+to condemn a live run. It retries now — three spaced tries — and four
+consecutive runs afterwards held the current step where two of three had
+degraded.
+
+**`MAX_FROM_ANCHOR` is the backstop**: a frame more than six hours from the
+hour it was asked for is refused, so a run with nothing near the anchor is
+skipped rather than mined for its least-bad step. When no run has one, the
+caller keeps the previous file — stale and saying so, which is the
+documented degradation, rather than stale and internally consistent.
+
+That last distinction is why nothing caught this. **The contract checks
+consistency, not currency.** A 43-hour-old snapshot from a single run, its
+tiles matching and every ESPC hour agreeing, satisfies every rule in
+`schema.ts` — and the same gate had blocked the *fresher* data an hour
+earlier for being inconsistent mid-transition. It rejected the better tree
+and passed the worse one.
+
+In the fields pipeline the bound applies **only when it is choosing its own
+hours**. With `want` set the target is the hour the currents published, so
+the distance measured is cross-product agreement rather than currency — and
+enforcing it there made the selection reject the newest run for sitting 9 h
+from a stale currents hour and fall back to an older run matching it
+exactly. Chasing staleness instead of refusing it, one function along from
+the bug being fixed.
+
+The fixed-lead selection degraded the other way, a whole day of valid time
+per run.
 
 **The fields follow the hours the currents published; they do not
 recompute them.** Both used to work the offset out independently — the

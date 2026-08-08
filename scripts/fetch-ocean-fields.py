@@ -945,6 +945,19 @@ def usable_step(product: dict) -> tuple[str, str, str]:
 # `test-schema.mjs` compares the published headers.
 REFRESH_HOURS = 6
 
+# How far a chosen frame may sit from the hour it was asked for. Mirrors
+# fetch-currents.py — see the long note there. The short version: "the
+# nearest step in this run" and "a step about now" are different claims, and
+# when a probe failure sent the selection back a run they differed by 43
+# hours, which published cleanly because the contract checks consistency and
+# says nothing about currency.
+MAX_FROM_ANCHOR = 6.0
+
+# What `serves()` waits between probe attempts. `fetch` here has no retry of
+# its own — this file's retry is around each tile — so without this a single
+# transient 500 rejects a live step.
+PROBE_BACKOFF = (0, 2, 5)
+
 # The window the currents publish, mirrored. `FRAMES` in fetch-currents.py
 # takes this many consecutive steps from the anchor and publishes all of
 # them; this file resolves the same window and publishes **only the last
@@ -1016,14 +1029,28 @@ def serves(product: dict, index: int) -> bool:
     to test. Probed off the middle of *this product's* grid: fixed indices do
     not work, since 2000 sits inside the Navy model's 4251 latitudes and
     outside OISST's 720.
+
+    **It retries**, because `fetch` does not — the retry in this file sits
+    around each *tile*, so a single transient 500 here used to condemn a step
+    that was perfectly alive. Measured 2026-08-08 on the sibling pipeline,
+    where the probe had the same shape: the same step gave opposite answers
+    minutes apart, and believing the first reading published a field 43 hours
+    stale. See `fetch-currents.py`'s `serves` for the full account.
     """
     y, x = product['nlat'] // 2, product['nlon'] // 2
-    try:
-        fetch(product, str(index), y, y + 4, x, x + 4, 2, 2)
-        return True
-    except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError, OSError) as exc:
-        print(f'  step {index} unusable: {exc}', file=sys.stderr)
-        return False
+    last: Exception | None = None
+    for wait in PROBE_BACKOFF:
+        if wait:
+            time.sleep(wait)
+        try:
+            fetch(product, str(index), y, y + 4, x, x + 4, 2, 2)
+            return True
+        except (urllib.error.URLError, TimeoutError, RuntimeError,
+                ValueError, OSError) as exc:
+            last = exc
+    print(f'  step {index} unusable after {len(PROBE_BACKOFF)} tries: {last}',
+          file=sys.stderr)
+    return False
 
 
 def step_offsets(count: int) -> list[float]:
@@ -1113,8 +1140,27 @@ def nearest_steps(product: dict, offsets: list[float],
         chosen: list[int] = []
         for offset in offsets:
             i = min(own, key=lambda k: abs(hours[k] - (anchor + offset)))
+            drift = abs(hours[i] - (anchor + offset))
+            # Only when this file is choosing its own hours. With `want`
+            # set the target *is* the hour the currents published, so the
+            # distance being measured is cross-product agreement rather than
+            # currency — and the currents have already been held to this same
+            # bound before they published it. Enforcing it here as well made
+            # the selection reject the newest run for being 9 h from a stale
+            # currents hour and fall back to an older run that matched it
+            # exactly, which is backwards: it chased staleness instead of
+            # refusing it.
+            if not want and drift > MAX_FROM_ANCHOR:
+                print(f'  ! {hour_stamp(epoch, run)} run: nearest step to '
+                      f'{hour_stamp(epoch, anchor + offset)} is '
+                      f'{hour_stamp(epoch, hours[i])}, {drift:.0f} h away — '
+                      f'that is a different day, not a near miss',
+                      file=sys.stderr)
+                continue
             if i not in chosen:
                 chosen.append(i)
+        if not chosen:
+            continue
         usable = []
         for i in chosen:
             if not serves(product, i):
