@@ -1,0 +1,16 @@
+# Development only — CI never installs these, and must not start.
+#
+# `scripts/make-slocum-fixture.py` records what dbdreader says about the
+# committed fixture files so that `npm run test:slocum` can check
+# `packages/slocum` against it with no Python and no network. The fixture is
+# committed; this file is here for whoever needs to re-record it.
+#
+# scipy is not used by the fixture recorder, but dbdreader imports it at
+# module load, so it has to be present.
+#
+# lz4 is the independent reference for the compressed-cache path, which
+# dbdreader does not read. Two implementations of a published block format.
+dbdreader>=0.5.8
+numpy>=1.26
+scipy>=1.11
+lz4>=4.3

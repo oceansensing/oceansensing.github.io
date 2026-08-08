@@ -331,10 +331,10 @@ them, a reader could see model and observations disagree. It needs no new
 dependency and shares the repository. Argo is the precedent for the
 renderer; the thinning rule needs measuring rather than guessing.
 
-## The two calculators
+## The two calculators, and the decoder
 
-Both are new and both carry an under-test notice; the language on them is
-factual rather than instructional.
+All three are new and all three carry an under-test notice; the language on
+them is factual rather than instructional.
 
 `/data/seawater/` evaluates the TEOS-10 Gibbs function directly — IAPWS-09,
 IAPWS-08, and IAPWS-06 for the freezing point — rather than the 75-term
@@ -352,7 +352,45 @@ reading, the neutral density, the ballasted mass, a row per point, and whether
 the buoyancy engine can surface and dive. The arithmetic is
 `packages/glider-ballast`.
 
+`/data/slocum/` decodes the Slocum glider binary family — `sbd`, `tbd`,
+`mbd`, `nbd`, `dbd`, `ebd` and their LZ4-compressed twins — to CSV or
+netCDF-3 classic, entirely in the browser. The decoder is `packages/slocum`,
+a port of `SlocumIO.jl` checked against `dbdreader` by SHA-256 over every
+sensor's raw bytes. It can add seawater properties from the CTD through
+`packages/teos10`, marked as derived and named for what they actually are —
+`salinity_reference` rather than `salinity_absolute` when the anomaly could
+not be applied.
+
 ### Open on the calculators
+
+### Open on the decoder
+
+- **It is checked against one glider and one deployment.** The fixture is a
+  matched flight/science pair from electa (MARACOOS, May 2025). The format has
+  no specification to check against instead, so breadth of real files is the
+  only way this gets stronger — a Seaglider-era `dbd`, a file from a glider
+  with a different science payload, or anything with a `dbd` rather than an
+  `sbd` would each be worth adding.
+- **No compressed *data* file has ever been decoded by it.** The LZ4 path is
+  gated through a `.ccc` cache, which is the same code, but the deployment to
+  hand holds no `.scd`/`.tcd`. One would close that.
+- **Two decode paths are correct by construction rather than by test**, and
+  both are named in CLAUDE.md: clearing the state buffer when `4 ×
+  state_bytes_per_cycle` is fewer than the sensor count, and the signedness of
+  1-byte sensors. Neither is exercised by these fixtures; the second is
+  asserted to *stay* unexercised, so a future fixture that carries a large
+  1-byte value fails the gate and prompts a real check.
+- **It reads, and does not process.** No thermal-lag correction, no despiking,
+  no quality control, no gridding, and it does not write the IOOS Glider DAC's
+  trajectory format. Each of those is a separate piece of work and only the
+  DAC format has an obvious specification to follow.
+- **Whole-deployment performance is untested.** Files are decoded one at a
+  time with a yield between them, and the table is a dense matrix capped at
+  500,000 rows with a note when it truncates. Hundreds of files at once has
+  not been tried against a real directory.
+- **It has not been used in anger either.** The under-test notice comes off
+  when someone has decoded a deployment they know and compared it against
+  whatever they normally use.
 
 - **No vehicle carries manufacturer data.** All four families ship
   illustrative values — masses are round figures, volumes are the mass over

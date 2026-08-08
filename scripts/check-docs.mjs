@@ -31,6 +31,7 @@ const DOCS = [
      else, so its README is the hand-off and nobody reads it week to week. */
   'packages/teos10/README.md',
   'packages/glider-ballast/README.md',
+  'packages/slocum/README.md',
 ];
 const WORKFLOW = '.github/workflows/deploy.yml';
 

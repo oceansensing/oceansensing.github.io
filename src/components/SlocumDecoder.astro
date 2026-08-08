@@ -1,0 +1,1286 @@
+---
+/**
+ * The Slocum decoder's interface. The decoding itself is `@c4po/slocum`;
+ * this is its placement, the same split the map and the two calculators use.
+ *
+ * **Nothing is uploaded.** Every byte is read with `FileReader` and decoded in
+ * the page, which is not a detail — glider data is routinely embargoed until a
+ * deployment is written up, and "it runs in your browser" is the difference
+ * between a tool an operator may use and one they may not.
+ *
+ * The interface's whole difficulty is the sensor-list cache. A file off a
+ * glider is *factored*: it names an eight-character CRC and carries no sensor
+ * list of its own, so without the matching `<crc>.cac` it cannot be decoded at
+ * all — not partially, not approximately. That is the first thing most readers
+ * will hit, so the missing cache is reported by name, and caches once supplied
+ * are kept in IndexedDB so it is a one-time step rather than a per-visit one.
+ */
+import Disclaimer from './Disclaimer.astro';
+---
+
+<section class="decoder" data-slocum>
+  <Disclaimer tool="decoder">
+    It is checked against <code>dbdreader</code> value for value on a matched
+    flight/science pair, and that is one glider and one deployment.
+  </Disclaimer>
+
+  <div class="pick">
+    <label class="drop" data-drop>
+      <input
+        type="file"
+        multiple
+        data-files
+        accept=".sbd,.tbd,.mbd,.nbd,.dbd,.ebd,.scd,.tcd,.mcd,.ncd,.dcd,.ecd,.cac,.ccc"
+      />
+      <span class="drop-title">Choose glider files, or drop them here</span>
+      <span class="drop-sub">
+        <code>sbd</code> <code>tbd</code> <code>mbd</code> <code>nbd</code> <code>dbd</code> <code>ebd</code>, compressed or not — and the <code>cache</code> directory they need. Nothing leaves this machine.
+      </span>
+    </label>
+
+    <p class="cache-state" data-cache-state>
+      No sensor-list caches held yet.
+    </p>
+  </div>
+
+  <p class="problem" data-problem hidden></p>
+
+  <div class="results" data-results hidden>
+    <div class="summary" data-summary></div>
+
+    <div class="controls">
+      <div class="control">
+        <label for="slocum-join">Rows</label>
+        <select id="slocum-join" data-join>
+          <option value="union" selected>Every time any sensor reported</option>
+          <option value="interpolate">One sensor's times, others interpolated</option>
+        </select>
+      </div>
+
+      <div class="control" data-base-control hidden>
+        <label for="slocum-base">Time base</label>
+        <select id="slocum-base" data-base></select>
+      </div>
+
+      <div class="control checkbox">
+        <input type="checkbox" id="slocum-derive" data-derive />
+        <label for="slocum-derive">Add seawater properties from the CTD</label>
+      </div>
+    </div>
+
+    <div class="charts" data-charts hidden>
+      <figure>
+        <svg viewBox="0 0 640 220" role="img" data-chart-dive>
+          <title>Depth against time</title>
+        </svg>
+        <figcaption data-dive-caption></figcaption>
+      </figure>
+      <figure>
+        <div class="profile-pick">
+          <label for="slocum-profile">Profile</label>
+          <select id="slocum-profile" data-profile></select>
+        </div>
+        <svg viewBox="0 0 320 220" role="img" data-chart-profile>
+          <title>The selected sensor against depth</title>
+        </svg>
+        <figcaption data-profile-caption></figcaption>
+      </figure>
+    </div>
+
+    <details class="sensors" data-sensor-panel>
+      <summary>
+        <span data-sensor-count></span>
+      </summary>
+      <div class="sensor-tools">
+        <input type="search" data-sensor-filter placeholder="Filter by name or unit" />
+        <button type="button" data-select-all>All</button>
+        <button type="button" data-select-none>None</button>
+      </div>
+      <div class="sensor-list" data-sensor-list></div>
+    </details>
+
+    <div class="preview">
+      <div class="preview-head">
+        <h3>Preview</h3>
+        <span data-preview-note></span>
+      </div>
+      <div class="table-scroll">
+        <table data-preview></table>
+      </div>
+    </div>
+
+    <ul class="notes" data-notes></ul>
+
+    <div class="download">
+      <button type="button" data-csv>Download CSV</button>
+      <button type="button" data-netcdf>Download netCDF</button>
+      <span class="download-note" data-download-note></span>
+    </div>
+  </div>
+</section>
+
+<style>
+  .decoder {
+    margin-block: var(--space-lg);
+  }
+
+  /* ---- picking files ---------------------------------------------------- */
+
+  .drop {
+    display: block;
+    padding: var(--space-lg) var(--space-md);
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-subtle);
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .drop:hover,
+  .drop:focus-within,
+  .drop.over {
+    border-color: var(--accent);
+  }
+
+  .drop input {
+    /* Visually hidden, but still the label's control, so a click on the whole
+       box opens the picker and the keyboard still reaches it. */
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .drop-title {
+    display: block;
+    font-weight: 600;
+    margin-block-end: var(--space-2xs);
+  }
+
+  .drop-sub {
+    display: block;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    max-inline-size: 52ch;
+    margin-inline: auto;
+  }
+
+  .drop-sub code,
+  .cache-state code,
+  .problem code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+
+  .cache-state {
+    margin-block: var(--space-xs) 0;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  .problem {
+    margin-block: var(--space-md) 0;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--border);
+    border-inline-start: 4px solid var(--accent);
+    border-radius: var(--radius);
+    background: var(--bg-subtle);
+    font-size: var(--text-sm);
+  }
+
+  /* ---- results ---------------------------------------------------------- */
+
+  .results {
+    margin-block-start: var(--space-lg);
+  }
+
+  .summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-md);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-block-end: var(--space-md);
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    align-items: end;
+    margin-block-end: var(--space-md);
+  }
+
+  .control {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+    font-size: var(--text-sm);
+  }
+
+  .control.checkbox {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+
+  .control label {
+    color: var(--text-muted);
+  }
+
+  .control select,
+  .sensor-tools input,
+  .profile-pick select {
+    font: inherit;
+    font-size: var(--text-sm);
+    padding: var(--space-2xs) var(--space-xs);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    min-inline-size: 0;
+  }
+
+  /* ---- charts ----------------------------------------------------------- */
+
+  .charts {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: var(--space-md);
+    margin-block-end: var(--space-md);
+  }
+
+  .charts figure {
+    margin: 0;
+    min-inline-size: 0;
+  }
+
+  .charts svg {
+    inline-size: 100%;
+    block-size: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-subtle);
+  }
+
+  .charts figcaption {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-block-start: var(--space-2xs);
+  }
+
+  .profile-pick {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-block-end: var(--space-2xs);
+  }
+
+  .profile-pick select {
+    flex: 1 1 auto;
+  }
+
+  /* ---- sensors ---------------------------------------------------------- */
+
+  .sensors {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-xs) var(--space-sm);
+    margin-block-end: var(--space-md);
+    font-size: var(--text-sm);
+  }
+
+  .sensors summary {
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+
+  .sensor-tools {
+    display: flex;
+    gap: var(--space-xs);
+    margin-block: var(--space-sm) var(--space-xs);
+  }
+
+  .sensor-tools input {
+    flex: 1 1 auto;
+  }
+
+  .sensor-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+    gap: 0 var(--space-md);
+    max-block-size: max(12rem, 40svh);
+    overflow-y: auto;
+  }
+
+  /* ---- preview ---------------------------------------------------------- */
+
+  .preview-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-xs) var(--space-sm);
+  }
+
+  .preview-head h3 {
+    font-size: var(--text-base);
+    margin: 0;
+  }
+
+  .preview-head span {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  .table-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-block: var(--space-xs) var(--space-md);
+    max-block-size: 26rem;
+    overflow-y: auto;
+  }
+
+  /* ---- notes and downloads ---------------------------------------------- */
+
+  .notes {
+    margin-block: 0 var(--space-md);
+    padding-inline-start: 1.2em;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    max-inline-size: var(--prose-width);
+  }
+
+  .notes[hidden] {
+    display: none;
+  }
+
+  .download {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs) var(--space-sm);
+  }
+
+  .download button,
+  .sensor-tools button {
+    /* iOS Safari applies its own button chrome — a grey rounded rect that
+       overrides both background and border-radius — so a button styled here
+       comes out looking like nothing on a phone unless the UA style is
+       switched off first. */
+    appearance: none;
+    font: inherit;
+    font-size: var(--text-sm);
+    padding: var(--space-2xs) var(--space-sm);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-subtle);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .download button {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast);
+    font-weight: 600;
+  }
+
+  .download button:hover {
+    background: var(--accent-strong);
+    border-color: var(--accent-strong);
+  }
+
+  .download button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .download-note {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  /* `[hidden]` is one selector and so is any class rule that sets `display`,
+     so author order decides and the element stays on screen. Everything the
+     script hides needs this stated. */
+  .results[hidden],
+  .charts[hidden],
+  .control[hidden],
+  .problem[hidden] {
+    display: none;
+  }
+
+  @media (max-width: 48rem) {
+    .charts {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<style is:global>
+  /*
+   * Everything below styles elements this component creates at *runtime* —
+   * the two charts' paths, the sensor checkboxes, the preview table, the notes
+   * and the summary.
+   *
+   * They cannot live in the scoped block above. Astro scopes a component's
+   * styles by stamping a `data-astro-cid-…` attribute onto the elements in its
+   * markup and rewriting every selector to require it; an element made later
+   * by `createElement` never gets that attribute, so a scoped rule cannot
+   * match it. Nothing errors. The elements simply render with the browser's
+   * defaults, which for an SVG `<path>` means filled black with no stroke —
+   * so the dive plot came out as a solid black blob and the whole sensor list
+   * as unstyled text. Found by reading `getComputedStyle`, not by looking:
+   * unstyled chrome looks like a design decision.
+   *
+   * Every selector is therefore anchored to `[data-slocum]`, which *is* in the
+   * markup, so these rules reach the runtime elements without leaking into the
+   * rest of the site.
+   */
+
+  /* An SVG path fills by default, so a two-legged axis renders as a solid
+     triangle. The seawater calculator's T–S diagram shipped exactly that. */
+  [data-slocum] .axis,
+  [data-slocum] .trace {
+    fill: none;
+  }
+
+  [data-slocum] .axis {
+    stroke: var(--border);
+    stroke-width: 1;
+  }
+
+  [data-slocum] .trace {
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+  }
+
+  [data-slocum] .tick {
+    fill: var(--text-muted);
+    font-size: 11px;
+    font-family: var(--font-sans);
+  }
+
+  [data-slocum] .summary strong {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-slocum] .sensor-list label {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2xs);
+    padding-block: 2px;
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+  }
+
+  /* `[hidden]` is one selector and so is the rule above, so without this the
+     filter would leave every sensor on screen. */
+  [data-slocum] .sensor-list label[hidden] {
+    display: none;
+  }
+
+  [data-slocum] .sensor-list .unit {
+    color: var(--text-muted);
+    font-size: 0.9em;
+  }
+
+  [data-slocum] .sensor-list .derived {
+    color: var(--accent);
+  }
+
+  [data-slocum] .notes li {
+    margin-block-end: var(--space-2xs);
+  }
+
+  [data-slocum] table {
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  [data-slocum] th,
+  [data-slocum] td {
+    padding: 2px var(--space-xs);
+    text-align: right;
+    border-block-end: 1px solid var(--border);
+  }
+
+  [data-slocum] th {
+    position: sticky;
+    inset-block-start: 0;
+    background: var(--bg-subtle);
+    text-align: right;
+    font-weight: 600;
+  }
+
+  [data-slocum] th.derived {
+    color: var(--accent);
+  }
+
+  [data-slocum] td.blank {
+    color: var(--border);
+  }
+</style>
+
+<script>
+  import {
+    buildTable,
+    decompressStream,
+    deriveSeawater,
+    describe,
+    exportName,
+    familyOf,
+    isCompressedName,
+    MissingCacheError,
+    openDbd,
+    readSeries,
+    sortFileNames,
+    toCsv,
+    toNetcdf,
+    type Column,
+    type Series,
+    type Table,
+  } from '@c4po/slocum';
+  import { ATLAS_URL, loadAtlas, type SalinityAtlas } from '@c4po/teos10';
+
+  const root = document.querySelector<HTMLElement>('[data-slocum]');
+  if (root) start(root);
+
+  function start(root: HTMLElement) {
+    // Defaults to HTMLElement, but widened to Element so the two charts can
+    // ask for SVGSVGElement — which is not an HTMLElement.
+    const find = <T extends Element = HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
+
+    const input = find<HTMLInputElement>('[data-files]');
+    const drop = find('[data-drop]');
+    const cacheState = find('[data-cache-state]');
+    const problem = find('[data-problem]');
+    const results = find('[data-results]');
+    const summary = find('[data-summary]');
+    const joinSelect = find<HTMLSelectElement>('[data-join]');
+    const baseControl = find('[data-base-control]');
+    const baseSelect = find<HTMLSelectElement>('[data-base]');
+    const deriveBox = find<HTMLInputElement>('[data-derive]');
+    const charts = find('[data-charts]');
+    const diveSvg = find<SVGSVGElement>('[data-chart-dive]');
+    const diveCaption = find('[data-dive-caption]');
+    const profileSvg = find<SVGSVGElement>('[data-chart-profile]');
+    const profileSelect = find<HTMLSelectElement>('[data-profile]');
+    const profileCaption = find('[data-profile-caption]');
+    const sensorCount = find('[data-sensor-count]');
+    const sensorFilter = find<HTMLInputElement>('[data-sensor-filter]');
+    const sensorList = find('[data-sensor-list]');
+    const previewNote = find('[data-preview-note]');
+    const previewTable = find<HTMLTableElement>('[data-preview]');
+    const notesList = find('[data-notes]');
+    const csvButton = find<HTMLButtonElement>('[data-csv]');
+    const ncButton = find<HTMLButtonElement>('[data-netcdf]');
+    const downloadNote = find('[data-download-note]');
+
+    /** `<crc>` → the text of its cache file. */
+    const caches = new Map<string, string>();
+    /** Decoded data files, in deployment order. */
+    let decoded: { name: string; series: Series[] }[] = [];
+    /** Data files that arrived without the cache they need. */
+    let pending: { name: string; crc: string }[] = [];
+    let selected = new Set<string>();
+    let everySensor: string[] = [];
+    let table: Table | null = null;
+    let atlas: SalinityAtlas | null = null;
+
+    const PREVIEW_ROWS = 200;
+
+    // ---- the cache store ---------------------------------------------------
+    //
+    // IndexedDB rather than localStorage: a cache file is 4-120 KB of text and
+    // a glider's directory holds a dozen, which is most of localStorage's ~5 MB
+    // before any margin. Every call resolves rather than rejecting, so a reader
+    // in private browsing gets a decoder that works and forgets, not one that
+    // fails to start.
+
+    const DB = 'c4po-slocum';
+    const STORE = 'caches';
+
+    function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest): Promise<T | null> {
+      return new Promise((resolve) => {
+        let request: IDBOpenDBRequest;
+        try {
+          request = indexedDB.open(DB, 1);
+        } catch {
+          resolve(null);
+          return;
+        }
+        request.onupgradeneeded = () => request.result.createObjectStore(STORE);
+        request.onerror = () => resolve(null);
+        request.onsuccess = () => {
+          const db = request.result;
+          try {
+            const op = run(db.transaction(STORE, mode).objectStore(STORE));
+            op.onsuccess = () => resolve(op.result as T);
+            op.onerror = () => resolve(null);
+          } catch {
+            resolve(null);
+          }
+        };
+      });
+    }
+
+    async function rememberCache(crc: string, text: string) {
+      caches.set(crc, text);
+      await withStore('readwrite', (store) => store.put(text, crc));
+    }
+
+    async function recallCaches() {
+      const keys = (await withStore<IDBValidKey[]>('readonly', (s) => s.getAllKeys())) ?? [];
+      const values = (await withStore<string[]>('readonly', (s) => s.getAll())) ?? [];
+      keys.forEach((key, i) => {
+        if (typeof key === 'string' && typeof values[i] === 'string') caches.set(key, values[i]);
+      });
+      showCaches();
+    }
+
+    function showCaches() {
+      const held = [...caches.keys()].sort();
+      cacheState.textContent = held.length
+        ? `${held.length} sensor-list cache${held.length === 1 ? '' : 's'} held, and kept for next time: ${held.join(', ')}.`
+        : 'No sensor-list caches held yet. A file off a glider carries no sensor list, so its .cac is needed to read it.';
+    }
+
+    // ---- taking files ------------------------------------------------------
+
+    input.addEventListener('change', () => {
+      if (input.files) void take([...input.files]);
+    });
+
+    for (const type of ['dragenter', 'dragover'] as const) {
+      drop.addEventListener(type, (event) => {
+        event.preventDefault();
+        drop.classList.add('over');
+      });
+    }
+    for (const type of ['dragleave', 'drop'] as const) {
+      drop.addEventListener(type, () => drop.classList.remove('over'));
+    }
+    drop.addEventListener('drop', (event) => {
+      event.preventDefault();
+      const dropped = event.dataTransfer?.files;
+      if (dropped?.length) void take([...dropped]);
+    });
+
+    async function take(chosen: File[]) {
+      say('Reading…');
+
+      // Caches first, always: a data file cannot be decoded without one, and a
+      // reader who selects a whole deployment directory hands over both at
+      // once in whatever order the browser lists them.
+      const cacheFiles = chosen.filter((f) => familyOf(f.name) === 'cache');
+      const dataFiles = chosen.filter((f) => familyOf(f.name) !== 'cache' && familyOf(f.name) !== 'unknown');
+      const ignored = chosen.length - cacheFiles.length - dataFiles.length;
+
+      for (const file of cacheFiles) {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const text = new TextDecoder('ascii').decode(
+          isCompressedName(file.name) ? decompressStream(bytes) : bytes,
+        );
+        const crc = file.name.replace(/\.[^.]*$/, '').toLowerCase();
+        await rememberCache(crc, text);
+      }
+      showCaches();
+
+      const order = sortFileNames(dataFiles.map((f) => f.name));
+      const byName = new Map(dataFiles.map((f) => [f.name, f]));
+      const fresh: typeof decoded = [];
+      const missing: typeof pending = [];
+      const broken: string[] = [];
+
+      for (const name of order) {
+        const file = byName.get(name)!;
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        try {
+          const header = describe(bytes, name);
+          const crc = header.sensorListCrc.toLowerCase();
+          const cache = caches.get(crc);
+          if (header.sensorListFactored !== 0 && !cache) {
+            missing.push({ name, crc });
+            continue;
+          }
+          const opened = openDbd(bytes, { name, cache });
+          fresh.push({ name, series: readSeries(opened) });
+        } catch (error) {
+          if (error instanceof MissingCacheError) missing.push({ name, crc: error.crc });
+          else broken.push(`${name}: ${(error as Error).message}`);
+        }
+        // Let the page paint between files: a whole deployment is hundreds of
+        // them and a single synchronous loop would freeze the tab.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+
+      decoded = fresh;
+      pending = missing;
+      report(broken, ignored);
+      if (decoded.length > 0) rebuild(true);
+      else results.hidden = true;
+    }
+
+    function report(broken: string[], ignored: number) {
+      const lines: string[] = [];
+      if (pending.length > 0) {
+        const wanted = [...new Set(pending.map((p) => p.crc))].sort();
+        lines.push(
+          `${pending.length} file(s) need a sensor-list cache that is not here: ` +
+            `${wanted.map((c) => `<code>${c}.cac</code>`).join(', ')}. ` +
+            'It is in the glider\'s <code>cache</code> directory, or in the ' +
+            'deployment directory the dockserver wrote. Add it and they will decode.',
+        );
+      }
+      for (const line of broken) lines.push(line);
+      if (ignored > 0) {
+        lines.push(`${ignored} file(s) were not Slocum files and were skipped.`);
+      }
+      problem.innerHTML = lines.join('<br />');
+      problem.hidden = lines.length === 0;
+    }
+
+    function say(message: string) {
+      problem.textContent = message;
+      problem.hidden = false;
+    }
+
+    // ---- building the table ------------------------------------------------
+
+    joinSelect.addEventListener('change', () => {
+      baseControl.hidden = joinSelect.value !== 'interpolate';
+      rebuild();
+    });
+    deriveBox.addEventListener('change', () => void wantDerived());
+    baseSelect.addEventListener('change', () => rebuild());
+    profileSelect.addEventListener('change', () => drawProfile());
+    sensorFilter.addEventListener('input', () => filterSensors());
+    find('[data-select-all]').addEventListener('click', () => setAll(true));
+    find('[data-select-none]').addEventListener('click', () => setAll(false));
+
+    async function wantDerived() {
+      if (deriveBox.checked && !atlas) {
+        downloadNote.textContent = 'Fetching the Absolute Salinity anomaly atlas…';
+        try {
+          atlas = await loadAtlas(ATLAS_URL);
+          downloadNote.textContent = '';
+        } catch {
+          atlas = null;
+          downloadNote.textContent =
+            'The anomaly atlas could not be fetched, so salinity is reported as Reference Salinity.';
+        }
+      }
+      rebuild();
+    }
+
+    function rebuild(fresh = false) {
+      const all = decoded.flatMap((d) => d.series);
+      if (all.length === 0) return;
+
+      // The rows are the union of the *selected* sensors' times, so the table
+      // narrows as the selection does rather than keeping rows nothing fills.
+      const wanted = fresh ? all : all.filter((s) => selected.has(columnName(s, all)));
+      const source = wanted.length > 0 ? wanted : all;
+
+      const join = joinSelect.value === 'interpolate' ? 'interpolate' : 'union';
+      const built = buildTable(source, { join, base: baseSelect.value || undefined });
+
+      const notes = [...built.notes];
+      if (deriveBox.checked) {
+        const { columns, notes: why } = deriveSeawater(built, { atlas });
+        built.columns.push(...columns);
+        notes.push(...why);
+      }
+      built.notes = notes;
+      table = built;
+
+      if (fresh) {
+        everySensor = built.columns.map((c) => c.name);
+        selected = new Set(everySensor);
+        fillBaseOptions(built);
+        drawSensorList(built);
+      } else {
+        mergeSensorList(built);
+      }
+
+      showSummary();
+      drawPreview();
+      drawNotes();
+      fillProfileOptions();
+      drawCharts();
+      results.hidden = false;
+    }
+
+    /** What `buildTable` will call this series, suffix and all. */
+    function columnName(series: Series, all: Series[]): string {
+      const ext = (series.from ?? '').split('.').pop()?.toLowerCase() ?? '';
+      const clash = all.some(
+        (other) =>
+          other.name === series.name &&
+          (other.from ?? '').split('.').pop()?.toLowerCase() !== ext,
+      );
+      return clash && ext ? `${series.name}_${ext}` : series.name;
+    }
+
+    function fillBaseOptions(built: Table) {
+      const dense = [...built.columns]
+        .map((c) => ({ name: c.name, n: countFinite(c.values) }))
+        .sort((a, b) => b.n - a.n)
+        .slice(0, 40);
+      baseSelect.innerHTML = '';
+      for (const { name, n } of dense) {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = `${name} (${n.toLocaleString()} samples)`;
+        baseSelect.append(option);
+      }
+    }
+
+    function fillProfileOptions() {
+      if (!table) return;
+      const previous = profileSelect.value;
+      const usable = table.columns.filter((c) => countFinite(c.values) > 4);
+      profileSelect.innerHTML = '';
+      for (const column of usable) {
+        const option = document.createElement('option');
+        option.value = column.name;
+        option.textContent = column.unit ? `${column.name} (${column.unit})` : column.name;
+        profileSelect.append(option);
+      }
+      const preferred =
+        usable.find((c) => c.name === previous)?.name ??
+        usable.find((c) => /water_temp/.test(c.name))?.name ??
+        usable.find((c) => /salinity_practical/.test(c.name))?.name ??
+        usable[0]?.name;
+      if (preferred) profileSelect.value = preferred;
+    }
+
+    // ---- the sensor list ---------------------------------------------------
+
+    function drawSensorList(built: Table) {
+      sensorList.innerHTML = '';
+      for (const column of built.columns) sensorList.append(sensorRow(column));
+      updateSensorCount();
+    }
+
+    function mergeSensorList(built: Table) {
+      // Derived columns come and go with the checkbox; recorded ones do not.
+      const known = new Set([...sensorList.querySelectorAll('label')].map((l) => l.dataset.name));
+      for (const column of built.columns) {
+        if (!known.has(column.name)) {
+          selected.add(column.name);
+          everySensor.push(column.name);
+          sensorList.append(sensorRow(column));
+        }
+      }
+      updateSensorCount();
+    }
+
+    function sensorRow(column: Column): HTMLLabelElement {
+      const label = document.createElement('label');
+      label.dataset.name = column.name;
+      label.dataset.unit = column.unit;
+
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = selected.has(column.name);
+      box.addEventListener('change', () => {
+        if (box.checked) selected.add(column.name);
+        else selected.delete(column.name);
+        updateSensorCount();
+        rebuild();
+      });
+
+      const name = document.createElement('span');
+      name.textContent = column.name;
+      if (column.source === 'derived') name.className = 'derived';
+
+      const unit = document.createElement('span');
+      unit.className = 'unit';
+      unit.textContent = column.unit ? `(${column.unit})` : '';
+
+      label.append(box, name, unit);
+      return label;
+    }
+
+    function setAll(on: boolean) {
+      for (const box of sensorList.querySelectorAll<HTMLInputElement>('input')) {
+        const label = box.closest('label')!;
+        if (label.hidden) continue; // the filter's job is to narrow this too
+        box.checked = on;
+        const name = label.dataset.name!;
+        if (on) selected.add(name);
+        else selected.delete(name);
+      }
+      updateSensorCount();
+      rebuild();
+    }
+
+    function filterSensors() {
+      const needle = sensorFilter.value.trim().toLowerCase();
+      for (const label of sensorList.querySelectorAll<HTMLLabelElement>('label')) {
+        const haystack = `${label.dataset.name} ${label.dataset.unit}`.toLowerCase();
+        label.hidden = needle.length > 0 && !haystack.includes(needle);
+      }
+    }
+
+    function updateSensorCount() {
+      sensorCount.textContent = `Sensors — ${selected.size} of ${everySensor.length} selected`;
+    }
+
+    // ---- what is on screen -------------------------------------------------
+
+    function showSummary() {
+      if (!table) return;
+      const span = table.rows > 0 ? `${stamp(table.time[0])} → ${stamp(table.time[table.rows - 1])}` : '—';
+      const files = decoded.length;
+      const flight = decoded.filter((d) => familyOf(d.name) === 'flight').length;
+      summary.innerHTML =
+        `<span><strong>${files}</strong> file${files === 1 ? '' : 's'} ` +
+        `(${flight} flight, ${files - flight} science)</span>` +
+        `<span><strong>${table.rows.toLocaleString()}</strong> rows</span>` +
+        `<span><strong>${table.columns.length}</strong> columns</span>` +
+        `<span>${span} UTC</span>`;
+    }
+
+    function drawNotes() {
+      notesList.innerHTML = '';
+      for (const note of table?.notes ?? []) {
+        const item = document.createElement('li');
+        item.textContent = note;
+        notesList.append(item);
+      }
+      notesList.hidden = (table?.notes.length ?? 0) === 0;
+    }
+
+    function drawPreview() {
+      if (!table) return;
+      const columns = table.columns.filter((c) => selected.has(c.name));
+      const rows = Math.min(table.rows, PREVIEW_ROWS);
+      previewNote.textContent =
+        `first ${rows.toLocaleString()} of ${table.rows.toLocaleString()} rows` +
+        (columns.length < table.columns.length
+          ? `, ${columns.length} of ${table.columns.length} columns`
+          : '');
+
+      const head = document.createElement('thead');
+      const headRow = document.createElement('tr');
+      for (const label of ['time_utc', ...columns.map((c) => (c.unit ? `${c.name} (${c.unit})` : c.name))]) {
+        const th = document.createElement('th');
+        th.textContent = label;
+        headRow.append(th);
+      }
+      columns.forEach((column, i) => {
+        if (column.source === 'derived') headRow.children[i + 1].className = 'derived';
+      });
+      head.append(headRow);
+
+      const body = document.createElement('tbody');
+      for (let r = 0; r < rows; r++) {
+        const tr = document.createElement('tr');
+        const when = document.createElement('td');
+        when.textContent = stamp(table.time[r]);
+        tr.append(when);
+        for (const column of columns) {
+          const td = document.createElement('td');
+          const v = column.values[r];
+          if (Number.isFinite(v)) {
+            td.textContent = short(v);
+          } else {
+            // Blank, and marked as blank rather than as a zero: a union table
+            // is mostly empty by nature and that is the honest picture.
+            td.textContent = '·';
+            td.className = 'blank';
+          }
+          tr.append(td);
+        }
+        body.append(tr);
+      }
+
+      previewTable.innerHTML = '';
+      previewTable.append(head, body);
+    }
+
+    // ---- the charts --------------------------------------------------------
+    //
+    // Not decoration: a wrong cache file produces a table of plausible floats,
+    // and the fastest way to see that something is wrong is that the dive does
+    // not look like a dive.
+
+    function drawCharts() {
+      if (!table) {
+        charts.hidden = true;
+        return;
+      }
+      const depth = depthColumn(table);
+      charts.hidden = !depth;
+      if (depth) drawDive(depth);
+      drawProfile();
+    }
+
+    /**
+     * Whatever this file set has that stands for depth, in metres.
+     *
+     * `against` matters more than it looks. A union table puts each computer's
+     * samples on their own rows, so the flight computer's `m_pressure` and the
+     * science computer's `sci_water_temp` share no row at all — and picking
+     * depth by name order gave a profile chart that was correctly empty and
+     * looked broken. The depth that goes with a sensor is the one written on
+     * the same cycles as it, so the candidates are scored by how often they
+     * actually co-occur rather than ranked by preference.
+     */
+    function depthColumn(
+      built: Table,
+      against?: Column,
+    ): { values: Float64Array; label: string } | null {
+      const candidates: { values: Float64Array; label: string; own: Float64Array }[] = [];
+      for (const column of built.columns) {
+        if (/^m_depth(_[a-z]{3})?$/.test(column.name)) {
+          candidates.push({ values: column.values, label: `${column.name} (m)`, own: column.values });
+        } else if (/water_pressure|^m_pressure/.test(column.name)) {
+          // Pressure in bar is within a percent of depth in metres over the
+          // few hundred this chart covers.
+          candidates.push({
+            values: Float64Array.from(column.values, (v) => v * 10),
+            label: `${column.name} (bar, shown as dbar)`,
+            own: column.values,
+          });
+        }
+      }
+
+      let best: (typeof candidates)[number] | null = null;
+      let bestScore = 4; // fewer points than this is not a dive
+      for (const candidate of candidates) {
+        const score = against
+          ? shared(candidate.own, against.values)
+          : countFinite(candidate.own);
+        if (score > bestScore) {
+          bestScore = score;
+          best = candidate;
+        }
+      }
+      return best ? { values: best.values, label: best.label } : null;
+    }
+
+    /** How many rows have both of these. */
+    function shared(a: Float64Array, b: Float64Array): number {
+      let n = 0;
+      for (let i = 0; i < a.length; i++) if (Number.isFinite(a[i]) && Number.isFinite(b[i])) n++;
+      return n;
+    }
+
+    function drawDive(depth: { values: Float64Array; label: string }) {
+      if (!table) return;
+      const points: [number, number][] = [];
+      for (let i = 0; i < table.rows; i++) {
+        if (Number.isFinite(depth.values[i]) && Number.isFinite(table.time[i])) {
+          points.push([table.time[i], depth.values[i]]);
+        }
+      }
+      plot(diveSvg, points, 640, 220, { flipY: true });
+      diveCaption.textContent = points.length
+        ? `${depth.label} against time — ${points.length.toLocaleString()} points, to ${Math.max(...points.map((p) => p[1])).toFixed(1)} m.`
+        : 'No depth in these files.';
+    }
+
+    function drawProfile() {
+      if (!table) return;
+      const column = table.columns.find((c) => c.name === profileSelect.value);
+      const depth = depthColumn(table, column);
+      if (!depth || !column) {
+        profileSvg.innerHTML = '';
+        profileCaption.textContent = '';
+        return;
+      }
+      const points: [number, number][] = [];
+      for (let i = 0; i < table.rows; i++) {
+        if (Number.isFinite(depth.values[i]) && Number.isFinite(column.values[i])) {
+          points.push([column.values[i], depth.values[i]]);
+        }
+      }
+      plot(profileSvg, points, 320, 220, { flipY: true, dots: true });
+      profileCaption.textContent = points.length
+        ? `${column.name} against depth — ${points.length.toLocaleString()} points.`
+        : `${column.name} and depth never share a row, so there is nothing to plot.`;
+    }
+
+    /** A tiny scatter/line plot. Classes only, so the theme restyles it. */
+    function plot(
+      svg: SVGSVGElement,
+      points: [number, number][],
+      width: number,
+      height: number,
+      options: { flipY?: boolean; dots?: boolean } = {},
+    ) {
+      const NS = 'http://www.w3.org/2000/svg';
+      const pad = { top: 10, right: 12, bottom: 26, left: 54 };
+      while (svg.lastChild && (svg.lastChild as Element).tagName !== 'title') svg.lastChild.remove();
+      if (points.length < 2) return;
+
+      let xLo = Infinity;
+      let xHi = -Infinity;
+      let yLo = Infinity;
+      let yHi = -Infinity;
+      for (const [x, y] of points) {
+        if (x < xLo) xLo = x;
+        if (x > xHi) xHi = x;
+        if (y < yLo) yLo = y;
+        if (y > yHi) yHi = y;
+      }
+      if (xHi === xLo) xHi = xLo + 1;
+      if (yHi === yLo) yHi = yLo + 1;
+
+      const px = (x: number) => pad.left + ((x - xLo) / (xHi - xLo)) * (width - pad.left - pad.right);
+      const py = (y: number) => {
+        const t = (y - yLo) / (yHi - yLo);
+        const up = options.flipY ? t : 1 - t;
+        return pad.top + up * (height - pad.top - pad.bottom);
+      };
+
+      const axis = document.createElementNS(NS, 'path');
+      axis.setAttribute('class', 'axis');
+      axis.setAttribute(
+        'd',
+        `M ${pad.left} ${pad.top} L ${pad.left} ${height - pad.bottom} L ${width - pad.right} ${height - pad.bottom}`,
+      );
+      svg.append(axis);
+
+      const label = (value: number, x: number, y: number, anchor: string) => {
+        const text = document.createElementNS(NS, 'text');
+        text.setAttribute('class', 'tick');
+        text.setAttribute('x', String(x));
+        text.setAttribute('y', String(y));
+        text.setAttribute('text-anchor', anchor);
+        text.textContent = tick(value);
+        svg.append(text);
+      };
+
+      // The y labels sit outside the plot area, so `pad.left` has to be wide
+      // enough for the longest of them. It was 46 with values printed to four
+      // decimals, so a depth of 125.2447 m ran off the left of the viewBox and
+      // was silently clipped to "25.2447" — a chart reporting a fifth of the
+      // dive it had just drawn, with nothing to say it had been cut.
+      label(yLo, pad.left - 5, py(yLo) + 4, 'end');
+      label(yHi, pad.left - 5, py(yHi) + 4, 'end');
+      // The x axis is time on the dive plot, where a number would say nothing,
+      // and the plotted quantity on the profile, where it is the whole point.
+      if (options.dots) {
+        label(xLo, pad.left, height - pad.bottom + 14, 'start');
+        label(xHi, width - pad.right, height - pad.bottom + 14, 'end');
+      }
+
+      if (options.dots) {
+        // A profile is two legs of a dive over the same water, so joining the
+        // points in row order draws a loop across the plot rather than a
+        // profile. Dots say what the data is without asserting an order.
+        const step = Math.max(1, Math.ceil(points.length / 2000));
+        let d = '';
+        for (let i = 0; i < points.length; i += step) {
+          d += `M ${px(points[i][0]).toFixed(1)} ${py(points[i][1]).toFixed(1)} h 0.8 `;
+        }
+        const dots = document.createElementNS(NS, 'path');
+        dots.setAttribute('class', 'trace');
+        dots.setAttribute('stroke-linecap', 'round');
+        dots.setAttribute('stroke-width', '2.5');
+        dots.setAttribute('d', d);
+        svg.append(dots);
+      } else {
+        const step = Math.max(1, Math.ceil(points.length / 4000));
+        let d = '';
+        for (let i = 0; i < points.length; i += step) {
+          d += `${i === 0 ? 'M' : 'L'} ${px(points[i][0]).toFixed(1)} ${py(points[i][1]).toFixed(1)} `;
+        }
+        const line = document.createElementNS(NS, 'path');
+        line.setAttribute('class', 'trace');
+        line.setAttribute('d', d);
+        svg.append(line);
+      }
+    }
+
+    // ---- downloads ---------------------------------------------------------
+
+    csvButton.addEventListener('click', () => {
+      if (!table) return;
+      save(toCsv(exported()), exportName(decoded.map((d) => d.name), 'csv'), 'text/csv');
+    });
+
+    ncButton.addEventListener('click', () => {
+      if (!table) return;
+      try {
+        const bytes = toNetcdf(exported(), {
+          title: `Slocum glider data — ${decoded.map((d) => d.name).join(', ')}`,
+          sources: decoded.map((d) => d.name),
+        });
+        save(bytes, exportName(decoded.map((d) => d.name), 'nc'), 'application/x-netcdf');
+      } catch (error) {
+        downloadNote.textContent = (error as Error).message;
+      }
+    });
+
+    /** The table as the reader has it: their columns, and nothing else. */
+    function exported(): Table {
+      const chosen = table!.columns.filter((c) => selected.has(c.name));
+      return { ...table!, columns: chosen };
+    }
+
+    function save(data: string | Uint8Array, name: string, type: string) {
+      const blob = new Blob([data as BlobPart], { type });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = name;
+      anchor.click();
+      // A whole deployment's netCDF runs to tens of megabytes, and an
+      // unrevoked object URL is held until the tab closes.
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      downloadNote.textContent = `${name} — ${(blob.size / 1024).toFixed(0)} KB`;
+    }
+
+    // ---- small helpers -----------------------------------------------------
+
+    function countFinite(values: Float64Array): number {
+      let n = 0;
+      for (const v of values) if (Number.isFinite(v)) n++;
+      return n;
+    }
+
+    function stamp(epochSeconds: number): string {
+      if (!Number.isFinite(epochSeconds)) return '—';
+      return new Date(epochSeconds * 1000).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
+    }
+
+    /**
+     * An axis label: enough digits to read the scale, few enough to fit in the
+     * gutter reserved for it. `short` is for the table, where a column has as
+     * much width as it needs; here the width is fixed and an overlong label is
+     * not wrapped or shrunk, it is clipped — losing the leading digit, which
+     * turns 125 m into 25 m and looks like data rather than a rendering fault.
+     */
+    function tick(v: number): string {
+      if (!Number.isFinite(v)) return '';
+      const size = Math.abs(v);
+      if (size !== 0 && (size < 1e-2 || size >= 1e5)) return v.toExponential(1);
+      const decimals = size >= 100 ? 0 : size >= 10 ? 1 : size >= 1 ? 2 : 3;
+      return v.toFixed(decimals);
+    }
+
+    /** Enough digits to read, never enough to mistake for the export. */
+    function short(v: number): string {
+      if (!Number.isFinite(v)) return '—';
+      const size = Math.abs(v);
+      if (size !== 0 && (size < 1e-3 || size >= 1e7)) return v.toExponential(3);
+      return String(Math.round(v * 1e4) / 1e4);
+    }
+
+    void recallCaches();
+  }
+</script>

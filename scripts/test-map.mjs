@@ -3850,6 +3850,7 @@ const checks = [
          decision rather than an oversight. */
       teos10: 'not a map; gated by test:teos10',
       'glider-ballast': 'not a map; gated by test:ballast',
+      slocum: 'not a map; gated by test:slocum and test:slocum-page',
     };
     const found = fs.readdirSync('packages', { withFileTypes: true })
       .filter((e) => e.isDirectory())

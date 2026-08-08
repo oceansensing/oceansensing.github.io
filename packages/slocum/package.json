@@ -1,0 +1,16 @@
+{
+  "name": "@c4po/slocum",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Decoder for Slocum glider dinkum binary data (sbd/tbd/mbd/nbd/dbd/ebd and their compressed forms)",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./dbd": "./dbd.ts",
+    "./lz4": "./lz4.ts",
+    "./netcdf": "./netcdf.ts"
+  },
+  "dependencies": {
+    "@c4po/teos10": "*"
+  }
+}

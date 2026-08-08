@@ -22,11 +22,14 @@ npm run data:bathy-tiles # just the 20-100 m tiles of that
 npm run data:coastline # rebuild the offline coastline basemap (Natural Earth; once)
 npm run data:saar    # the salinity anomaly atlas (needs the gsw package; once)
 npm run data:teos10-fixture # re-record GSW's answers for test:teos10 (needs gsw)
+npm run data:slocum-fixture # re-record dbdreader's answers for test:slocum (needs dbdreader)
 npm run test:units   # the map's renderer-independent modules, directly
 npm run test:teos10  # the TEOS-10 package against GSW, calculus and physics
 npm run test:seawater # headless test of the built seawater calculator
 npm run test:ballast # the glider ballast arithmetic, against identities
 npm run test:ballast-page # headless test of the built ballast calculator
+npm run test:slocum  # the Slocum decoder against dbdreader's recorded answers
+npm run test:slocum-page # headless test of the built Slocum decoder
 npm run test:prose   # built pages keep the spaces Astro likes to eat
 npm run test:schema  # every published file against the contract in schema.ts
 npm run test:multimap # two maps on one page stay out of each other's way
@@ -4885,6 +4888,262 @@ Both were found the hard way; do not re-derive them.
   Cancelling is not unpublishing — that is `DELETE .../pages`, and it takes
   the site down.
 
+## The Slocum decoder (`packages/slocum/`, `/data/slocum/`)
+
+The third thing on this site with a package behind it, and the split is the
+map's: `packages/slocum` decides what the bytes mean, `SlocumDecoder.astro`
+decides what it looks like. No DOM, no Leaflet and **no npm dependency** — the
+LZ4 and netCDF-3 implementations are in the package rather than imported, on
+the same argument `kmz.ts` makes about ZIP libraries, and it matters more here
+because this code is served to a reader's browser.
+
+**It runs entirely client-side, and that is the feature rather than an
+implementation note.** Glider data is routinely embargoed until a deployment
+is written up, so "nothing is uploaded" is the difference between a tool an
+operator may use and one they may not.
+
+`test:map` carries a named list of everything under `packages/` and fails on
+an unlisted one; `slocum` is listed as **not a map**, which is what exempts it
+from the palette, pane and `dataBase` rules. That gate fired the moment the
+package appeared, which is what it is for.
+
+### Ported, not invented
+
+Teledyne Webb publishes no specification. Every reader of the format —
+`dbd2asc`, `dbdreader`, `SlocumIO.jl`, this — is a reimplementation, and a
+decoder that is subtly wrong **does not fail**: it produces floats, in the
+right shape, in a plausible range, and nothing on screen says the third column
+is the wrong sensor.
+
+So this is a port of
+[`SlocumIO.jl`](https://github.com/oceansensing/SlocumIO.jl), which was itself
+validated against `dbdreader` byte for byte, and `test:slocum` holds the port
+to the same standard against a fixture recorded from dbdreader. Agreeing with
+one is agreeing with both.
+
+**The fixture is real data**, on the rule the shapefile reader taught this
+repository: a file written by the writer that matches this reader agrees with
+it by construction and proves nothing. It is one matched flight/science pair
+from the electa MARACOOS deployment (VIMS/C4PO, May 2025), the two caches they
+need and one compressed cache — 180 KB, committed. Segment 169 rather than any
+other because it is a genuine dive, 853 CTD samples to 125 dbar, where the
+first segment tried was a surface interval in which nothing moves.
+
+Each sensor's times and values are compared by **SHA-256 over their raw
+IEEE-754 bytes**. Every value, exactly. A tolerance would be the wrong
+instrument twice: these are bytes copied out of a file rather than computed
+quantities, and the failures this format actually produces are whole-column
+shifts, which a comparison of summary statistics absorbs. NaN is canonicalised
+to one bit pattern first, because IEEE-754 does not specify a payload and
+there is no reason for CPython's and V8's to agree.
+
+### The format, and the three things that are silent when wrong
+
+After the ASCII header comes a 17-byte preamble whose whole job is to declare
+byte order — `'s'`, a diagnostic byte, `0x1234`, `123.456` as a float32,
+`123456789.12345` as a double, `'d'`. Every sentinel is checked, not just the
+marker: they cost nothing and they are the only thing between a misidentified
+file and a decode that produces confident nonsense.
+
+Then, per cycle: `state_bytes_per_cycle` bytes at two bits per sensor, MSB
+first; the values of the UPDATED sensors in cycle order; and one separator
+byte.
+
+- **The separator separates rather than terminates.** The final cycle has
+  none, so a well-formed file ends with `chunk_end === length`. A reader that
+  requires it drops the last complete cycle of every file it reads — a whole
+  cycle, no error, nothing to say so. Caught here only because the fixture
+  compares counts against dbdreader.
+- **The state buffer has to be cleared each cycle.** Only `4 ×
+  state_bytes_per_cycle` entries are written and that can be fewer than there
+  are sensors. Left dirty, a sensor past the written range keeps the previous
+  cycle's state and every chunk offset after it is wrong. **These fixtures do
+  not exercise it** — 4 × 16 is exactly 64 sensors and 4 × 4 covers 14 — so it
+  is correct by construction rather than by test, and worth knowing before
+  touching that loop.
+- **1-byte sensors are signed**, following both reference implementations.
+  Nothing here distinguishes that from unsigned: every 1-byte value in the
+  fixtures is 0, 1 or 2, and reading the wrong signedness is a mutation that
+  survives the whole suite. That limit is asserted rather than written in a
+  comment — `test:slocum` fails if a fixture ever carries a 1-byte value past
+  127, so whoever sees it can gate the real thing instead.
+
+**In JavaScript there is no host endianness**, which simplifies this: `DataView`
+takes the byte order explicitly, so the file's own marker is passed to every
+read and the swap-if-different dance both reference implementations do is not
+needed.
+
+### The cache is the whole interface problem
+
+A file off a glider is **factored**: it names an eight-character CRC and
+carries no sensor list, so without the matching `<crc>.cac` the bytes cannot
+be interpreted — not partially, not approximately. That is the first thing
+most readers meet, so `describe()` reads the header alone and
+`MissingCacheError` carries the CRC, and the page asks for that file by name.
+"Missing cache" without the name is not an actionable message.
+
+Supplied caches are kept in **IndexedDB**, so it is a one-time step. Not
+localStorage: a cache file is 4–120 KB of text and a glider's directory holds
+a dozen, which is most of localStorage's ~5 MB before any margin. Every call
+resolves rather than rejecting, so a reader in private browsing gets a decoder
+that works and forgets — the same bargain the map's KMZ store strikes.
+
+**The wrong cache is worse than none**, because it parses. Only the counts
+disagree, so the sensor-list length is checked against the header's
+`sensors_per_cycle` and a mismatch is refused rather than decoded.
+
+### There is no single time base, and that is a choice the reader makes
+
+Every sensor is written on its own subset of cycles — the flight computer logs
+depth every few seconds and position only on surfacing, and the science
+computer keeps its own clock — so making a rectangular table is a decision
+rather than a formatting step.
+
+| `join` | rows | what is in them |
+| --- | --- | --- |
+| `union` (default) | every time any sensor reported | recorded values only; blank elsewhere |
+| `interpolate` | one sensor's times | every other column interpolated, so not recorded |
+
+The default is the lossless one and the other is never applied without being
+asked. A union table is mostly blank, which is an honest picture of what a
+glider logs — and **blank is written as an empty CSV field, never `0` or
+`NaN`**, both of which are claims the file does not make.
+
+**A sensor written by both computers stays two columns.**
+`sci_water_pressure` is measured by the science computer and *relayed* to the
+flight computer, which logs it at its own much slower rate — 853 samples
+against 4 in the fixture pair. Merged under one name, the netCDF writer's
+uniquifier silently renamed one `_2` and `f.variables['sci_water_pressure']`
+returned the sparse relay: the right bytes under a name that meant something
+else. They carry their file family now (`_sbd`, `_tbd`) and the reader is told
+why. The same sensor across *segments* is one column, concatenated and sorted
+— and the sort is load-bearing only on the interpolate path, since the union
+join places each value by its own time regardless.
+
+**Interpolation is angular where it has to be.** A heading interpolated
+linearly across the 0/2π seam gives 180° — pointing exactly backwards, with
+nothing in the output to say so. Matched by name rather than by unit, because
+`rad` is also a fin deflection and a pitch, both of which are signed angles
+about zero that interpolate perfectly well linearly and would be *damaged* by
+wrapping.
+
+### netCDF-3 classic, written by hand
+
+netCDF-4 is HDF5 underneath — a library, not a file writer, and shipping a
+WASM build of it to export a table of doubles is the wrong trade. Classic is
+about two hundred lines: a magic number, dimensions, attributes, variables,
+then the data, big-endian and padded to four bytes. Every tool that reads
+glider netCDF reads it.
+
+**Fixed dimensions, no record dimension.** `time` could be UNLIMITED and a
+file written for appending usually makes it so; this one is written whole, and
+a record dimension costs the interleaved record layout for no benefit.
+
+**It does not claim CF.** The variable names are the glider's own sensor names
+and the units are the glider's own unit strings — `degc`, `nodim`, `enum`,
+`X` — which are neither udunits nor CF standard names. Writing
+`Conventions = "CF-1.8"` would be a claim something downstream eventually
+believes. `time` is the exception and is genuinely udunits, because that one
+is computed here.
+
+The real risk in a hand-written netCDF is the **offsets**: every `begin` is
+patched after the header is sized, and one wrong pad puts a variable's data a
+few bytes out, which reads as plausible numbers rather than as a corrupt file.
+`test:slocum` therefore walks the file by its own header and compares each
+variable against the column it came from. The layout was separately confirmed
+by reading the output with `scipy.io.netcdf_file`, which is an implementation
+nobody here wrote; the check is what keeps it true.
+
+### The derived seawater columns
+
+Off by default, and every one carries `source: 'derived'`, which reaches the
+CSV heading and the netCDF `comment` attribute. A derived salinity in a file
+of recorded sensors with nothing to say which is which is the failure this
+package is otherwise built to avoid.
+
+**The units are the whole risk.** Slocum writes conductivity in **S/m** and
+pressure in **bar**; PSS-78 and TEOS-10 want **mS/cm** and **dbar**. Both
+conversions are ×10, both are silent when wrong, and neither produces anything
+that looks broken — a salinity from S/m read as mS/cm comes out near 3, which
+is a number. So the unit string is read *and* the values are range-checked,
+because believing a units attribute is how this project once drew sea-ice
+concentration in the bottom hundredth of its ramp.
+
+**The pressure scale needed a check of its own**, and finding one took a
+second look: bar-instead-of-dbar moves density by about half a unit, which
+sits comfortably inside any plausible-range test. What does see it is the gap
+between in-situ density and sigma0, which *is* the compression — 0.57 kg/m³
+over the fixture's 125 dbar dive, a tenth of that if the pressure were read as
+bar.
+
+**`saFromSP` returns NaN without an atlas rather than quietly handing back
+Reference Salinity**, which is the TEOS-10 package's own refusal and the
+reason this had to be handled rather than inherited. The fallback is made
+here, counted, and reflected in **what the column is called**: `salinity_absolute`
+only when the anomaly was applied to every row, `salinity_reference`
+otherwise. The two differ by up to 0.03 g/kg, in the fourth digit, which is
+exactly the substitution TEOS-10 exists to prevent.
+
+Position for the lookup is interpolated between surfacings, and that is a
+different thing from interpolating a measurement: it is an input to a
+4°-lattice lookup rather than a column anybody reads, and a whole dive sits
+well inside one cell. It is said in the notes anyway.
+
+### A stylesheet that could not match what it was written for
+
+**The worst bug this page shipped, and it is a new shape for this file.**
+
+Astro scopes a component's styles by stamping a `data-astro-cid-…` attribute
+onto the elements in its **markup** and rewriting every selector to require
+it. An element built later by `createElement` never gets that attribute, so a
+scoped rule **cannot match it** — and nothing errors. The two charts rendered
+as solid black blobs, because an SVG `<path>` fills by default; the sensor
+list, the preview table, the notes and the summary all came out with browser
+defaults.
+
+It was found by reading `getComputedStyle` in a browser, not by looking:
+unstyled chrome looks like a design decision. The fix is a
+`<style is:global>` block with every selector anchored to `[data-slocum]`,
+which is in the markup, so the rules reach the runtime elements without
+leaking to the rest of the site.
+
+`test:slocum-page` decides that over the **built stylesheet**, the same tactic
+`test:map` uses for the three CSS faults jsdom cannot render its way to: every
+rule for a runtime-built element must be global and anchored, none of them may
+be written bare, `[hidden]` must still beat the class that sets `display`, and
+the chart paths must declare `fill: none`. Mutation-tested — reverting
+`is:global` fails it.
+
+**And the `appearance: none` check had to be anchored too.** `builtCss`
+concatenates every stylesheet in `dist`, and the map alone carries four
+`appearance: none` declarations, so an unanchored search passed with this
+component's deleted. The same masking `test:map` already has a note about,
+met from a different direction.
+
+Two smaller things the browser found and no gate could:
+
+- **The depth axis label read `25.2447` for a 125 m dive.** The tick text is
+  drawn outside the plot area, and the gutter reserved for it was narrower
+  than the string, so the leading digit was clipped by the viewBox — a chart
+  reporting a fifth of the dive it had just drawn. Widened, and the labels now
+  round to a width that fits rather than printing four decimals.
+- **The profile chart was correctly empty and looked broken.** In a union
+  table the flight computer's `m_pressure` and the science computer's
+  `sci_water_temp` share no row at all, so picking a depth column by name
+  order gave a plot with nothing in it. The depth that goes with a sensor is
+  the one written on the same cycles as it, so the candidates are scored by
+  co-occurrence rather than ranked by preference.
+
+### What it does not do
+
+It reads files; it does not process them. No thermal-lag correction, no
+despiking, no quality control, no gridding, and it does not write the IOOS
+Glider DAC's trajectory format. Position is converted from NMEA and otherwise
+left as the glider dead-reckoned it.
+
+And it is checked against **one glider and one deployment**, which is the
+honest limit of a format with no specification to check against instead.
+
 ## What keeps going wrong here
 
 Four shapes, each paid for more than once. They are listed together because
@@ -4905,6 +5164,18 @@ saved view restored programmatically left the legend describing a map that
 no longer existed — and the reader's first click repaired it, which is why it
 read as "it fixes itself when I touch it". The harness builds a map once and
 never arrives at it twice.
+
+**A rule that cannot match the thing it was written for.** The map's caption
+chrome took `.ocean-map .om-tint` selectors while the elements were the
+canvas's *siblings*, so a whole set of controls stayed dead through several
+rounds of "verified in the browser". The Slocum decoder styled its charts and
+its whole table in a scoped Astro block, and Astro's scoping requires an
+attribute that only elements in the *markup* receive — so everything built by
+`createElement` rendered with browser defaults, which for an SVG path means
+filled black. Neither errors, and neither looks like a bug: unstyled chrome
+looks like a design decision, and an empty chart looks like empty data. Ask
+what the selector matches, in the DOM that exists when the rule runs, not in
+the source.
 
 **A fix that unmasks a second bug the first was hiding.** Correcting the
 `.ocean-map` selectors switched the stylesheet on, and switching it on

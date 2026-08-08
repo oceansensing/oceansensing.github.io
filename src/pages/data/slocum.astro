@@ -1,0 +1,160 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SlocumDecoder from '../../components/SlocumDecoder.astro';
+---
+
+<BaseLayout
+  title="Slocum glider decoder"
+  description="Decode Slocum glider binary data — sbd, tbd, mbd, nbd, dbd, ebd and their compressed forms — to CSV or netCDF, entirely in your browser. Nothing is uploaded."
+>
+  <div class="container">
+    <p class="crumb"><a href="/data/">Data &amp; Tools</a></p>
+    <h1>Slocum glider decoder</h1>
+    <p class="intro">
+      Teledyne Webb's Slocum gliders log to a binary format with no published
+      specification. This reads it — flight and science files, compressed or
+      not — and writes CSV or netCDF. It runs entirely in your browser: the
+      files are never uploaded, which matters while a deployment is still under
+      embargo.
+    </p>
+
+    <SlocumDecoder />
+
+    <section class="about">
+      <h2>What you need</h2>
+      <p>
+        Two things: the data files, and the <strong>sensor-list cache</strong> they refer to.
+      </p>
+      <p>
+        A file off a glider is <em>factored</em> — it names an eight-character
+        CRC and carries no sensor list of its own, so the bytes cannot be
+        interpreted without the matching <code>&lt;crc&gt;.cac</code>. There is
+        no partial or approximate reading of a file whose cache is missing, so
+        the decoder names the one it wants rather than failing vaguely. Caches
+        live in the glider's <code>cache</code> directory and in the deployment
+        directory the dockserver writes; select them alongside the data, or
+        select the whole deployment folder. Once supplied they are kept in this
+        browser, so it is a one-time step.
+      </p>
+
+      <h2>What it produces</h2>
+
+      <h3>Rows, and the one choice that is yours</h3>
+      <p>
+        There is no single time base in a Slocum file. Each sensor is written
+        on its own subset of cycles — the flight computer logs depth every few
+        seconds and position only when the glider surfaces, and the science
+        computer keeps its own clock — so making a rectangular table is a
+        decision rather than a formatting step.
+      </p>
+      <p>
+        The default is the lossless one: one row per time <em>any</em> sensor
+        reported, blank where a sensor did not. Nothing is invented and nothing
+        is dropped, and the table is mostly blank, which is an honest picture
+        of what a glider logs. The alternative interpolates everything onto one
+        sensor's times, which is dense and immediately usable and in which
+        every value but the base column is a number the glider never recorded.
+        The decoder will do it; it will not do it without being asked.
+      </p>
+
+      <h3>Both computers, one table</h3>
+      <p>
+        Flight and science files merge on one axis: both stamp epoch seconds
+        and the science clock is set from the flight computer's. Where a sensor
+        is written by <em>both</em> — <code>sci_water_pressure</code> is
+        measured by the science computer and relayed to the flight computer at
+        a much slower rate — the two stay separate columns, suffixed with the
+        file family they came from. They are not the same record and merging
+        them would hide that.
+      </p>
+
+      <h3>Seawater properties</h3>
+      <p>
+        A Slocum CTD writes conductivity, in-situ temperature and pressure.
+        Ticking the box adds practical salinity, Absolute Salinity,
+        Conservative Temperature, density, σ<sub>0</sub> and sound speed,
+        computed with the same full-precision <a href="/data/seawater/">TEOS-10 engine</a> as the seawater
+        calculator. They are marked as derived in the CSV heading and in the
+        netCDF attributes, and without a position or the anomaly atlas the
+        salinity column is named <code>salinity_reference</code> rather than <code>salinity_absolute</code>, because that is what it is.
+      </p>
+
+      <h3>CSV and netCDF</h3>
+      <p>
+        The CSV carries data alone, with no comment lines, so it opens
+        anywhere. The netCDF is <strong>netCDF-3 classic</strong>, written
+        directly rather than through a library, and it is the one that carries
+        provenance: the source files, the decode history and every note the
+        table produced. Its units are the glider's own unit strings —
+        <code>degc</code>, <code>nodim</code>, <code>enum</code> — carried
+        verbatim, so it does not claim CF conventions it does not meet. The
+        time variable is the exception, and is genuinely udunits.
+      </p>
+
+      <h3>Where it stops</h3>
+      <p>
+        It reads files; it does not process them. There is no thermal-lag
+        correction, no despiking, no quality control and no gridding, and it
+        does not write the IOOS Glider DAC's trajectory format. Position is
+        converted from NMEA and otherwise left as the glider dead-reckoned it.
+      </p>
+
+      <h2>How it is checked</h2>
+      <p>
+        Against <a href="https://github.com/smerckel/dbdreader">dbdreader</a>,
+        value for value: every sensor's times and values are compared by a
+        SHA-256 over their raw bytes, for a matched flight/science pair from a
+        real deployment. The decoder is a port of <a href="https://github.com/oceansensing/SlocumIO.jl">SlocumIO.jl</a>,
+        which was itself validated against dbdreader, so agreeing with one is
+        agreeing with both. The netCDF writer was separately confirmed by
+        reading its output with <code>scipy.io.netcdf_file</code>.
+      </p>
+      <p>
+        That is one glider and one deployment, which is the honest limit of it.
+        The format has no specification to check against instead.
+      </p>
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .crumb {
+    margin-block: var(--space-xl) 0;
+    font-size: var(--text-sm);
+  }
+
+  h1 {
+    margin-block: var(--space-xs) var(--space-md);
+  }
+
+  .intro {
+    color: var(--text-muted);
+    max-width: var(--prose-width);
+    margin-block-end: var(--space-lg);
+  }
+
+  .about {
+    margin-block: var(--space-2xl);
+    max-width: var(--prose-width);
+  }
+
+  .about h2 {
+    margin-block: var(--space-xl) var(--space-md);
+  }
+
+  .about h3 {
+    font-size: var(--text-base);
+    margin-block: var(--space-lg) var(--space-2xs);
+  }
+
+  .about p,
+  .about li {
+    color: var(--text-muted);
+    margin-block-end: var(--space-sm);
+  }
+
+  .about code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+</style>

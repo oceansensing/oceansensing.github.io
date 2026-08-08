@@ -1,0 +1,2129 @@
+{
+ "compressed": {
+  "bytes": 4709,
+  "file": "63231de3.ccc",
+  "head": "s: F    0   -1 1 sci_ad2cp_file_state enum\ns: F    1   -1 4 sci_badd_error nodim\ns: F    2   -1 1 sci_badd_finished bool",
+  "lines": 116,
+  "sha256": "10385fa0eba063815fbf6308a2dc47d8a8d66a33310708513bf41c57b075bc96"
+ },
+ "dbdreader": "0.5.8",
+ "files": {
+  "electa-2025-120-1-169.sbd": {
+   "header": {
+    "dbd_label": "DBD(dinkum_binary_data)file",
+    "encoding_ver": 5,
+    "fileopen_time": "Wed_May__7_22:16:18_2025",
+    "full_filename": "electa-2025-120-1-169",
+    "mission_name": "electash.mi",
+    "num_ascii_tags": 14,
+    "sensor_list_crc": "0f682cb2",
+    "sensor_list_factored": 1,
+    "sensors_per_cycle": 64,
+    "state_bytes_per_cycle": 16,
+    "the8x3_filename": "02150169",
+    "total_num_sensors": 2709
+   },
+   "latlon": {
+    "c_wpt_lat": {
+     "n": 0,
+     "sampleValue": {
+      "all": []
+     },
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "c_wpt_lon": {
+     "n": 0,
+     "sampleValue": {
+      "all": []
+     },
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "m_gps_lat": {
+     "n": 23,
+     "sampleValue": {
+      "first": [
+       38.218115,
+       38.2181,
+       38.218086666666665
+      ],
+      "last": [
+       38.20039666666666,
+       38.200381666666665,
+       38.20037166666667
+      ]
+     },
+     "value": "1cce9c23500c3f44cb0610c3aeb209032b9af1b4239f03cf4eb946bc449b4afe"
+    },
+    "m_gps_lon": {
+     "n": 23,
+     "sampleValue": {
+      "first": [
+       -73.72064333333333,
+       -73.72063999999999,
+       -73.72063666666666
+      ],
+      "last": [
+       -73.704875,
+       -73.70487833333333,
+       -73.70488
+      ]
+     },
+     "value": "68a30ba3a86575c01021605f541cab69f644fef2356224d71e42cef863456419"
+    },
+    "m_lat": {
+     "n": 4,
+     "sampleValue": {
+      "all": [
+       38.21661483252917,
+       38.21282263602209,
+       38.20923141006568,
+       38.205787909342476
+      ]
+     },
+     "value": "9782f80e345a5cb6ee30aa3b47be928aca38a059b3294e0e4808abe8de69eba9"
+    },
+    "m_lon": {
+     "n": 4,
+     "sampleValue": {
+      "all": [
+       -73.71915165167594,
+       -73.71717757483091,
+       -73.71435379214489,
+       -73.71154177570487
+      ]
+     },
+     "value": "c7749f8eb83f3b69a77ff7cbea9295a34e6ca3e84f21005beeaac9a73ce76970"
+    }
+   },
+   "params": {
+    "c_ballast_pumped": {
+     "n": 3,
+     "sampleTime": {
+      "all": [
+       1746656308.137,
+       1746657032.137,
+       1746657753.436
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       -425.0,
+       -425.0,
+       -100.0
+      ]
+     },
+     "time": "04f8273b613e34f01f3f20774627ea5447dbb56ede1d9a950659ef4707f29c8a",
+     "value": "a65c47185844896ea294703fb0ae8f26747952896457e0ec93c187b93d831ed6"
+    },
+    "c_climb_target_depth": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "c_de_oil_vol": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "c_dive_target_depth": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "c_fin": {
+     "n": 2,
+     "sampleTime": {
+      "all": [
+       1746656308.137,
+       1746657212.412
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       0.0,
+       -0.16821983456611633
+      ]
+     },
+     "time": "e172e707515832c0259df54784152093f71f2bd82659f27dcbebecf78fc9f162",
+     "value": "023033b43ca08065dd7ca960954730fa69232a960e449f08c53d65b9de916060"
+    },
+    "c_heading": {
+     "n": 5,
+     "sampleTime": {
+      "all": [
+       1746656308.137,
+       1746658109.981,
+       1746659913.192,
+       1746661714.591,
+       1746663517.934
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       2.665005683898926,
+       2.6579315662384033,
+       2.6525826454162598,
+       2.644400119781494,
+       2.639540195465088
+      ]
+     },
+     "time": "3ae01a6f6468bfb0b80fc37bbb70a92b0ffd7fcbedbe04ff332265f544aa8d5e",
+     "value": "ffc0b600e61c99b04c1801c659be3dac4217d639954870ab975a19cce5fb75bd"
+    },
+    "c_thruster_on": {
+     "n": 1,
+     "sampleTime": {
+      "all": [
+       1746656308.137
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       0.0
+      ]
+     },
+     "time": "4a535ab4d64b516021b89a0685ab1db51ada416b98ae374a2055788eb3a5aa62",
+     "value": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc"
+    },
+    "c_weight_drop": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "c_wpt_lat": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "c_wpt_lon": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "c_wpt_x_lmc": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "c_wpt_y_lmc": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "f_fin_offset": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "m_avg_climb_rate": {
+     "n": 2,
+     "sampleTime": {
+      "all": [
+       1746656308.137,
+       1746658109.981
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       -0.24064266681671143,
+       -0.12103427946567535
+      ]
+     },
+     "time": "517fdf611907dfb57e7513e9de2b52429672a75c519e9392d77e6ab2a6bf8810",
+     "value": "ec7964dea032c895dbb8c103ddd5bdaff0f7db9075d59c56fd618ef5d2d693f4"
+    },
+    "m_avg_dive_rate": {
+     "n": 2,
+     "sampleTime": {
+      "all": [
+       1746656308.137,
+       1746658109.981
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       0.08530308306217194,
+       0.09192664921283722
+      ]
+     },
+     "time": "517fdf611907dfb57e7513e9de2b52429672a75c519e9392d77e6ab2a6bf8810",
+     "value": "aca92c610b9e451a56486f13b5d47d4f056008c9da6356b9dce2cdbf9b0c6a9f"
+    },
+    "m_avg_speed": {
+     "n": 4,
+     "sampleTime": {
+      "all": [
+       1746657192.328,
+       1746658995.783,
+       1746660796.934,
+       1746662600.532
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       0.26270031929016113,
+       0.265331894159317,
+       0.26650547981262207,
+       0.2660924196243286
+      ]
+     },
+     "time": "5811b55ced639edf31af7671800193aaf11d3bba012ef915449c69ae6355f49c",
+     "value": "91feb52f5ee81418c4802a7b3056d934bb8e5c58522637e04e255273e097e7a9"
+    },
+    "m_ballast_pumped": {
+     "n": 1,
+     "sampleTime": {
+      "all": [
+       1746656308.137
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       -424.3798828125
+      ]
+     },
+     "time": "4a535ab4d64b516021b89a0685ab1db51ada416b98ae374a2055788eb3a5aa62",
+     "value": "dd60c34ee543a800f5988d116354b4b711812769a77c2cada4630fd77f01823f"
+    },
+    "m_battery_inst": {
+     "n": 25,
+     "sampleTime": {
+      "first": [
+       1746656391.068,
+       1746656691.603,
+       1746656992.052
+      ],
+      "last": [
+       1746663005.153,
+       1746663305.609,
+       1746663606.128
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       15.5819091796875,
+       15.582769393920898,
+       15.582769393920898
+      ],
+      "last": [
+       15.584273338317871,
+       15.588141441345215,
+       15.587926864624023
+      ]
+     },
+     "time": "78592a53df35b0ae743b0ac2d34c0f5df2e863e7c90c9142551cec5077b0f713",
+     "value": "3349e6dd29aca3819223c7978b0e932568f925c964dc30593afabda32492b944"
+    },
+    "m_battpos": {
+     "n": 7,
+     "sampleTime": {
+      "first": [
+       1746656308.137,
+       1746656611.465,
+       1746656911.935
+      ],
+      "last": [
+       1746657513.031,
+       1746657813.54,
+       1746658113.99
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       -0.3548595905303955,
+       -0.3548595905303955,
+       -0.3548595905303955
+      ],
+      "last": [
+       -0.723533570766449,
+       -0.723533570766449,
+       -0.723533570766449
+      ]
+     },
+     "time": "289e1e3546c14ff3fe9141542a24f6c840144d8dbe6090d04e3c12d2b8222568",
+     "value": "532f99fcb49d15c3d831917fa4a71f1a881f47244a7f8280cdede43639ef2a03"
+    },
+    "m_bms_emergency_battery_voltage": {
+     "n": 4,
+     "sampleTime": {
+      "all": [
+       1746658166.031,
+       1746659969.24,
+       1746661926.875,
+       1746663730.284
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       12.160400390625,
+       12.06982421875,
+       11.979007720947266,
+       12.092286109924316
+      ]
+     },
+     "time": "70e054249682d5e4f57a3b58e0c673aad85dee9a62dbc6e08ebf42ab2bd894a2",
+     "value": "a0eb67299596d910b38311685b03a124392e5a609efcdc03c64956c26cb1aee4"
+    },
+    "m_coulomb_amphr_total": {
+     "n": 4,
+     "sampleTime": {
+      "all": [
+       1746657192.328,
+       1746658995.783,
+       1746660796.934,
+       1746662600.532
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       55.00883865356445,
+       55.111385345458984,
+       55.212459564208984,
+       55.31256103515625
+      ]
+     },
+     "time": "5811b55ced639edf31af7671800193aaf11d3bba012ef915449c69ae6355f49c",
+     "value": "5ed8a9325f7c5171504366afae7e9d970500c4f9e5b795f2b5906756f710e9c1"
+    },
+    "m_de_oil_vol": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "m_depth": {
+     "n": 4,
+     "sampleTime": {
+      "all": [
+       1746658146.012,
+       1746659981.25,
+       1746661906.857,
+       1746663690.25
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       3.828725576400757,
+       3.97481369972229,
+       3.7069854736328125,
+       3.09828519821167
+      ]
+     },
+     "time": "159b6822a49f611927deb25fd7cdd880c10aeb70b745e8e0b29dd265b160e599",
+     "value": "eee64ae70c06a077fea33c8ebfd61da91ee266dffdc480c4675a51b7a28fc20e"
+    },
+    "m_depth_rate_avg_final": {
+     "n": 6,
+     "sampleTime": {
+      "all": [
+       1746656308.137,
+       1746656671.523,
+       1746657032.137,
+       1746657392.881,
+       1746657753.436,
+       1746658113.99
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       0.0,
+       0.10687602311372757,
+       0.093663789331913,
+       0.10452134907245636,
+       -0.15375033020973206,
+       -0.10880934447050095
+      ]
+     },
+     "time": "4a12c4e32ed2cb2a7c52fe8de1e3265120247c10a9675bebf358083477605462",
+     "value": "a2530f3c2b4caa6f005983dc62acead24881cd34732de5b7c9fc7f3df01de1a5"
+    },
+    "m_digifin_leakdetect_reading": {
+     "n": 4,
+     "sampleTime": {
+      "all": [
+       1746657192.328,
+       1746658995.783,
+       1746660796.934,
+       1746662600.532
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       1023.0,
+       1023.0,
+       1023.0,
+       1023.0
+      ]
+     },
+     "time": "5811b55ced639edf31af7671800193aaf11d3bba012ef915449c69ae6355f49c",
+     "value": "ec4ee422a55c762dc8371b5a48424849471e4337584a0ca44bd5be81ed4384a3"
+    },
+    "m_fin": {
+     "n": 3,
+     "sampleTime": {
+      "all": [
+       1746656308.137,
+       1746656671.523,
+       1746657032.137
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       0.05789684131741524,
+       0.1650059074163437,
+       -0.17369049787521362
+      ]
+     },
+     "time": "24d81b495a1ca6ce055303eae0771a6f5d5b72f730d53af0348d064f6f0d3bc6",
+     "value": "0a570493c03359a30be17253ea33d1630474adffffeee0ccf18ba4e1dcd7038d"
+    },
+    "m_gps_lat": {
+     "n": 23,
+     "sampleTime": {
+      "first": [
+       1746656212.033,
+       1746656220.0,
+       1746656224.006
+      ],
+      "last": [
+       1746663746.307,
+       1746663754.314,
+       1746663758.323
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       3813.0869,
+       3813.086,
+       3813.0852
+      ],
+      "last": [
+       3812.0238,
+       3812.0229,
+       3812.0223
+      ]
+     },
+     "time": "5242e458290419ee016c6aa8f1b4d877f08061480f8d04e6a0a5f20c3f0cd504",
+     "value": "e73767ffc7c4ad469334aef70ddeed028775c30f6b6bdf280a21e63b281607c5"
+    },
+    "m_gps_lon": {
+     "n": 23,
+     "sampleTime": {
+      "first": [
+       1746656212.033,
+       1746656220.0,
+       1746656224.006
+      ],
+      "last": [
+       1746663746.307,
+       1746663754.314,
+       1746663758.323
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       -7343.2386,
+       -7343.238399999999,
+       -7343.2382
+      ],
+      "last": [
+       -7342.2925000000005,
+       -7342.2927,
+       -7342.2928
+      ]
+     },
+     "time": "5242e458290419ee016c6aa8f1b4d877f08061480f8d04e6a0a5f20c3f0cd504",
+     "value": "de01b15489ac9675142b5a167e7fc38db77c8cb82408e7fbad076ead4a6d9a05"
+    },
+    "m_gps_mag_var": {
+     "n": 6,
+     "sampleTime": {
+      "all": [
+       1746656212.033,
+       1746656244.08,
+       1746656276.107,
+       1746658146.012,
+       1746663742.295,
+       1746663774.388
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       0.21816615760326385,
+       0.21816615760326385,
+       0.21816615760326385,
+       0.21816615760326385,
+       0.21816615760326385,
+       0.21816615760326385
+      ]
+     },
+     "time": "a427d56be7cdad2935a544114a4111e6e5b09ede1e83ae7934c40abbe1ddbeee",
+     "value": "1a6f8d2d59f1d2addc5194086fce4cc80430d6776c5c0a16443bd911303eba81"
+    },
+    "m_gps_status": {
+     "n": 11,
+     "sampleTime": {
+      "first": [
+       1746656184.004,
+       1746656216.039,
+       1746656248.082
+      ],
+      "last": [
+       1746663722.273,
+       1746663754.314,
+       1746663786.394
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       2.0,
+       0.0,
+       0.0
+      ],
+      "last": [
+       1.0,
+       0.0,
+       0.0
+      ]
+     },
+     "time": "502780a3cb73503dbf69cdbe62095a9773a8cbb91590870909b6079ac63b4765",
+     "value": "0a4e8ad9e642912a170a5843fc8c5fa2120fa11050a4e86c332843bb1530f6e7"
+    },
+    "m_hdg_derror": {
+     "n": 6,
+     "sampleTime": {
+      "all": [
+       1746656308.137,
+       1746656671.523,
+       1746657032.137,
+       1746657392.881,
+       1746657753.436,
+       1746658113.99
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       -0.002289885887876153,
+       -0.027044977992773056,
+       -0.011769810691475868,
+       -0.005208794493228197,
+       0.0012197337346151471,
+       -0.008707928471267223
+      ]
+     },
+     "time": "4a12c4e32ed2cb2a7c52fe8de1e3265120247c10a9675bebf358083477605462",
+     "value": "fe2f70263e18c5094ba008a126df169a31b8c74c61c03287378bff8f39289fea"
+    },
+    "m_hdg_error": {
+     "n": 6,
+     "sampleTime": {
+      "all": [
+       1746656308.137,
+       1746656671.523,
+       1746657032.137,
+       1746657392.881,
+       1746657753.436,
+       1746658113.99
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       0.027880234643816948,
+       -0.84004807472229,
+       0.6187803149223328,
+       0.8417447805404663,
+       0.019571784883737564,
+       0.23410171270370483
+      ]
+     },
+     "time": "4a12c4e32ed2cb2a7c52fe8de1e3265120247c10a9675bebf358083477605462",
+     "value": "ae86eadaff38af35ec8d51d3cefb7be095036de9f9edeb00ed38ae1f9f06106b"
+    },
+    "m_hdg_ierror": {
+     "n": 6,
+     "sampleTime": {
+      "all": [
+       1746656308.137,
+       1746656671.523,
+       1746657032.137,
+       1746657392.881,
+       1746657753.436,
+       1746658113.99
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       1663.1502685546875,
+       -97.4961929321289,
+       -129.1846160888672,
+       160.1971893310547,
+       228.4392852783203,
+       384.58831787109375
+      ]
+     },
+     "time": "4a12c4e32ed2cb2a7c52fe8de1e3265120247c10a9675bebf358083477605462",
+     "value": "45950b9e1f0a8e1e93cdf5269bc6e2f6ff930264ee27ebd22b3dfb925e9bcc1b"
+    },
+    "m_heading": {
+     "n": 11,
+     "sampleTime": {
+      "first": [
+       1746656308.137,
+       1746657032.137,
+       1746657753.436
+      ],
+      "last": [
+       1746662083.313,
+       1746662804.896,
+       1746663525.945
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       1.8867008686065674,
+       3.24282169342041,
+       2.6947884559631348
+      ],
+      "last": [
+       2.2567107677459717,
+       3.2794737815856934,
+       2.431243658065796
+      ]
+     },
+     "time": "7a361396eb430c09ffe082451f19e0e9d8669c0b0c197f282e34d0d34eb258b2",
+     "value": "eef2deaaae200961a6cf56908426e124ebc9f09d5d221909d76b0d6a597aa3f1"
+    },
+    "m_iridium_call_num": {
+     "n": 1,
+     "sampleTime": {
+      "all": [
+       1746663802.413
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       2506.0
+      ]
+     },
+     "time": "a9f068da0a652669a8fc37b7de20b16f6a60ca457f3c6ae0cd20c2221c2bc12a",
+     "value": "fc468af4b8aa0a746eb9d40fe5964c112212656516ad145818fe40933685bb6a"
+    },
+    "m_iridium_dialed_num": {
+     "n": 1,
+     "sampleTime": {
+      "all": [
+       1746663794.404
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       3951.0
+      ]
+     },
+     "time": "4a82791cddf9dd5a295bbeeb22dece0290f240f55d83edd01c8877de7035ee23",
+     "value": "7fa6e81a737382cf12d5bd8c792513d0d24ea06acb6e1c33570d489abc897a40"
+    },
+    "m_lat": {
+     "n": 4,
+     "sampleTime": {
+      "all": [
+       1746657192.328,
+       1746658995.783,
+       1746660796.934,
+       1746662600.532
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       3812.99688995175,
+       3812.7693581613253,
+       3812.553884603941,
+       3812.3472745605486
+      ]
+     },
+     "time": "5811b55ced639edf31af7671800193aaf11d3bba012ef915449c69ae6355f49c",
+     "value": "6824a19dc07c6fe251c116250549d844130ab43c5414e7020b52d871b0a703cc"
+    },
+    "m_leakdetect_voltage": {
+     "n": 4,
+     "sampleTime": {
+      "all": [
+       1746657192.328,
+       1746658995.783,
+       1746660796.934,
+       1746662600.532
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       2.492338180541992,
+       2.4927961826324463,
+       2.4929182529449463,
+       2.492673873901367
+      ]
+     },
+     "time": "5811b55ced639edf31af7671800193aaf11d3bba012ef915449c69ae6355f49c",
+     "value": "f332ff223f86ae3d2bba87c6fb9b73ebb68585fdeed66ccd656fe6d73e979829"
+    },
+    "m_leakdetect_voltage_forward": {
+     "n": 4,
+     "sampleTime": {
+      "all": [
+       1746657192.328,
+       1746658995.783,
+       1746660796.934,
+       1746662600.532
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       2.4955127239227295,
+       2.4959707260131836,
+       2.4956960678100586,
+       2.4957571029663086
+      ]
+     },
+     "time": "5811b55ced639edf31af7671800193aaf11d3bba012ef915449c69ae6355f49c",
+     "value": "6923e77a8b35cef5d3683c76875565d8810c62ac6237dc4b6c33530a1a56deac"
+    },
+    "m_leakdetect_voltage_science": {
+     "n": 4,
+     "sampleTime": {
+      "all": [
+       1746657192.328,
+       1746658995.783,
+       1746660796.934,
+       1746662600.532
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       2.498137950897217,
+       2.498260021209717,
+       2.498076915740967,
+       2.498137950897217
+      ]
+     },
+     "time": "5811b55ced639edf31af7671800193aaf11d3bba012ef915449c69ae6355f49c",
+     "value": "e302a53d6bf3e0e59bdef9bfafcb9ee54d94af19a6caa39fdfa1229679b33d52"
+    },
+    "m_lon": {
+     "n": 4,
+     "sampleTime": {
+      "all": [
+       1746657192.328,
+       1746658995.783,
+       1746660796.934,
+       1746662600.532
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       -7343.149099100557,
+       -7343.030654489855,
+       -7342.861227528693,
+       -7342.692506542292
+      ]
+     },
+     "time": "5811b55ced639edf31af7671800193aaf11d3bba012ef915449c69ae6355f49c",
+     "value": "7f9b36ef82d1d1525d53fb0e37f7e67c9d62a596feb0b7bbd112e3f90b8a2c20"
+    },
+    "m_pitch": {
+     "n": 21,
+     "sampleTime": {
+      "first": [
+       1746656308.137,
+       1746656671.523,
+       1746657032.137
+      ],
+      "last": [
+       1746662804.896,
+       1746663165.443,
+       1746663525.945
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       -0.46076691150665283,
+       -0.35953783988952637,
+       -0.3769911229610443
+      ],
+      "last": [
+       -0.42411500215530396,
+       0.4136430323123932,
+       0.39968040585517883
+      ]
+     },
+     "time": "a611dbc219236448eb36eb2103e4f3c829a8ef0df9dafd1878674b29dee7e001",
+     "value": "d468a8bb607a44e3e19b03aea440bdda88bc3d329ac52e345f1e9c36986e003c"
+    },
+    "m_present_time": {
+     "n": 362,
+     "sampleTime": {
+      "first": [
+       1746656184.004,
+       1746656208.024,
+       1746656212.033
+      ],
+      "last": [
+       1746663794.404,
+       1746663802.413,
+       1746663810.422
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       1746656184.004,
+       1746656208.024,
+       1746656212.033
+      ],
+      "last": [
+       1746663794.404,
+       1746663802.413,
+       1746663810.422
+      ]
+     },
+     "time": "bd3cc7460053b53186f4e48a81111b6ceddab20e5c1d08253262f3ba0a909e57",
+     "value": "bd3cc7460053b53186f4e48a81111b6ceddab20e5c1d08253262f3ba0a909e57"
+    },
+    "m_pressure": {
+     "n": 230,
+     "sampleTime": {
+      "first": [
+       1746656308.137,
+       1746656340.215,
+       1746656372.238
+      ],
+      "last": [
+       1746663594.122,
+       1746663626.145,
+       1746663658.169
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       0.41452497243881226,
+       0.877137303352356,
+       1.3275755643844604
+      ],
+      "last": [
+       2.1554081439971924,
+       1.5126205682754517,
+       0.9453117251396179
+      ]
+     },
+     "time": "da3863be24aea2c51d13e8e0e146853ede6a8b0726daa0e39644d263b091ad4e",
+     "value": "0ba1be6c02c65e1125a98e042733963020f106e3279dc653df606c4036e2ea5e"
+    },
+    "m_raw_altitude": {
+     "n": 1,
+     "sampleTime": {
+      "all": [
+       1746656308.137
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       5.377289295196533
+      ]
+     },
+     "time": "4a535ab4d64b516021b89a0685ab1db51ada416b98ae374a2055788eb3a5aa62",
+     "value": "9a8ef79a0d0af30fc7c5aa31d6a7e558f5610668761aaaeb637ebc1d94454550"
+    },
+    "m_roll": {
+     "n": 6,
+     "sampleTime": {
+      "all": [
+       1746656308.137,
+       1746656671.523,
+       1746657032.137,
+       1746657392.881,
+       1746657753.436,
+       1746658113.99
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       0.03490658476948738,
+       0.013962633907794952,
+       0.024434609338641167,
+       0.03316125646233559,
+       0.03839724510908127,
+       0.024434609338641167
+      ]
+     },
+     "time": "4a12c4e32ed2cb2a7c52fe8de1e3265120247c10a9675bebf358083477605462",
+     "value": "7aaa09c1fb1928ad2c9e32501cc3cb66eb68c7cee4330010819e5aa62a24b9cd"
+    },
+    "m_thruster_power": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "m_tot_num_inflections": {
+     "n": 4,
+     "sampleTime": {
+      "all": [
+       1746658146.012,
+       1746659981.25,
+       1746661906.857,
+       1746663710.262
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       2099.0,
+       2101.0,
+       2103.0,
+       2105.0
+      ]
+     },
+     "time": "4cfbe0b3cc4fb9570b258fff0591538858b8e776f13c664f6a33cf0ff73eeea0",
+     "value": "41e8e23461a8cefca02367c698f3a18424df0fc98d12c259d82094ad0d3adec3"
+    },
+    "m_vacuum": {
+     "n": 4,
+     "sampleTime": {
+      "all": [
+       1746657192.328,
+       1746658995.783,
+       1746660796.934,
+       1746662600.532
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       8.203226089477539,
+       8.254016876220703,
+       8.274469375610352,
+       8.273106575012207
+      ]
+     },
+     "time": "5811b55ced639edf31af7671800193aaf11d3bba012ef915449c69ae6355f49c",
+     "value": "6597badf710a17105430e66d63645b6e38c94cbcfe03470f22810094c98e245e"
+    },
+    "m_veh_temp": {
+     "n": 64,
+     "sampleTime": {
+      "first": [
+       1746656208.024,
+       1746656328.152,
+       1746656451.174
+      ],
+      "last": [
+       1746663546.016,
+       1746663666.179,
+       1746663786.394
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       13.629108428955078,
+       14.308961868286133,
+       14.473064422607422
+      ],
+      "last": [
+       10.694798469543457,
+       10.60493278503418,
+       10.722148895263672
+      ]
+     },
+     "time": "8a444e25fa0d1a30d2a80cf616ded01336ba2e3d742c0eb59f7c7be5ea3c9458",
+     "value": "4848c17dd908e37756d34821d157c4c43830c3ad698705d72ae6a7b115851ec0"
+    },
+    "m_vehicle_temp": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "m_water_depth": {
+     "n": 1,
+     "sampleTime": {
+      "all": [
+       1746658278.229
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       124.36840057373047
+      ]
+     },
+     "time": "b2849773b3b586d82fb2674d8312c449e478f51cf3ca76e9560bb1865e0acccf",
+     "value": "f67dd3880f8376a245c149b0f4fbe431e56cee96e52e9a416ce83c8cf17ae0bc"
+    },
+    "m_water_vx": {
+     "n": 2,
+     "sampleTime": {
+      "all": [
+       1746663746.307,
+       1746663754.314
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       0.04302377253770828,
+       0.04306617006659508
+      ]
+     },
+     "time": "266778011178413f48c525e1bcbd7533c4e6d9b36a6cb78479a291537d0f4999",
+     "value": "04a9ad8d11fd7bd7a1dfe717be6ce01457a2cf9668ad06a0a643e2329032c576"
+    },
+    "m_water_vy": {
+     "n": 2,
+     "sampleTime": {
+      "all": [
+       1746663746.307,
+       1746663754.314
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       -0.051992323249578476,
+       -0.05188656225800514
+      ]
+     },
+     "time": "266778011178413f48c525e1bcbd7533c4e6d9b36a6cb78479a291537d0f4999",
+     "value": "e870225e6bc2190d6f03b2130fbde82e26e06e9b772d30fb75ada1108ade8d13"
+    },
+    "m_x_lmc": {
+     "n": 6,
+     "sampleTime": {
+      "all": [
+       1746656212.033,
+       1746658146.012,
+       1746659981.25,
+       1746661906.857,
+       1746663690.25,
+       1746663810.422
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       -8751.7705078125,
+       -8636.30078125,
+       -8466.943359375,
+       -8326.263671875,
+       -8127.0791015625,
+       -7807.34814453125
+      ]
+     },
+     "time": "da36ade0a7c6128a21943990e1124adafa3a83d8798078935e1769bfa94faa99",
+     "value": "0a63ff695a47330a6d958eddf68455d6c50271193c171e3b4ce4e277067bf0ee"
+    },
+    "m_y_lmc": {
+     "n": 6,
+     "sampleTime": {
+      "all": [
+       1746656212.033,
+       1746658146.012,
+       1746659981.25,
+       1746661906.857,
+       1746663690.25,
+       1746663810.422
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       -130435.1640625,
+       -130877.421875,
+       -131326.828125,
+       -131801.328125,
+       -132251.9375,
+       -132646.5625
+      ]
+     },
+     "time": "da36ade0a7c6128a21943990e1124adafa3a83d8798078935e1769bfa94faa99",
+     "value": "99d0a6a043163a8add1c911239b36f07a340fcf4c6cf6fff95e241d42c1f3ea2"
+    },
+    "sci_water_pressure": {
+     "n": 4,
+     "sampleTime": {
+      "all": [
+       1746657192.328,
+       1746658995.783,
+       1746660796.934,
+       1746662600.532
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       9.989879608154297,
+       9.965869903564453,
+       9.147549629211426,
+       7.897759914398193
+      ]
+     },
+     "time": "5811b55ced639edf31af7671800193aaf11d3bba012ef915449c69ae6355f49c",
+     "value": "4c9ab5937eb5fa691276d79f5a5dc64991e080d3d223f8a3af43f9ecd2bf5985"
+    },
+    "u_hd_fin_ap_dgain": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "u_hd_fin_ap_gain": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "u_hd_fin_ap_igain": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "x_current_target_altitude": {
+     "n": 1,
+     "sampleTime": {
+      "all": [
+       1746656308.137
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       6.0
+      ]
+     },
+     "time": "4a535ab4d64b516021b89a0685ab1db51ada416b98ae374a2055788eb3a5aa62",
+     "value": "3e6357a56fbae74413051d518261f4b70e5b3758172a70e7f101e996e00a9ee0"
+    },
+    "x_fin_max": {
+     "n": 0,
+     "sampleTime": {
+      "all": []
+     },
+     "sampleValue": {
+      "all": []
+     },
+     "time": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "x_low_power_status": {
+     "n": 2,
+     "sampleTime": {
+      "all": [
+       1746656308.137,
+       1746658109.981
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       5.0,
+       0.0
+      ]
+     },
+     "time": "517fdf611907dfb57e7513e9de2b52429672a75c519e9392d77e6ab2a6bf8810",
+     "value": "1cee94368510ac075569ee51da842a19c90aff03300bcbc756ff5cfc9beadb2a"
+    },
+    "x_thruster_state": {
+     "n": 1,
+     "sampleTime": {
+      "all": [
+       1746656308.137
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       0.0
+      ]
+     },
+     "time": "4a535ab4d64b516021b89a0685ab1db51ada416b98ae374a2055788eb3a5aa62",
+     "value": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc"
+    }
+   },
+   "sensors": [
+    {
+     "bytes": 4,
+     "name": "c_ballast_pumped",
+     "unit": "cc"
+    },
+    {
+     "bytes": 4,
+     "name": "c_climb_target_depth",
+     "unit": "m"
+    },
+    {
+     "bytes": 4,
+     "name": "c_de_oil_vol",
+     "unit": "cc"
+    },
+    {
+     "bytes": 4,
+     "name": "c_dive_target_depth",
+     "unit": "m"
+    },
+    {
+     "bytes": 4,
+     "name": "c_fin",
+     "unit": "rad"
+    },
+    {
+     "bytes": 4,
+     "name": "c_heading",
+     "unit": "rad"
+    },
+    {
+     "bytes": 4,
+     "name": "c_thruster_on",
+     "unit": "%"
+    },
+    {
+     "bytes": 1,
+     "name": "c_weight_drop",
+     "unit": "bool"
+    },
+    {
+     "bytes": 8,
+     "name": "c_wpt_lat",
+     "unit": "lat"
+    },
+    {
+     "bytes": 8,
+     "name": "c_wpt_lon",
+     "unit": "lon"
+    },
+    {
+     "bytes": 4,
+     "name": "c_wpt_x_lmc",
+     "unit": "m"
+    },
+    {
+     "bytes": 4,
+     "name": "c_wpt_y_lmc",
+     "unit": "m"
+    },
+    {
+     "bytes": 4,
+     "name": "f_fin_offset",
+     "unit": "rad"
+    },
+    {
+     "bytes": 4,
+     "name": "m_avg_climb_rate",
+     "unit": "m/s"
+    },
+    {
+     "bytes": 4,
+     "name": "m_avg_dive_rate",
+     "unit": "m/s"
+    },
+    {
+     "bytes": 4,
+     "name": "m_avg_speed",
+     "unit": "m/s"
+    },
+    {
+     "bytes": 4,
+     "name": "m_ballast_pumped",
+     "unit": "cc"
+    },
+    {
+     "bytes": 4,
+     "name": "m_battery_inst",
+     "unit": "volts"
+    },
+    {
+     "bytes": 4,
+     "name": "m_battpos",
+     "unit": "in"
+    },
+    {
+     "bytes": 4,
+     "name": "m_bms_emergency_battery_voltage",
+     "unit": "volts"
+    },
+    {
+     "bytes": 4,
+     "name": "m_coulomb_amphr_total",
+     "unit": "amp-hrs"
+    },
+    {
+     "bytes": 4,
+     "name": "m_depth",
+     "unit": "m"
+    },
+    {
+     "bytes": 4,
+     "name": "m_depth_rate_avg_final",
+     "unit": "m/s"
+    },
+    {
+     "bytes": 4,
+     "name": "m_de_oil_vol",
+     "unit": "cc"
+    },
+    {
+     "bytes": 4,
+     "name": "m_digifin_leakdetect_reading",
+     "unit": "nodim"
+    },
+    {
+     "bytes": 4,
+     "name": "m_fin",
+     "unit": "rad"
+    },
+    {
+     "bytes": 8,
+     "name": "m_gps_lat",
+     "unit": "lat"
+    },
+    {
+     "bytes": 8,
+     "name": "m_gps_lon",
+     "unit": "lon"
+    },
+    {
+     "bytes": 4,
+     "name": "m_gps_mag_var",
+     "unit": "rad"
+    },
+    {
+     "bytes": 1,
+     "name": "m_gps_status",
+     "unit": "enum"
+    },
+    {
+     "bytes": 4,
+     "name": "m_hdg_derror",
+     "unit": "rad/sec"
+    },
+    {
+     "bytes": 4,
+     "name": "m_hdg_error",
+     "unit": "rad"
+    },
+    {
+     "bytes": 4,
+     "name": "m_hdg_ierror",
+     "unit": "rad-sec"
+    },
+    {
+     "bytes": 4,
+     "name": "m_heading",
+     "unit": "rad"
+    },
+    {
+     "bytes": 4,
+     "name": "m_iridium_call_num",
+     "unit": "nodim"
+    },
+    {
+     "bytes": 4,
+     "name": "m_iridium_dialed_num",
+     "unit": "nodim"
+    },
+    {
+     "bytes": 8,
+     "name": "m_lat",
+     "unit": "lat"
+    },
+    {
+     "bytes": 4,
+     "name": "m_leakdetect_voltage",
+     "unit": "volts"
+    },
+    {
+     "bytes": 4,
+     "name": "m_leakdetect_voltage_forward",
+     "unit": "volts"
+    },
+    {
+     "bytes": 4,
+     "name": "m_leakdetect_voltage_science",
+     "unit": "volts"
+    },
+    {
+     "bytes": 8,
+     "name": "m_lon",
+     "unit": "lon"
+    },
+    {
+     "bytes": 4,
+     "name": "m_pitch",
+     "unit": "rad"
+    },
+    {
+     "bytes": 8,
+     "name": "m_present_time",
+     "unit": "timestamp"
+    },
+    {
+     "bytes": 4,
+     "name": "m_pressure",
+     "unit": "bar"
+    },
+    {
+     "bytes": 4,
+     "name": "m_raw_altitude",
+     "unit": "m"
+    },
+    {
+     "bytes": 4,
+     "name": "m_roll",
+     "unit": "rad"
+    },
+    {
+     "bytes": 4,
+     "name": "m_thruster_power",
+     "unit": "watt"
+    },
+    {
+     "bytes": 4,
+     "name": "m_tot_num_inflections",
+     "unit": "nodim"
+    },
+    {
+     "bytes": 4,
+     "name": "m_vacuum",
+     "unit": "inHg"
+    },
+    {
+     "bytes": 4,
+     "name": "m_vehicle_temp",
+     "unit": "degC"
+    },
+    {
+     "bytes": 4,
+     "name": "m_veh_temp",
+     "unit": "c"
+    },
+    {
+     "bytes": 4,
+     "name": "m_water_depth",
+     "unit": "m"
+    },
+    {
+     "bytes": 4,
+     "name": "m_water_vx",
+     "unit": "m/s"
+    },
+    {
+     "bytes": 4,
+     "name": "m_water_vy",
+     "unit": "m/s"
+    },
+    {
+     "bytes": 4,
+     "name": "m_x_lmc",
+     "unit": "m"
+    },
+    {
+     "bytes": 4,
+     "name": "m_y_lmc",
+     "unit": "m"
+    },
+    {
+     "bytes": 4,
+     "name": "sci_water_pressure",
+     "unit": "bar"
+    },
+    {
+     "bytes": 4,
+     "name": "u_hd_fin_ap_dgain",
+     "unit": "sec/rad"
+    },
+    {
+     "bytes": 4,
+     "name": "u_hd_fin_ap_gain",
+     "unit": "1/rad"
+    },
+    {
+     "bytes": 4,
+     "name": "u_hd_fin_ap_igain",
+     "unit": "1/rad-sec"
+    },
+    {
+     "bytes": 4,
+     "name": "x_current_target_altitude",
+     "unit": "m"
+    },
+    {
+     "bytes": 4,
+     "name": "x_fin_max",
+     "unit": "rad"
+    },
+    {
+     "bytes": 4,
+     "name": "x_low_power_status",
+     "unit": "nodim"
+    },
+    {
+     "bytes": 1,
+     "name": "x_thruster_state",
+     "unit": "enum"
+    }
+   ]
+  },
+  "electa-2025-120-1-169.tbd": {
+   "header": {
+    "dbd_label": "DBD(dinkum_binary_data)file",
+    "encoding_ver": 5,
+    "fileopen_time": "Wed_May__7_22:16:14_2025",
+    "full_filename": "electa-2025-120-1-169",
+    "mission_name": "electash.mi",
+    "num_ascii_tags": 14,
+    "sensor_list_crc": "92610b65",
+    "sensor_list_factored": 1,
+    "sensors_per_cycle": 14,
+    "state_bytes_per_cycle": 4,
+    "the8x3_filename": "02150169",
+    "total_num_sensors": 105
+   },
+   "latlon": {},
+   "params": {
+    "sci_bsipar_par": {
+     "n": 127,
+     "sampleTime": {
+      "first": [
+       1746658170.336,
+       1746658187.336,
+       1746658204.336
+      ],
+      "last": [
+       1746662965.338,
+       1746662982.338,
+       1746662999.338
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       54.46986389160156,
+       38.65460205078125,
+       28.060440063476562
+      ],
+      "last": [
+       -0.10244151949882507,
+       -0.09902680665254593,
+       -0.10244151949882507
+      ]
+     },
+     "time": "c2dd6d5bf6819af52416a9f12002cc8076347615603e71216be6941a8810f71a",
+     "value": "bca7508fa3a8a78bda37804e58983bd02fe919d45da028d033e5f1e222e18d7a"
+    },
+    "sci_bsipar_temp": {
+     "n": 127,
+     "sampleTime": {
+      "first": [
+       1746658170.336,
+       1746658187.336,
+       1746658204.336
+      ],
+      "last": [
+       1746662965.338,
+       1746662982.338,
+       1746662999.338
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       11.5,
+       11.90999984741211,
+       11.90999984741211
+      ],
+      "last": [
+       11.90999984741211,
+       11.90999984741211,
+       11.90999984741211
+      ]
+     },
+     "time": "c2dd6d5bf6819af52416a9f12002cc8076347615603e71216be6941a8810f71a",
+     "value": "66cb9a5ecf67ac74073ff48acb75ab3ec78822b5b4499ad5fd0e5a3aecd18349"
+    },
+    "sci_flbbcd_bb_units": {
+     "n": 127,
+     "sampleTime": {
+      "first": [
+       1746658170.336,
+       1746658187.336,
+       1746658204.336
+      ],
+      "last": [
+       1746662965.338,
+       1746662982.338,
+       1746662999.338
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       0.0068056099116802216,
+       0.0068056099116802216,
+       0.0068056099116802216
+      ],
+      "last": [
+       0.0068056099116802216,
+       0.0068056099116802216,
+       0.0068056099116802216
+      ]
+     },
+     "time": "c2dd6d5bf6819af52416a9f12002cc8076347615603e71216be6941a8810f71a",
+     "value": "1fa0c0e07908ceef820e033b308782d75ec9ae1ee3625998621d8d07375c629c"
+    },
+    "sci_flbbcd_cdom_units": {
+     "n": 127,
+     "sampleTime": {
+      "first": [
+       1746658170.336,
+       1746658187.336,
+       1746658204.336
+      ],
+      "last": [
+       1746662965.338,
+       1746662982.338,
+       1746662999.338
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       3.9995999336242676,
+       4.0904998779296875,
+       4.181399822235107
+      ],
+      "last": [
+       4.181399822235107,
+       4.272299766540527,
+       3.726900100708008
+      ]
+     },
+     "time": "c2dd6d5bf6819af52416a9f12002cc8076347615603e71216be6941a8810f71a",
+     "value": "5c655b78c42b86842f13f513266daacdc43ed6852e782dde2b4342b211c2e7f8"
+    },
+    "sci_flbbcd_chlor_units": {
+     "n": 127,
+     "sampleTime": {
+      "first": [
+       1746658170.336,
+       1746658187.336,
+       1746658204.336
+      ],
+      "last": [
+       1746662965.338,
+       1746662982.338,
+       1746662999.338
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       0.6225000023841858,
+       0.637499988079071,
+       0.675000011920929
+      ],
+      "last": [
+       0.04500000178813934,
+       0.06750000268220901,
+       0.05249999836087227
+      ]
+     },
+     "time": "c2dd6d5bf6819af52416a9f12002cc8076347615603e71216be6941a8810f71a",
+     "value": "4653d211d434da29fa7e44dfeb43afc5e0087ed11510f356f23da114a2584e1b"
+    },
+    "sci_flbbcd_timestamp": {
+     "n": 1,
+     "sampleTime": {
+      "all": [
+       1746658170.336
+      ]
+     },
+     "sampleValue": {
+      "all": [
+       0.0
+      ]
+     },
+     "time": "8155679f32ffdae5818dbb53672a08a132b240cf769258045ba254a0cda9cfb2",
+     "value": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc"
+    },
+    "sci_m_present_secs_into_mission": {
+     "n": 966,
+     "sampleTime": {
+      "first": [
+       1746656174.335,
+       1746656183.335,
+       1746656192.335
+      ],
+      "last": [
+       1746663815.338,
+       1746663824.338,
+       1746663833.338
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       532085.5625,
+       532094.5625,
+       532103.5625
+      ],
+      "last": [
+       539726.5625,
+       539735.5625,
+       539744.5625
+      ]
+     },
+     "time": "5dd3b37f516e28887d8b245589682565d4f19a3d78e861c7e2855bab3d9eea34",
+     "value": "9195f7a9b219914db2411e1f51b32a385e7230198bd45bf8601a2315d39a55e2"
+    },
+    "sci_m_present_time": {
+     "n": 966,
+     "sampleTime": {
+      "first": [
+       1746656174.335,
+       1746656183.335,
+       1746656192.335
+      ],
+      "last": [
+       1746663815.338,
+       1746663824.338,
+       1746663833.338
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       1746656174.335,
+       1746656183.335,
+       1746656192.335
+      ],
+      "last": [
+       1746663815.338,
+       1746663824.338,
+       1746663833.338
+      ]
+     },
+     "time": "5dd3b37f516e28887d8b245589682565d4f19a3d78e861c7e2855bab3d9eea34",
+     "value": "5dd3b37f516e28887d8b245589682565d4f19a3d78e861c7e2855bab3d9eea34"
+    },
+    "sci_rbrctd_cond_cell_temp_00": {
+     "n": 853,
+     "sampleTime": {
+      "first": [
+       1746656174.335,
+       1746656183.335,
+       1746656192.335
+      ],
+      "last": [
+       1746663815.338,
+       1746663824.338,
+       1746663833.338
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       16.171199798583984,
+       16.195899963378906,
+       16.220500946044922
+      ],
+      "last": [
+       12.203200340270996,
+       12.34179973602295,
+       12.471400260925293
+      ]
+     },
+     "time": "911cec9a8540219a61cb2b11cc12566f1248ac4814c617463a84f0f8f2ca2bb2",
+     "value": "22658f2ea116d899bfbdf9d7b2faa3fa2d2effd8a55f02e8603c23b3b4e2df24"
+    },
+    "sci_rbrctd_count_00": {
+     "n": 853,
+     "sampleTime": {
+      "first": [
+       1746656174.335,
+       1746656183.335,
+       1746656192.335
+      ],
+      "last": [
+       1746663815.338,
+       1746663824.338,
+       1746663833.338
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       1.0,
+       1.0,
+       1.0
+      ],
+      "last": [
+       1.0,
+       1.0,
+       1.0
+      ]
+     },
+     "time": "911cec9a8540219a61cb2b11cc12566f1248ac4814c617463a84f0f8f2ca2bb2",
+     "value": "37c41fd6c318c4372fab72ea5ee1586fa3a72d09edf3199b28d89bc3863d9195"
+    },
+    "sci_rbrctd_timestamp": {
+     "n": 853,
+     "sampleTime": {
+      "first": [
+       1746656174.335,
+       1746656183.335,
+       1746656192.335
+      ],
+      "last": [
+       1746663815.338,
+       1746663824.338,
+       1746663833.338
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       1746656174.33,
+       1746656182.906,
+       1746656191.906
+      ],
+      "last": [
+       1746663815.027,
+       1746663824.028,
+       1746663833.028
+      ]
+     },
+     "time": "911cec9a8540219a61cb2b11cc12566f1248ac4814c617463a84f0f8f2ca2bb2",
+     "value": "23a4f4fc1c0900566ba512fac543991d36ffb2cd2a53715fcaca00366e8baa62"
+    },
+    "sci_water_cond": {
+     "n": 853,
+     "sampleTime": {
+      "first": [
+       1746656174.335,
+       1746656183.335,
+       1746656192.335
+      ],
+      "last": [
+       1746663815.338,
+       1746663824.338,
+       1746663833.338
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       4.245510101318359,
+       4.253680229187012,
+       4.253600120544434
+      ],
+      "last": [
+       4.184390068054199,
+       4.1811299324035645,
+       4.180850028991699
+      ]
+     },
+     "time": "911cec9a8540219a61cb2b11cc12566f1248ac4814c617463a84f0f8f2ca2bb2",
+     "value": "941aa7e032ec6440d17c9fcdf6dc859200ee6632ac295c9cf5ce970c7690ca59"
+    },
+    "sci_water_pressure": {
+     "n": 853,
+     "sampleTime": {
+      "first": [
+       1746656174.335,
+       1746656183.335,
+       1746656192.335
+      ],
+      "last": [
+       1746663815.338,
+       1746663824.338,
+       1746663833.338
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       0.01752999983727932,
+       0.017400000244379044,
+       0.015850000083446503
+      ],
+      "last": [
+       0.01624000072479248,
+       0.015599999576807022,
+       0.017500000074505806
+      ]
+     },
+     "time": "911cec9a8540219a61cb2b11cc12566f1248ac4814c617463a84f0f8f2ca2bb2",
+     "value": "86c6d537d8516ef472ca95d31247ff35f947163230db94884016bc560e50b0f1"
+    },
+    "sci_water_temp": {
+     "n": 853,
+     "sampleTime": {
+      "first": [
+       1746656174.335,
+       1746656183.335,
+       1746656192.335
+      ],
+      "last": [
+       1746663815.338,
+       1746663824.338,
+       1746663833.338
+      ]
+     },
+     "sampleValue": {
+      "first": [
+       16.99049949645996,
+       17.064800262451172,
+       17.06730079650879
+      ],
+      "last": [
+       16.372499465942383,
+       16.344900131225586,
+       16.37529945373535
+      ]
+     },
+     "time": "911cec9a8540219a61cb2b11cc12566f1248ac4814c617463a84f0f8f2ca2bb2",
+     "value": "3a9ed1e12355786ffd512a0ca175b12aad4ae9cf56c37a76a941a638f55c8aa1"
+    }
+   },
+   "sensors": [
+    {
+     "bytes": 4,
+     "name": "sci_bsipar_par",
+     "unit": "ue/m^2sec"
+    },
+    {
+     "bytes": 4,
+     "name": "sci_bsipar_temp",
+     "unit": "degc"
+    },
+    {
+     "bytes": 4,
+     "name": "sci_flbbcd_bb_units",
+     "unit": "nodim"
+    },
+    {
+     "bytes": 4,
+     "name": "sci_flbbcd_cdom_units",
+     "unit": "ppb"
+    },
+    {
+     "bytes": 4,
+     "name": "sci_flbbcd_chlor_units",
+     "unit": "ug/l"
+    },
+    {
+     "bytes": 8,
+     "name": "sci_flbbcd_timestamp",
+     "unit": "timestamp"
+    },
+    {
+     "bytes": 4,
+     "name": "sci_m_present_secs_into_mission",
+     "unit": "sec"
+    },
+    {
+     "bytes": 8,
+     "name": "sci_m_present_time",
+     "unit": "timestamp"
+    },
+    {
+     "bytes": 4,
+     "name": "sci_rbrctd_cond_cell_temp_00",
+     "unit": "degc"
+    },
+    {
+     "bytes": 4,
+     "name": "sci_rbrctd_count_00",
+     "unit": "counts"
+    },
+    {
+     "bytes": 8,
+     "name": "sci_rbrctd_timestamp",
+     "unit": "timestamp"
+    },
+    {
+     "bytes": 4,
+     "name": "sci_water_cond",
+     "unit": "s/m"
+    },
+    {
+     "bytes": 4,
+     "name": "sci_water_pressure",
+     "unit": "bar"
+    },
+    {
+     "bytes": 4,
+     "name": "sci_water_temp",
+     "unit": "degc"
+    }
+   ]
+  }
+ }
+}
