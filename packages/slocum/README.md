@@ -3,8 +3,8 @@
 A decoder for the Slocum glider file family — `sbd`, `tbd`, `mbd`, `nbd`,
 `dbd`, `ebd` and their LZ4-compressed twins — with CSV and netCDF-3 writers.
 
-Teledyne Webb publishes no specification for the format, so every reader of it
-is a reimplementation of the vendor's `dbd2asc`. This one is a port of
+Every reader of the format is a reimplementation of the vendor's `dbd2asc`.
+This one is a port of
 [`SlocumIO.jl`](https://github.com/oceansensing/SlocumIO.jl), which was itself
 validated against [`dbdreader`](https://github.com/smerckel/dbdreader) byte for
 byte, and `npm run test:slocum` holds the port to the same fixture.

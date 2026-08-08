@@ -1,12 +1,11 @@
 /**
  * A decoder for the Slocum glider file family, in the browser.
  *
- * Teledyne Webb's gliders log to a binary format with no published
- * specification — `sbd`, `tbd`, `mbd`, `nbd`, `dbd`, `ebd` and their
- * LZ4-compressed twins — and reading it has always meant the vendor's
- * `dbd2asc`, a Python extension, or a Julia package. This is the same job
- * with nothing to install: the files never leave the machine they are on,
- * which matters for a deployment still under embargo.
+ * Teledyne Webb's gliders log to a binary format — `sbd`, `tbd`, `mbd`,
+ * `nbd`, `dbd`, `ebd` and their LZ4-compressed twins — and reading it has
+ * meant the vendor's `dbd2asc`, a Python extension, or a Julia package. This
+ * is the same job with nothing to install, and the files never leave the
+ * machine they are on.
  *
  * It is a port of [`SlocumIO.jl`](https://github.com/oceansensing/SlocumIO.jl),
  * which was itself validated against `dbdreader` byte for byte, and

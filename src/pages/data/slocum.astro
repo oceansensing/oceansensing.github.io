@@ -5,24 +5,22 @@ import SlocumDecoder from '../../components/SlocumDecoder.astro';
 
 <BaseLayout
   title="Slocum glider decoder"
-  description="Decode Slocum glider binary data — sbd, tbd, mbd, nbd, dbd, ebd and their compressed forms — to CSV or netCDF, entirely in your browser. Nothing is uploaded."
+  description="Decode Slocum glider binary data — sbd, tbd, mbd, nbd, dbd, ebd and their compressed forms — to CSV, netCDF or OceanGliders OG1.0, in the browser. No file is uploaded."
   wide
 >
   <div class="container wide full">
     <p class="crumb"><a href="/data/">Data &amp; Tools</a></p>
     <h1>Slocum glider decoder</h1>
     <p class="intro">
-      Teledyne Webb's Slocum gliders log to a binary format for which no
-      specification has been published. This decoder reads the flight and
-      science files, compressed or not, and writes CSV, netCDF, or the
-      OceanGliders OG1.0 format. The decoding runs in the browser and no file
-      is uploaded, so data under embargo stays on the machine it is read on.
+      Reads Slocum flight and science files — <code>sbd</code>, <code>tbd</code>, <code>mbd</code>, <code>nbd</code>, <code>dbd</code>, <code>ebd</code> and their compressed
+      forms — and writes CSV, netCDF, or the OceanGliders OG1.0 format. The
+      decoding runs in the browser, and no file is uploaded.
     </p>
 
     <SlocumDecoder />
 
-    <section class="about">
-      <h2>Data files and sensor-list caches</h2>
+    <details class="aside">
+      <summary>Data files and sensor-list caches</summary>
       <p>
         A Slocum file is <em>factored</em>. It names an eight-character CRC and
         carries no sensor list of its own, so the binary section cannot be
@@ -41,8 +39,10 @@ import SlocumDecoder from '../../components/SlocumDecoder.astro';
         the one action that supplies both: the file dialog selects within a
         single directory, and the data and the caches are in different ones.
       </p>
+    </details>
 
-      <h2>Deployments</h2>
+    <details class="aside">
+      <summary>Deployments</summary>
       <p>
         Files are grouped into deployments before anything is written, and each
         deployment is exported as its own file. Two gliders, or one glider's
@@ -59,8 +59,10 @@ import SlocumDecoder from '../../components/SlocumDecoder.astro';
         deployment. With a single deployment the page behaves as it does for a
         single pair of files.
       </p>
+    </details>
 
-      <h2>The table and the exports</h2>
+    <details class="aside">
+      <summary>The table and the exports</summary>
 
       <h3>Rows and the time base</h3>
       <p>
@@ -197,8 +199,10 @@ import SlocumDecoder from '../../components/SlocumDecoder.astro';
         quality control has been applied. Position is converted from NMEA and
         is otherwise the glider's own dead-reckoned position.
       </p>
+    </details>
 
-      <h2>Checks against dbdreader</h2>
+    <details class="aside">
+      <summary>Checks against dbdreader</summary>
       <p>
         Every sensor's times and values are compared with <a href="https://github.com/smerckel/dbdreader">dbdreader</a> by a
         SHA-256 over their raw bytes, for a matched flight and science pair
@@ -209,9 +213,9 @@ import SlocumDecoder from '../../components/SlocumDecoder.astro';
       </p>
       <p>
         That is one glider and one deployment, which is the extent of what has
-        been tested. The format has no specification to check against instead.
+        been tested.
       </p>
-    </section>
+    </details>
   </div>
 </BaseLayout>
 
@@ -230,27 +234,29 @@ import SlocumDecoder from '../../components/SlocumDecoder.astro';
     margin-block-end: var(--space-lg);
   }
 
-  .about {
-    margin-block: var(--space-2xl);
-  }
-
-  .about h2 {
-    margin-block: var(--space-xl) var(--space-md);
-  }
-
-  .about h3 {
+  /* The explanations are collapsed asides now. `.aside` itself — the rule,
+     the eyebrow and its hover — is in global.css, shared with the map page;
+     what is here is only the prose inside one when it is open. */
+  .aside h3 {
     font-size: var(--text-base);
     margin-block: var(--space-lg) var(--space-2xs);
   }
 
-  .about p,
-  .about li {
+  .aside p {
     color: var(--text-muted);
     margin-block-end: var(--space-sm);
   }
 
-  .about code {
+  .aside code {
     font-family: var(--font-mono);
     font-size: 0.9em;
   }
+
+  /* The last aside needs a bottom border, or the run of them ends on an
+     open edge with the footer directly beneath it. */
+  .aside:last-of-type {
+    border-bottom: 1px solid var(--border);
+    margin-block-end: var(--space-2xl);
+  }
+
 </style>

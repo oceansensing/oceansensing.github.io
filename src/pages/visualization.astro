@@ -126,32 +126,12 @@ const description =
     gap: var(--space-sm);
   }
 
-  .aside {
-    max-width: 65ch;
-    margin-top: var(--space-md);
-    border-top: 1px solid var(--border);
-  }
-
-  .aside summary {
-    padding: var(--space-xs) 0;
-    cursor: pointer;
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-
-  /* The marker is the only thing saying these open, so it has to stay put
-     when the summary is styled as an eyebrow. */
-  .aside summary:hover,
-  .aside summary:focus-visible {
-    color: var(--text);
-  }
-
-  .aside[open] summary {
-    color: var(--text);
-  }
+  /* The chrome is in global.css — two pages carry it, and nothing here
+     overrides it. A `max-width: 65ch` lived here and never applied:
+     `.container.wide > :not(.map-figure, .topline)` is three classes against
+     a scoped `.aside`'s two, so the container's own 72rem won whatever the
+     order. Measured at 1152px either way. Deleted rather than bumped, since
+     72rem is what this prose has always been read at. */
 
   ul {
     max-width: 65ch;

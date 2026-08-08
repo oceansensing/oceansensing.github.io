@@ -4908,9 +4908,8 @@ the same argument `kmz.ts` makes about ZIP libraries, and it matters more here
 because this code is served to a reader's browser.
 
 **It runs entirely client-side, and that is the feature rather than an
-implementation note.** Glider data is routinely embargoed until a deployment
-is written up, so "nothing is uploaded" is the difference between a tool an
-operator may use and one they may not.
+implementation note.** The page states it and nothing has to be trusted for
+it to hold: there is no upload path in the code at all.
 
 `test:map` carries a named list of everything under `packages/` and fails on
 an unlisted one; `slocum` is listed as **not a map**, which is what exempts it
@@ -4919,8 +4918,8 @@ package appeared, which is what it is for.
 
 ### Ported, not invented
 
-Teledyne Webb publishes no specification. Every reader of the format —
-`dbd2asc`, `dbdreader`, `SlocumIO.jl`, this — is a reimplementation, and a
+Every reader of the format — `dbd2asc`, `dbdreader`, `SlocumIO.jl`, this — is
+a reimplementation of one another, and a
 decoder that is subtly wrong **does not fail**: it produces floats, in the
 right shape, in a plausible range, and nothing on screen says the third column
 is the wrong sensor.
@@ -5414,7 +5413,7 @@ Glider DAC's trajectory format. Position is converted from NMEA and otherwise
 left as the glider dead-reckoned it.
 
 And it is checked against **one glider and one deployment**, which is the
-honest limit of a format with no specification to check against instead.
+honest limit when the only thing to check against is another reader.
 
 ## What keeps going wrong here
 

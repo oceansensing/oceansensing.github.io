@@ -133,6 +133,38 @@ kbd {
   max-width: none;
 }
 
+/* A collapsed aside: a one-line eyebrow that opens onto prose. Used for
+   reference material a reader wants once and not on every visit — the map's
+   quick start and data sources, the Slocum decoder's whole explanation.
+   `<details>` rather than a script: it opens by keyboard, it is findable by
+   the browser's own search, and it needs no JS, which is what the rest of
+   this site does.
+   Here rather than on a page because two pages now carry it. Width is *not*
+   set: a page built around prose caps it, and the full-width decoder page
+   does not. */
+.aside {
+  margin-top: var(--space-md);
+  border-top: 1px solid var(--border);
+}
+
+.aside summary {
+  padding: var(--space-xs) 0;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* The marker is the only thing saying these open, so it stays put and the
+   colour is what answers a hover. */
+.aside summary:hover,
+.aside summary:focus-visible,
+.aside[open] summary {
+  color: var(--text);
+}
+
 /* The topline is the map's caption above the map: an eyebrow on the left and
    the UTC clock on the right. It spans the figure rather than the prose
    measure so those two land on the map's own left and right edges — a clock

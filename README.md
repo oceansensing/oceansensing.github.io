@@ -64,8 +64,7 @@ netCDF, with seawater properties from the CTD if you want them, and an
 Drop a whole deployment folder — data and its `cache` directory, in any order
 — and files from several gliders, or from one glider with a break of three
 days or more, come out as separate deployments in separate files. Nothing is
-uploaded, so a deployment under embargo stays on the machine it is read on.
-The decoder is
+uploaded. The decoder is
 **[`packages/slocum`](packages/slocum/)**, a port of
 [SlocumIO.jl](https://github.com/oceansensing/SlocumIO.jl) checked against
 `dbdreader` value for value.

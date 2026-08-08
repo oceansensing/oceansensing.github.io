@@ -374,8 +374,8 @@ quantities first, and the three decimations within one computer's family
 
 - **It is checked against one glider and one deployment.** The fixture is a
   matched flight/science pair from electa (MARACOOS, May 2025). The format has
-  no specification to check against instead, so breadth of real files is the
-  only way this gets stronger — a Seaglider-era `dbd`, a file from a glider
+  no reference specification to check against instead, so breadth of real
+  files is the only way this gets stronger — a Seaglider-era `dbd`, a file from a glider
   with a different science payload, or anything with a `dbd` rather than an
   `sbd` would each be worth adding.
 - **No compressed *data* file has ever been decoded by it.** The LZ4 path is
